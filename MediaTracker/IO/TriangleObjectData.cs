@@ -1,0 +1,191 @@
+﻿using System.Drawing;
+using System.Numerics;
+using TM_GenericMapping.Common;
+
+namespace TM_GenericMapping.MediaTracker.IO
+{
+    public interface IBinarySerializable
+    {
+        void Write(BinaryWriter w);
+        void Read(BinaryReader r);
+    }
+
+    public class TriangleObjectData : IBinarySerializable
+    {
+        private const uint MagicNumber = 0x4D455348; // "MESH"
+        private const byte Version = 2;
+
+        public Vector3[] Vertices;
+        public Color[] Colors;
+        public int[] Triangles;
+        public Vector3 LocalPosition;
+        public Quaternion LocalRotation;
+        public Vector3 LocalScale;
+        public string Name;
+        public int FillVertexCount;
+        public int FillTrianglesCount;
+        public bool HasOutline;
+        public float OutlineWidth;
+        public OutlineExtendsDirection OutlineExtends;
+        public bool CanFill;
+        public bool IsFilled;
+        public bool HasUniqueVertices;
+        public bool CanShareBlock;
+
+        public TriangleObjectData[] SubObjects;
+
+        public void Write(BinaryWriter w) 
+        {
+            w.Write(MagicNumber);
+            w.Write(Version);
+
+            w.Write(Name);
+
+            w.Write(FillVertexCount);
+            w.Write(FillTrianglesCount);
+            w.Write(HasOutline);
+            w.Write(OutlineWidth);
+            w.Write((byte)OutlineExtends);
+            w.Write(CanFill);
+            w.Write(IsFilled);
+            w.Write(HasUniqueVertices);
+            w.Write(CanShareBlock);
+
+            w.Write(LocalPosition.X);
+            w.Write(LocalPosition.Y);
+            w.Write(LocalPosition.Z);
+
+            w.Write(LocalRotation.X);
+            w.Write(LocalRotation.Y);
+            w.Write(LocalRotation.Z);
+            w.Write(LocalRotation.W);
+
+            w.Write(LocalScale.X);
+            w.Write(LocalScale.Y);
+            w.Write(LocalScale.Z);
+
+            w.Write(Vertices.Length);
+            foreach (var v in Vertices)
+            {
+                w.Write(v.X); 
+                w.Write(v.Y); 
+                w.Write(v.Z);
+            }
+
+            foreach (var c in Colors)
+            {
+                w.Write(c.A);
+                w.Write(c.R); 
+                w.Write(c.G); 
+                w.Write(c.B);
+            }
+
+            w.Write(Triangles.Length);
+            foreach (var t in Triangles) 
+                w.Write(t);
+
+            w.Write(SubObjects?.Length ?? 0);
+            if (SubObjects != null)
+            {
+                foreach (var sub in SubObjects)
+                    sub.Write(w);
+            }
+        }
+        public void Read(BinaryReader r)
+        {
+            long fileLength = r.BaseStream.Length;
+
+            if (fileLength < 6) // magic + version + at least one count
+                throw new InvalidDataException("File too small");
+
+            uint magic = r.ReadUInt32();
+            if (magic != MagicNumber)
+                throw new InvalidDataException($"Invalid file format (expected MESH header)");
+
+            byte version = r.ReadByte();
+            if (version > Version)
+                throw new InvalidDataException($"Unsupported version: {version}");
+
+            Name = r.ReadString();
+            FillVertexCount = r.ReadInt32();
+            FillTrianglesCount = r.ReadInt32();
+            HasOutline = r.ReadBoolean();
+            OutlineWidth = r.ReadSingle();
+            OutlineExtends = (OutlineExtendsDirection)r.ReadByte();
+            CanFill = r.ReadBoolean();
+            IsFilled = r.ReadBoolean();
+            HasUniqueVertices = r.ReadBoolean();
+            CanShareBlock = r.ReadBoolean();
+
+            LocalPosition = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+            LocalRotation = new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+            LocalScale = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+
+            int vertCount = r.ReadInt32();
+            if (vertCount < 0 || vertCount > 10_000_000) // sanity check
+                throw new InvalidDataException($"Invalid vertex count: {vertCount}");
+
+            // check if file is large enough for claimed data
+            long needed = 6 + 4 + (vertCount * 12) + (vertCount * 4) + 4; // header + verts + colors + triCount
+            if (fileLength < needed)
+                throw new InvalidDataException("File truncated");
+
+            Vertices = new Vector3[vertCount];
+            Colors = new Color[vertCount];
+
+            for (int i = 0; i < vertCount; i++)
+                Vertices[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+            for (int i = 0; i < vertCount; i++)
+                Colors[i] = Color.FromArgb(r.ReadByte(), r.ReadByte(), r.ReadByte(), r.ReadByte());
+
+            int triCount = r.ReadInt32();
+            if (triCount < 0 || triCount > 30_000_000 || triCount % 3 != 0)
+                throw new InvalidDataException($"Invalid triangle count: {triCount}");
+
+            Triangles = new int[triCount];
+            for (int i = 0; i < triCount; i++)
+            {
+                int idx = r.ReadInt32();
+                if (idx < 0 || idx >= vertCount)
+                    throw new InvalidDataException($"Triangle index out of range: {idx}");
+                Triangles[i] = idx;
+            }
+
+            int subCount = r.ReadInt32();
+            if (subCount < 0 || subCount > 10_000)
+                throw new InvalidDataException($"Invalid subobject count: {subCount}");
+
+            SubObjects = new TriangleObjectData[subCount];
+            for (int i = 0; i < subCount; i++)
+            {
+                SubObjects[i] = new TriangleObjectData();
+                SubObjects[i].Read(r);
+            }
+        }
+
+        public TriangleObjectData Copy()
+        {
+            using (var ms = new MemoryStream())
+            {
+                // Write this object to memory
+                using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
+                    Write(writer);
+                }
+
+                // Reset stream position
+                ms.Position = 0;
+
+                // Read into new object
+                var copy = new TriangleObjectData();
+                using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8))
+                {
+                    copy.Read(reader);
+                }
+
+                return copy;
+            }
+        }
+
+    }
+}
