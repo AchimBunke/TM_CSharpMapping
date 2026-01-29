@@ -214,7 +214,7 @@ public class MaterialLibrary : IDisposable
     }
 
 
-    public const string DefaultTexturesPath = @"C:\Users\achim\Documents\Trackmania\Skins\Stadium\DefaultTextures.zip";
+    public static string DefaultTexturesPath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Skins\Stadium\DefaultTextures.zip");
     public static MaterialLibrary CreateDefaultMaterialLibrary()
     {
         var library = new MaterialLibrary();

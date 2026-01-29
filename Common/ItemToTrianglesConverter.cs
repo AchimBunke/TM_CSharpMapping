@@ -43,9 +43,8 @@ namespace TM_GenericMapping.Common
                 };
         }
 
-
-        const string relativeItemDirectoryPath = @"C:\Users\achim\Documents\Trackmania\Items";
-        const string extraItemDirectory = @"C:\Users\achim\Documents\Trackmania\Items\BlockToItemExports\Nadeo";
+        public static string ItemDirectoryPath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items");
+        public static string BlockToItemExportDirectory = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items\BlockToItemExports\Nadeo");
         public static bool TryConvert(CGameCtnAnchoredObject anchoredItem, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings, out TriangleObject triangleObj)
         {
             var ident = anchoredItem.ItemModel;
@@ -54,7 +53,7 @@ namespace TM_GenericMapping.Common
                 Logger.Debug($"Converting Item: {ident.Id}");
                 triangleObj = new TriangleObject() { Name = ident.Id };
 
-                var itemModel = Gbx.Parse<CGameItemModel>(System.IO.Path.Combine(relativeItemDirectoryPath, ident.Id)).Node;
+                var itemModel = Gbx.Parse<CGameItemModel>(System.IO.Path.Combine(ItemDirectoryPath, ident.Id)).Node;
                 var entityModel = itemModel.EntityModel;
 
                 if (entityModel is CPlugPrefab cPlugPrefabEntityModel)
@@ -74,10 +73,10 @@ namespace TM_GenericMapping.Common
                     }
                     else
                     {
-                        if (!Directory.Exists(extraItemDirectory))
+                        if (!Directory.Exists(BlockToItemExportDirectory))
                             return false;
 
-                        var extraItemModel = FindExtraItemModel(new DirectoryInfo(extraItemDirectory), Path.GetFileName(ident.Id)).Node;
+                        var extraItemModel = FindExtraItemModel(new DirectoryInfo(BlockToItemExportDirectory), Path.GetFileName(ident.Id)).Node;
                         if (extraItemModel.EntityModelEdition == null ||
                             extraItemModel.EntityModelEdition is not CGameCommonItemEntityModelEdition commonItemEntityModelEdition)
                             return false;

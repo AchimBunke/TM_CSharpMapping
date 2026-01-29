@@ -1,6 +1,7 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Control;
 using GBX.NET.Engines.Game;
+using TM_GenericMapping.Common;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
 
@@ -215,11 +216,11 @@ public static class MediaTrackerUtils
     }
 
 
-    public const string Triangles2DTemplatePath = @"C:\Users\achim\Documents\Trackmania\Replays\Clips\Templates\Triangle2DTemplate.Clip.Gbx";
-    public const string Triangles3DTemplatePath = @"C:\Users\achim\Documents\Trackmania\Replays\Clips\Templates\Triangle3DTemplate.Clip.Gbx";
-    public const string TrackTemplatePath = @"C:\Users\achim\Documents\Trackmania\Replays\Clips\Templates\Triangle2DTemplate.Clip.Gbx";
-    public const string ImageTemplatePath = @"C:\Users\achim\Documents\Trackmania\Replays\Clips\Templates\ImageTemplate.Clip.Gbx";
-    public const string TextTemplatePath = @"C:\Users\achim\Documents\Trackmania\Replays\Clips\Templates\TextTemplate.Clip.Gbx";
+    public static string Triangles2DTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\Triangle2DTemplate.Clip.Gbx");
+    public static string Triangles3DTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\Triangle3DTemplate.Clip.Gbx");
+    public static string TrackTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\Triangle2DTemplate.Clip.Gbx");
+    public static string ImageTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\ImageTemplate.Clip.Gbx");
+    public static string TextTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\TextTemplate.Clip.Gbx");
 
     public static BlockTemplates CreateBlockTemplates()
     {
