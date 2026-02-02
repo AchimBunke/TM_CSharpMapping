@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 
 public interface IAnimationParameter

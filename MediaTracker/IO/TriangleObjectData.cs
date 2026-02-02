@@ -2,7 +2,7 @@
 using System.Numerics;
 using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.MediaTracker.IO
+namespace TM_GenericMapping.Common.IO
 {
     public interface IBinarySerializable
     {
@@ -13,7 +13,7 @@ namespace TM_GenericMapping.MediaTracker.IO
     public class TriangleObjectData : IBinarySerializable
     {
         private const uint MagicNumber = 0x4D455348; // "MESH"
-        private const byte Version = 2;
+        private const byte Version = 3;
 
         public Vector3[] Vertices;
         public Color[] Colors;
@@ -33,6 +33,7 @@ namespace TM_GenericMapping.MediaTracker.IO
         public bool CanShareBlock;
 
         public TriangleObjectData[] SubObjects;
+        public ISerializableComponent[] SerializableComponents;
 
         public void Write(BinaryWriter w) 
         {
@@ -89,6 +90,26 @@ namespace TM_GenericMapping.MediaTracker.IO
             {
                 foreach (var sub in SubObjects)
                     sub.Write(w);
+            }
+
+            if (Version < 3)
+                return;
+
+            w.Write(SerializableComponents?.Length ?? 0);
+            if(SerializableComponents != null)
+            {
+                foreach (var cmp in SerializableComponents)
+                {
+                    string typeName = cmp.GetType().AssemblyQualifiedName!;
+                    w.Write(typeName);
+                    using var ms = new MemoryStream();
+                    using var bw = new BinaryWriter(ms);
+                    cmp.Serialize(bw, Version);
+                    bw.Flush();
+                    byte[] data = ms.ToArray();
+                    w.Write(data.Length); // length prefix
+                    w.Write(data);
+                }
             }
         }
         public void Read(BinaryReader r)
@@ -160,6 +181,31 @@ namespace TM_GenericMapping.MediaTracker.IO
             {
                 SubObjects[i] = new TriangleObjectData();
                 SubObjects[i].Read(r);
+            }
+
+            if (version < 3)
+                return;
+
+            int cmpCount = r.ReadInt32();
+            if (cmpCount < 0 || cmpCount > 10_000)
+                throw new InvalidDataException($"Invalid component count: {subCount}");
+
+            SerializableComponents = new ISerializableComponent[cmpCount];
+            for (int i = 0; i < cmpCount; i++)
+            {
+                string typeName = r.ReadString();
+                Type type = Type.GetType(typeName)!;
+
+                int length = r.ReadInt32();
+                byte[] data = r.ReadBytes(length);
+
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+
+                var cmp = (ISerializableComponent)Activator.CreateInstance(type)!;
+                cmp.Deserialize(br, version);
+
+                SerializableComponents[i] = cmp;
             }
         }
 

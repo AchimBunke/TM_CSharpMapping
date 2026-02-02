@@ -1,7 +1,7 @@
 ﻿using System.Numerics;
 using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public interface IAnimationCurve<T>
 {
@@ -107,7 +107,6 @@ public record class AnimationCurveFloat : IAnimationCurve<float>
             return Keys[^1].Time - Keys[0].Time;
         }
     }
-
     public int Length => Keys.Length;
 
     public float StartTime => (Keys.Length > 0) ? Keys[0].Time : 0f;

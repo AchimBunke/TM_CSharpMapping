@@ -1,7 +1,8 @@
-﻿using System.Numerics;
+﻿using System.Collections.ObjectModel;
+using System.Numerics;
 using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 public enum Space
 {
     World,
@@ -31,6 +32,7 @@ public interface ICloneable<T> where T: class
     T Clone();
 }
 
+
 public abstract class MediaObject : ICloneable<MediaObject>
 {
 
@@ -47,6 +49,13 @@ public abstract class MediaObject : ICloneable<MediaObject>
         foreach(var o in other.SubObjects)
         {
             AddSubObjects(o.Clone());
+        }
+        foreach(var cmp in other.Components)
+        {
+            if (cmp is ICloneableComponent cloneable)
+                components.Add(cloneable.Clone(this));
+            else
+                components.Add(cmp);
         }
     }
 
@@ -273,6 +282,36 @@ public abstract class MediaObject : ICloneable<MediaObject>
          => new MediaObjectAnimator<MediaObject>(this) { ContinuosKeyFrames = continuosKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis };
 
     public abstract MediaObject Clone();
+
+
+    HashSet<IMediaObjectComponent> components = [];
+    public IReadOnlySet<IMediaObjectComponent> Components => components;
+    public T? GetComponent<T>() where T : IMediaObjectComponent
+    {
+        return components.OfType<T>().FirstOrDefault();
+    }
+    public bool TryGetComponent<T>(out T cmp) where T : IMediaObjectComponent
+    {
+        if (components.OfType<T>().Any())
+        {
+            cmp = GetComponent<T>()!;
+            return true;
+        }
+        else
+        {
+            cmp = default!;
+            return false;
+        }
+    }
+    public void AddComponent<T>(T component) where T : IMediaObjectComponent
+    {
+        components.Add(component);
+    }
+    public void AddComponents(params ReadOnlySpan<IMediaObjectComponent> components)
+    {
+        foreach(var cmp in components)
+            AddComponent(cmp);
+    }
 }
 
 public class MediaObjectGroup : MediaObject

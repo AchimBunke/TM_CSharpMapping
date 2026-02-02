@@ -1,7 +1,6 @@
 ﻿using System.Numerics;
-using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public static class Conversion
 {
@@ -13,8 +12,5 @@ public static class Conversion
     public static Vector2 V2(float x, float y)=> new Vector2(x, y);
     public static Vector2 V2(float v) => new Vector2(v);
     public static Vector2 V2(Vector3 v) => v.ToVector2();
-
-
-
 
 }

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Numerics;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public record struct PostProcessingEffectData(Memory<PostProcessingEffect> WorldSpaceEffects, Memory<PostProcessingEffect> NdcSpaceEffects);
 

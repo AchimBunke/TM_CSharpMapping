@@ -9,11 +9,11 @@ using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using TM_GenericMapping.Common;
-using TM_GenericMapping.MediaTracker.IO;
+using TM_GenericMapping.Common.IO;
 using static GBX.NET.Engines.Plug.CPlugSurface.Mesh;
 using Color = System.Drawing.Color;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public interface IMorphable
 {
@@ -228,6 +228,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         LocalRotation = data.LocalRotation;
         LocalScale = data.LocalScale;
         AddSubObjects(data.SubObjects.Select(s => new TriangleObject(s)).ToArray());
+        AddComponents(data.SerializableComponents);
     }
     public TriangleObjectData AsTriangleObjectData()
     {
@@ -250,6 +251,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
             LocalRotation = LocalRotation,
             LocalScale = LocalScale,
             SubObjects = SubObjects.Where(s => s is TriangleObject).Select(s => (s as TriangleObject).AsTriangleObjectData()).ToArray(),
+            SerializableComponents = Components.OfType<ISerializableComponent>().ToArray(),
         };
         return triangleObjectData;
     }

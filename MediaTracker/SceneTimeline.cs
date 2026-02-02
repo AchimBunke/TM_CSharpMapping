@@ -8,7 +8,7 @@ using TM_GenericMapping.IO;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 /// <summary>
 /// 
@@ -96,7 +96,7 @@ public static class WorldPositionExtensions
     public static Vector3 StadiumSurfaceCenter => StadiumSurfaceBounds.Center with { Y = StadiumSurfaceOffset.Y };
 }
 
-public abstract class Scene
+public class SceneTimeline
 {
     #region Publics
     public BlockTemplates BlockTemplates { get; init; }
@@ -142,7 +142,7 @@ public abstract class Scene
 
     #region Scene API
     public IEnumerable<MediaObject> Objects => objects;
-    protected void Add(params ReadOnlySpan<MediaObject> newObjects)
+    public void Add(params ReadOnlySpan<MediaObject> newObjects)
     {
         foreach (var obj in newObjects)
         {
@@ -155,7 +155,7 @@ public abstract class Scene
             }
         }
     }
-    protected void AddSubObjects(MediaObject obj, params ReadOnlySpan<MediaObject> subObjects)
+    public void AddSubObjects(MediaObject obj, params ReadOnlySpan<MediaObject> subObjects)
     {
         foreach (var subObject in subObjects)
         {
@@ -167,7 +167,7 @@ public abstract class Scene
             }
         }
     }
-    protected void Wait(float timeSeconds)
+    public void Wait(float timeSeconds)
     {
         ulong targetAnimationTimeMillis = AnimationTimeMillis + (ulong)(timeSeconds * 1000f);
         while (AnimationTimeMillis < targetAnimationTimeMillis)
@@ -175,7 +175,7 @@ public abstract class Scene
             AnimationUpdate();
         }
     }
-    protected void RequireKeyFrame(params ReadOnlySpan<MediaObject> objects)
+    public void RequireKeyFrame(params ReadOnlySpan<MediaObject> objects)
     {
         foreach (var obj in objects)
         {
@@ -183,18 +183,18 @@ public abstract class Scene
             SetHierarchyRequiresKeyFrame(obj);
         }
     }
-    protected void AnimationStep()
+    public void AnimationStep()
     {
         AnimationUpdate();
     }
 
-    protected void Delayed(float delaySeconds, Action action)
+    public void Delayed(float delaySeconds, Action action)
     {
         ulong targetTimeMillis = AnimationTimeMillis + (ulong)(delaySeconds * 1000f);
         delayedActions.Add(targetTimeMillis, action);
     }
 
-    protected void StepToNextKeyFrameUpdate()
+    public void StepToNextKeyFrameUpdate()
     {
         while(AnimationTimeMillis < nextKeyFrameTimeMillis)
         {
@@ -205,7 +205,7 @@ public abstract class Scene
     /// Step to next update of keyframe of specific object
     /// </summary>
     /// <param name="obj"></param>
-    protected void StepToNextKeyFrameUpdate(MediaObject obj)
+    public void StepToNextKeyFrameUpdate(MediaObject obj)
     {
         ulong targetMillis = blockToKeyFrameData[objectsInScene[obj].block].NextKeyFrameTargetMillis;
         while (AnimationTimeMillis < targetMillis)
@@ -216,7 +216,7 @@ public abstract class Scene
     /// <summary>
     /// Runs animation until every animation ended and all objects are created
     /// </summary>
-    protected void WaitAnimationEnd()
+    public void WaitAnimationEnd()
     {
         while (RequiresKeyFrameUpdates || HasActiveAnimations || HasDelayedActions)
         {
@@ -224,7 +224,7 @@ public abstract class Scene
         }
        
     }
-    void CompleteKeyframesForUnfinishedBlocks()
+    private void CompleteKeyframesForUnfinishedBlocks()
     {
         // Create keyframes for objects which only have 1
         foreach (var block in blockToRenderObjects.Keys)
@@ -245,7 +245,7 @@ public abstract class Scene
         }
     }
 
-    protected void ForceStopAllAnimations()
+    public void ForceStopAllAnimations()
     {
         foreach (var animator in animators.Values.SelectMany(v=>v))
         {
@@ -256,7 +256,7 @@ public abstract class Scene
             concurrentAnimator.Stop();
         }
     }
-    protected void StopAnimation(params ReadOnlySpan<MediaObject> targets)
+    public void StopAnimation(params ReadOnlySpan<MediaObject> targets)
     {
         foreach (var obj in targets)
         {
@@ -276,40 +276,40 @@ public abstract class Scene
         }
     }
 
-    protected void SetPosition(MediaObject obj, Vector3 position, Space space = Space.Local)
+    public void SetPosition(MediaObject obj, Vector3 position, Space space = Space.Local)
     {
         obj.SetPosition(position, space);
         if (IsInScene(obj))
             SetHierarchyRequiresKeyFrame(obj);
     }
-    protected void SetPosition(MediaObject obj, ScreenPosition moveLocation, Space space = Space.Local) => SetPosition(obj, GetPosition(moveLocation), space);
-    protected void Translate(MediaObject obj, Vector3 position, Space space = Space.Local)
+    public void SetPosition(MediaObject obj, ScreenPosition moveLocation, Space space = Space.Local) => SetPosition(obj, GetPosition(moveLocation), space);
+    public void Translate(MediaObject obj, Vector3 position, Space space = Space.Local)
     {
         obj.Translate(position, space);
         if (IsInScene(obj))
             SetHierarchyRequiresKeyFrame(obj);
     }
-    protected void SetScale(MediaObject obj, Vector3 scale)
+    public void SetScale(MediaObject obj, Vector3 scale)
     {
         obj.LocalScale = scale;
         if (IsInScene(obj))
             SetHierarchyRequiresKeyFrame(obj);
     }
-    protected void SetScale(MediaObject obj, float scale) => SetScale(obj, Vector3.Create(scale));
-    protected void SetRotation(MediaObject obj, Quaternion rotation, Space space = Space.Local)
+    public void SetScale(MediaObject obj, float scale) => SetScale(obj, Vector3.Create(scale));
+    public void SetRotation(MediaObject obj, Quaternion rotation, Space space = Space.Local)
     {
         obj.SetRotation(rotation, space);
         if (IsInScene(obj))
             SetHierarchyRequiresKeyFrame(obj);
     }
-    protected void Rotate(MediaObject obj, Quaternion rotation, Space space = Space.Local)
+    public void Rotate(MediaObject obj, Quaternion rotation, Space space = Space.Local)
     {
         obj.Rotate(rotation, space);
         if (IsInScene(obj))
             SetHierarchyRequiresKeyFrame(obj);
     }
 
-    protected void AddLocalNDCPostProcessingEffects(RenderObject obj, params ReadOnlySpan<PostProcessingEffect> effects)
+    public void AddLocalNDCPostProcessingEffects(RenderObject obj, params ReadOnlySpan<PostProcessingEffect> effects)
     {
         foreach (var effect in effects)
         {
@@ -318,7 +318,7 @@ public abstract class Scene
                 SetHierarchyRequiresKeyFrame(obj);
         }
     }
-    protected void AddLocalWorldSpacePostProcessingEffects(RenderObject obj, params ReadOnlySpan<PostProcessingEffect> effects)
+    public void AddLocalWorldSpacePostProcessingEffects(RenderObject obj, params ReadOnlySpan<PostProcessingEffect> effects)
     {
         foreach (var effect in effects)
         {
@@ -328,7 +328,7 @@ public abstract class Scene
         }
     }
 
-    protected void AddNDCSpacePostProcessingEffect(PostProcessingEffect effect, params ReadOnlySpan<string> layers)
+    public void AddNDCSpacePostProcessingEffect(PostProcessingEffect effect, params ReadOnlySpan<string> layers)
     {
         foreach(var layer in layers)
         {
@@ -341,7 +341,7 @@ public abstract class Scene
             effectSet.Add(effect);
         }
     }
-    protected void AddWorldSpacePostProcessingEffect(PostProcessingEffect effect, params ReadOnlySpan<string> layers)
+    public void AddWorldSpacePostProcessingEffect(PostProcessingEffect effect, params ReadOnlySpan<string> layers)
     {
         foreach (var layer in layers)
         {
@@ -356,7 +356,7 @@ public abstract class Scene
     }
 
 
-    protected void Morph<T, T2>(T source, T2 target, Easing type = Easing.Linear, float percent = 1f)
+    public void Morph<T, T2>(T source, T2 target, Easing type = Easing.Linear, float percent = 1f)
         where T : MediaObject, IMorphable
         where T2 : IMorphable
     {
@@ -365,7 +365,7 @@ public abstract class Scene
             SetHierarchyRequiresKeyFrame(source);
     }
 
-    protected void Play(bool stopAfter = false, params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
+    public void Play(bool stopAfter = false, params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
     {
         foreach (var newAnimator in newAnimators)
         {
@@ -381,7 +381,7 @@ public abstract class Scene
         if(stopAfter)
             StopObjectAnimationsAfter(newAnimators);
     }
-    protected void Play(ulong tickRateMillis, ulong keyFrameGenerationTickRateMillis = 0, bool stopAfter = false, params ReadOnlySpan<IMediaObjectAnimator> animators)
+    public void Play(ulong tickRateMillis, ulong keyFrameGenerationTickRateMillis = 0, bool stopAfter = false, params ReadOnlySpan<IMediaObjectAnimator> animators)
     {
         foreach (var animator in animators)
         {
@@ -390,12 +390,12 @@ public abstract class Scene
         }
         Play(stopAfter, animators);
     }
-    protected void Play(ulong tickRateMillis, params ReadOnlySpan<IMediaObjectAnimator> animators)
+    public void Play(ulong tickRateMillis, params ReadOnlySpan<IMediaObjectAnimator> animators)
         => Play(tickRateMillis, 0, false, animators);
-    protected void Play(params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
+    public void Play(params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
         => Play(false, newAnimators);
 
-    protected void PlayConcurrent(params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
+    public void PlayConcurrent(params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
     {
 
         foreach (var newAnimator in newAnimators)
@@ -403,7 +403,7 @@ public abstract class Scene
             concurrentAnimators.Add(newAnimator);
         }
     }
-    protected void PlayConcurrent(ulong tickRateMillis, params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
+    public void PlayConcurrent(ulong tickRateMillis, params ReadOnlySpan<IMediaObjectAnimator> newAnimators)
     {
         foreach (var animator in newAnimators)
         {
@@ -413,7 +413,7 @@ public abstract class Scene
     }
 
 
-    protected void StopObjectAnimationsAfter(params ReadOnlySpan<IMediaObjectAnimator> animators)
+    public void StopObjectAnimationsAfter(params ReadOnlySpan<IMediaObjectAnimator> animators)
     {
         foreach(var animator in animators)
         {
@@ -422,7 +422,7 @@ public abstract class Scene
     }
 
 
-    protected void SetKeyFrameTickRate(ulong tickRateMillis, params ReadOnlySpan<MediaObject> objects)
+    public void SetKeyFrameTickRate(ulong tickRateMillis, params ReadOnlySpan<MediaObject> objects)
     {
 
         foreach(var obj in objects)
@@ -460,7 +460,7 @@ public abstract class Scene
         ScreenPositionExtensions.ScreenToVector3Function = GetPosition;
     }
 
-    protected void SetTrackCycling(bool cycleTrack = true, params ReadOnlySpan<MediaObject> objects)
+    public void SetTrackCycling(bool cycleTrack = true, params ReadOnlySpan<MediaObject> objects)
     {
         foreach (var obj in objects)
         {
@@ -472,7 +472,7 @@ public abstract class Scene
             }
         }
     }
-    protected MediaObject[] GetObjectsFromHierarchy(params ReadOnlySpan<MediaObject> objects)
+    public MediaObject[] GetObjectsFromHierarchy(params ReadOnlySpan<MediaObject> objects)
     {
         List<MediaObject> objs = [];
         foreach(var o in objects)
@@ -483,7 +483,7 @@ public abstract class Scene
         return objs.ToArray();
     }
 
-    protected void SetKeepTrackActive(bool keepActive = true, params ReadOnlySpan<MediaObject> objects)
+    public void SetKeepTrackActive(bool keepActive = true, params ReadOnlySpan<MediaObject> objects)
     {
         //throw new NotImplementedException("Feature not enabled!");
         foreach (var obj in objects)
@@ -501,12 +501,13 @@ public abstract class Scene
     #endregion
 
     #region Internal
-    public Scene()
+    public SceneTimeline()
     {
         BlockTemplates = MediaTrackerUtils.CreateBlockTemplates();
         RenderData = RenderData.Default;
     }
 
+    public float AnimationTickRateMillis => animationSettings.AnimationTickRateMillis;
     public float AnimationTime => AnimationTimeMillis / 1000f;
     float NextKeyFrameTime => nextKeyFrameTimeMillis / 1000f;
 
@@ -518,7 +519,7 @@ public abstract class Scene
     protected bool HasDelayedActions => delayedActions.Count > 0;
     void AnimationUpdate()
     {
-        PreAnimationUpdateTick();
+        PreAnimationUpdateTick?.Invoke(this);
         UpdateAnimators();
         UpdateDelayedAction();
         UpdatePostProcessingEffects();
@@ -527,7 +528,7 @@ public abstract class Scene
             GenerateKeyFrames();
             nextKeyFrameTimeMillis += animationSettings.MinKeyFrameTickRateMillis;
         }
-        PostAnimationUpdateTick();
+        PostAnimationUpdateTick?.Invoke(this);
         AnimationTimeMillis += animationSettings.AnimationTickRateMillis;
     }
     void UpdateAnimators()
@@ -806,14 +807,14 @@ public abstract class Scene
 
     #endregion
 
-    public void Animate(CGameCtnMediaClip clip, SceneAnimationSettings settings)
+    public void Animate(CGameCtnMediaClip clip, SceneAnimationSettings settings, ISceneScript sceneBuilder)
     {
         objects.Clear();
         this.clip = clip;
         animationSettings = settings;
         ResetScreenPositionFunction();
 
-        Animate();
+        sceneBuilder.Build(this);
 
         CompleteKeyframesForUnfinishedBlocks();
 
@@ -823,14 +824,22 @@ public abstract class Scene
         UpdateTrackCycling();
     }
 
-   
-    protected abstract void Animate();
-    protected virtual void PreAnimationUpdateTick()
-    {
 
-    }
-    protected virtual void PostAnimationUpdateTick()
-    {
+    public event Action<SceneTimeline> PreAnimationUpdateTick;
+    public event Action<SceneTimeline> PostAnimationUpdateTick;
+}
 
+public interface ISceneScript
+{
+    void Build(SceneTimeline scene);
+}
+public abstract class SceneBuilder : ISceneScript
+{
+    protected SceneTimeline scene { get; private set; } = null!;
+    public void Build(SceneTimeline scene)
+    {
+        this.scene = scene;
+        Build();
     }
+    protected abstract void Build();
 }

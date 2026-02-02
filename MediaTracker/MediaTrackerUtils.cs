@@ -5,7 +5,7 @@ using TM_GenericMapping.Common;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public static class MediaTrackerUtils
 {

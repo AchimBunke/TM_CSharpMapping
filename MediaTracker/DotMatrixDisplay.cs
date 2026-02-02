@@ -5,7 +5,7 @@ using Color = System.Drawing.Color;
 using TM_GenericMapping.Common;
 using System.Security;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public enum Anchor
 {

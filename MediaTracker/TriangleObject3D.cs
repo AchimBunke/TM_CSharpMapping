@@ -4,10 +4,10 @@ using System.Numerics;
 using TM_GenericMapping.Common;
 using static GBX.NET.Engines.Plug.CPlugVisual;
 using static System.Collections.Specialized.BitVector32;
-using static TM_GenericMapping.MediaTracker.Spline;
+using static TM_GenericMapping.Common.Spline;
 using Color = System.Drawing.Color;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public class TriangleObject3D : TriangleObject
 {
@@ -118,6 +118,25 @@ public class Plane : TriangleObject3D
     {
         Name = "Plane";
     }
+    public Plane(
+        Vector3 br,
+        Vector3 bl,
+        Vector3 tl,
+        Vector3 tr,
+        Color? color = null,
+        bool uniqueVertices = false,
+        IRenderer renderer = null!) : base(points:
+            [
+            br, bl ,tl, tr
+            ],
+            triangles: [(0, 1, 2), (2, 0, 3)],
+            colors: [color ?? Color.Black, color ?? Color.Black, color ?? Color.Black, color ?? Color.Black],
+            uniqueVertices: uniqueVertices,
+            renderer: renderer)
+    {
+        Name = "Plane";
+    }
+
 }
 
 public class Sphere : TriangleObject3D

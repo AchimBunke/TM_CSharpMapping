@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using TM_GenericMapping.Common;
 using static GBX.NET.Engines.Plug.CPlugVehicleCarPhyTuning;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public interface IMediaObjectAnimator
 {

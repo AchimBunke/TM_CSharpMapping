@@ -7,7 +7,7 @@ using System.Numerics;
 using TM_GenericMapping.Common;
 using Color = System.Drawing.Color;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 #pragma warning disable CA1416 // Validate platform compatibility
 

@@ -1,4 +1,4 @@
-﻿namespace TM_GenericMapping.MediaTracker.IO;
+﻿namespace TM_GenericMapping.Common.IO;
 
 public static class TriangleObjectSerializer
 {

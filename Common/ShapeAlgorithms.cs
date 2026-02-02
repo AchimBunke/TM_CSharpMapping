@@ -2,7 +2,8 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using TM_GenericMapping.MediaTracker;
+using TM_GenericMapping.IO;
+using TM_GenericMapping.Common;
 using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using Color = System.Drawing.Color;
@@ -646,6 +647,27 @@ public static class ShapeUtils
         float max = MathF.Max(dx, MathF.Max(dy, dz));
         return max; // Negative means overlap
     }
+    public static float Distance(Bounds a, Vector3 p)
+    {
+        var min = a.Min;
+        var max = a.Max;
+
+        float dx = MathF.Max(min.X - p.X, p.X - max.X);
+        float dy = MathF.Max(min.Y - p.Y, p.Y - max.Y);
+        float dz = MathF.Max(min.Z - p.Z, p.Z - max.Z);
+
+        return MathF.Max(dx, MathF.Max(dy, dz));
+    }
+    public static Vector3 ClosesPoint(Bounds a, Vector3 p)
+    {
+        var min = a.Min;
+        var max = a.Max;
+
+        return new Vector3(
+            Math.Clamp(p.X, min.X, max.X),
+            Math.Clamp(p.Y, min.Y, max.Y),
+            Math.Clamp(p.Z, min.Z, max.Z));
+    }
     public static Bounds GetAABB(TriangleObject obj)
     {
         ExceptionUtils.Ensure(obj.Vertices.Length > 0, () => new ArgumentException("Must have at least one vertex."));
@@ -693,6 +715,7 @@ public static class ShapeUtils
     {
         return CombineAABB(GetFlattenedHierarchyObjects(obj).OfType<TriangleObject>().Where(o => o.Vertices.Length > 0).Select(o => o.GetAABB()).ToArray());
     }
+
 
     public static Vector4[] GenerateVertexVisualizationColors(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<Int3> triangles, int distinctColors = 12, bool uniqueVertices = false)
     {
@@ -1173,4 +1196,21 @@ public struct Bounds
 
     public bool Intersects(Bounds other) => ShapeUtils.Distance(this, other) < 0;
     public float Distance(Bounds other) => ShapeUtils.Distance(this, other);
+    public bool Contains(Vector3 point) => ShapeUtils.Distance(this, point) < 0;
+    public float Distance(Vector3 point) => ShapeUtils.Distance(this, point);
+    public bool IsEmpty => Size.X <= 0 || Size.Y <= 0 || Size.Z <= 0;
+    public float Volume => Size.X * Size.Y * Size.Z;
+
+
+    public static Bounds FromCorners(Vector3 a, Vector3 b)
+    {
+        var min = Vector3.Min(a, b);
+        var max = Vector3.Max(a, b);
+
+        return new Bounds
+        {
+            Center = (min + max) * 0.5f,
+            Size = max - min
+        };
+    }
 }

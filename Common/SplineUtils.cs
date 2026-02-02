@@ -1,8 +1,8 @@
 ﻿using System.Numerics;
 using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
-using TM_GenericMapping.MediaTracker;
-using static TM_GenericMapping.MediaTracker.Spline;
+using TM_GenericMapping.Common;
+using static TM_GenericMapping.Common.Spline;
 
 namespace TM_GenericMapping.Common;
 

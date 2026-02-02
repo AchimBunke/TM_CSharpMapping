@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Security.Cryptography;
 using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public class GenericTriangle2DObjectMorpher
 {

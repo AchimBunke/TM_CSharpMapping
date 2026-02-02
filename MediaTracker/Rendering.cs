@@ -4,7 +4,7 @@ using GBX.NET.Inputs;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 
 public interface IRenderer

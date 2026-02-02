@@ -1,7 +1,7 @@
 ﻿using System.Xml.Linq;
 using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.MediaTracker.IO;
+namespace TM_GenericMapping.Common.IO;
 
 public class TriangleBlockLibrary
 {

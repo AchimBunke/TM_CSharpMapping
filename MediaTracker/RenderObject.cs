@@ -4,7 +4,7 @@ using GBX.NET.Inputs;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public abstract class RenderObject : MediaObject
 {

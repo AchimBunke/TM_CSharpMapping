@@ -30,7 +30,7 @@ namespace TM_GenericMapping.Common
         }
 
         public static Vec3 ToVec3(this Vector3 v) => new Vec3(v.X, v.Y, v.Z);
-
+        public static Vector3 ToVector3(this Vec3 v) => new Vector3(v.X, v.Y, v.Z);
 
     }
 }

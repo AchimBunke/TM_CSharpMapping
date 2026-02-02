@@ -1,9 +1,9 @@
 ﻿using GBX.NET;
 using System.Numerics;
 using TM_GenericMapping.Common;
-using static TM_GenericMapping.MediaTracker.Spline;
+using static TM_GenericMapping.Common.Spline;
 
-namespace TM_GenericMapping.MediaTracker;
+namespace TM_GenericMapping.Common;
 
 public class Spline
 {
