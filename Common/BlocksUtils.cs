@@ -11,9 +11,9 @@ public static class BlocksUtils
         {
             get => block.IsFree ? (Vec3)block.AbsolutePositionInMap : BlockPositionToAbsolutePosition(block.Coord, block.Direction);
         }
-        public Vec3 PitchYawRollSave
+        public Vec3 YawPitchRollSave
         {
-            get => block.IsFree ? new Vec3(block.PitchYawRoll!.Value.Y, block.PitchYawRoll!.Value.X, block.PitchYawRoll!.Value.Z) : BlockDirectionToPitchYawRoll(block.Direction);
+            get => block.IsFree ? new Vec3(block.YawPitchRoll!.Value.X, block.YawPitchRoll!.Value.Y, block.YawPitchRoll!.Value.Z) : BlockDirectionToYawPitchRoll(block.Direction);
         }
     }
     extension(CGameCtnChallenge challenge)
@@ -45,13 +45,13 @@ public static class BlocksUtils
                 _ => throw new NotImplementedException(),
             }) * 32f);
     }
-    public static Vec3 BlockDirectionToPitchYawRoll(Direction blockDirection)
+    public static Vec3 BlockDirectionToYawPitchRoll(Direction blockDirection)
         => blockDirection switch
         {
-            Direction.North => new Vec3(0f, 0f, 0f) * MathUtils.Deg2Rad,
-            Direction.East => new Vec3(0f, -90f, 0f) * MathUtils.Deg2Rad,
-            Direction.South => new Vec3(0f, -180f, 0f) * MathUtils.Deg2Rad,
-            Direction.West => new Vec3(0f, 90f, 0f) * MathUtils.Deg2Rad,
+            Direction.North => new Vec3(0f, 0f, 0f),
+            Direction.East => new Vec3(-90f, 0f, 0f),
+            Direction.South => new Vec3(180f, 0f, 0f),
+            Direction.West => new Vec3(90f, 0f, 0f),
             _ => throw new NotImplementedException(),
         } * MathUtils.Deg2Rad;
 }

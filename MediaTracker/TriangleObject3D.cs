@@ -367,3 +367,5 @@ public class SweepShape : TriangleObject3D
         colors = Enumerable.Repeat(color.ToVector4(), vertices.Count).ToList();
     }
 }
+
+

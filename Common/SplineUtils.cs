@@ -130,4 +130,35 @@ public static class SplineUtils
 
         return new Spline(SplineType.Linear, knots);
     }
+    public static Spline CreateLinearWithRotation(params ReadOnlySpan<Vector3> points)
+    {
+        ExceptionUtils.Ensure(points.Length >= 2, () => new ArgumentException("Need at least 2 points to create a linear spline."));
+
+        var knots = new Spline.Knot[points.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector3 forward;
+
+            if (i == 0)
+                forward = Vector3.Normalize(points[1] - points[0]);
+            else if (i == points.Length - 1)
+                forward = Vector3.Normalize(points[i] - points[i - 1]);
+            else
+                forward = Vector3.Normalize(points[i + 1] - points[i - 1]);
+
+            // Choose a stable up vector (depends on your coordinate system)
+            var rotation = Quaternion.CreateFromRotationMatrix(
+                Matrix4x4.CreateLookAt(Vector3.Zero, forward, Vector3.UnitY)
+            );
+
+            knots[i] = new Spline.Knot(
+                points[i],              // Position
+                points[i],              // TangentIn (ignored for linear)
+                points[i],              // TangentOut (ignored for linear)
+                rotation     // Rotation
+            );
+        }
+
+        return new Spline(SplineType.Linear, knots);
+    }
 }

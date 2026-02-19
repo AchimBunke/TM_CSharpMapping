@@ -313,7 +313,7 @@ public static class ShapeUtils
 
         return CalculateTangent(points[pointIndex], points[prevIndex], points[nextIndex]);
     }
-    public static Vector3 CalculatePolygonNormal(ReadOnlySpan<Vector3> points)
+    public static Vector3 CalculatePolygonNormal(params ReadOnlySpan<Vector3> points)
     {
         if (points.Length < 3)
             throw new ArgumentException("A polygon must have at least 3 points.");
@@ -392,7 +392,9 @@ public static class ShapeUtils
             Vector3 nextVertex = points[(i + 1) % points.Length];
 
             var tangent = CalculateTangent(currentVertex, previousVertex, nextVertex);
-            Vector3 perpendicular = Vector3.Normalize(new Vector3(-tangent.Y, tangent.X, 0));
+            Vector3 planeNormal = ComputePlaneNormal(points);
+            Vector3 perpendicular = Vector3.Normalize(
+                Vector3.Cross(planeNormal, tangent));
 
             switch (outlineExtends)
             {
@@ -426,95 +428,74 @@ public static class ShapeUtils
         }
     }
 
-    public static void GenerateClosedPolygonOutline(ReadOnlySpan<Vector3> points, float width, OutlineExtendsDirection outlineExtends, out List<Vector3> outlineVertices, out List<Int3> outlineTriangles)
+    public static void GenerateClosedPolygonOutline(
+      ReadOnlySpan<Vector3> points,
+      float width,
+      OutlineExtendsDirection outlineExtends,
+      out List<Vector3> outlineVertices,
+      out List<Int3> outlineTriangles)
     {
-        ExceptionUtils.Ensure(points.Length >= 2, () => new ArgumentException("Polygon must have at least 2 vertices"));
+        ExceptionUtils.Ensure(points.Length >= 2,
+            () => new ArgumentException("Polygon must have at least 2 vertices"));
+
         outlineVertices = new List<Vector3>();
         outlineTriangles = new List<Int3>();
 
-        // The first step is to add the top-left and top-right corners for the first rectangle
-        // Bottom left and bottom right vertices will be aligned later
-        Vector3 lastBottomLeft = Vector3.Zero;
-        Vector3 lastBottomRight = Vector3.Zero;
+        Vector3 planeNormal = ComputePlaneNormal(points);
 
         var innerVertices = new Vector3[points.Length];
         var outerVertices = points.ToArray();
+
         for (int i = 0; i < points.Length; i++)
         {
-            // Get top-left and top-right points (top corners of the rectangle)
-            Vector3 previousVertex = points[i == 0 ? points.Length - 1 : i - 1];
-            Vector3 currentVertex = points[i];
-            Vector3 nextVertex = points[(i + 1) % points.Length];
+            Vector3 prev = points[i == 0 ? points.Length - 1 : i - 1];
+            Vector3 curr = points[i];
+            Vector3 next = points[(i + 1) % points.Length];
 
-            //var tangent = CalculateTangent(currentVertex, previousVertex, nextVertex);
-            //Vector3 perpendicular = Vector3.Normalize(new Vector3(-tangent.Y, tangent.X, 0));
+            Vector3 dirA = Vector3.Normalize(curr - prev);
+            Vector3 dirB = Vector3.Normalize(next - curr);
 
+            // Perpendiculars inside plane
+            Vector3 normalA = Vector3.Normalize(Vector3.Cross(planeNormal, dirA));
+            Vector3 normalB = Vector3.Normalize(Vector3.Cross(planeNormal, dirB));
 
-            Vector2 prev2D = new Vector2(previousVertex.X, previousVertex.Y);
-            Vector2 curr2D = new Vector2(currentVertex.X, currentVertex.Y);
-            Vector2 next2D = new Vector2(nextVertex.X, nextVertex.Y);
+            // Miter
+            Vector3 miter = Vector3.Normalize(normalA + normalB);
 
-            Vector2 dirA = Vector2.Normalize(curr2D - prev2D);
-            Vector2 dirB = Vector2.Normalize(next2D - curr2D);
-
-            Vector2 normalA = new Vector2(-dirA.Y, dirA.X);
-            Vector2 normalB = new Vector2(-dirB.Y, dirB.X);
-
-            Vector2 miter = Vector2.Normalize(normalA + normalB);
-
-            // Miter length
-            float dot = Vector2.Dot(miter, normalA);
+            float dot = Vector3.Dot(miter, normalA);
             float miterLength = width / MathF.Max(dot, 0.000001f);
 
-            // Final offset
-            Vector2 offset2D = miter * miterLength;
-            Vector3 offset = new Vector3(offset2D.X, offset2D.Y, 0);
-
-            //switch (outlineExtends)
-            //{
-            //    case OutlineExtendsDirection.Inwards:
-            //        innerVertices[i] = currentVertex + perpendicular * width;
-            //        outerVertices[i] = currentVertex;
-            //        break;
-            //    case OutlineExtendsDirection.Outwards:
-            //        innerVertices[i] = currentVertex;
-            //        outerVertices[i] = currentVertex - perpendicular * width;
-            //        break;
-            //    case OutlineExtendsDirection.Bidirectional:
-            //        innerVertices[i] = currentVertex + perpendicular * width / 2f;
-            //        outerVertices[i] = currentVertex - perpendicular * width / 2f;
-            //        break;
-
-            //}
+            Vector3 offset = miter * miterLength;
 
             switch (outlineExtends)
             {
                 case OutlineExtendsDirection.Inwards:
-                    innerVertices[i] = currentVertex + offset;
-                    outerVertices[i] = currentVertex;
+                    innerVertices[i] = curr + offset;
+                    outerVertices[i] = curr;
                     break;
+
                 case OutlineExtendsDirection.Outwards:
-                    innerVertices[i] = currentVertex;
-                    outerVertices[i] = currentVertex - offset;
+                    innerVertices[i] = curr;
+                    outerVertices[i] = curr - offset;
                     break;
+
                 case OutlineExtendsDirection.Bidirectional:
-                    innerVertices[i] = currentVertex + offset / 2f;
-                    outerVertices[i] = currentVertex - offset / 2f;
+                    innerVertices[i] = curr + offset * 0.5f;
+                    outerVertices[i] = curr - offset * 0.5f;
                     break;
             }
         }
+
         for (int i = 0; i < points.Length; ++i)
         {
             outlineVertices.Add(outerVertices[i]);
             outlineVertices.Add(innerVertices[i]);
 
-            int currentPointIdx = i * 2;
-            int currentInnerVertexIdx = (i * 2) + 1;
-            int nextPointIdx = (currentPointIdx + 2) % (outerVertices.Length * 2);
-            int nextInnerVertexIdx = (nextPointIdx + 1) % (outerVertices.Length * 2);
+            int current = i * 2;
+            int next = (current + 2) % (points.Length * 2);
 
-            outlineTriangles.Add(new Int3(currentPointIdx, nextPointIdx, currentInnerVertexIdx));
-            outlineTriangles.Add(new Int3(nextPointIdx, nextInnerVertexIdx, currentInnerVertexIdx));
+            outlineTriangles.Add(new Int3(current, next, current + 1));
+            outlineTriangles.Add(new Int3(next, next + 1, current + 1));
         }
     }
 
@@ -560,7 +541,16 @@ public static class ShapeUtils
         //outlineTriangles.RemoveRange(outlineTriangles.Count - 6, 6);
     }
 
-
+    static Vector3 ComputePlaneNormal(ReadOnlySpan<Vector3> pts)
+    {
+        for (int i = 2; i < pts.Length; i++)
+        {
+            var n = Vector3.Cross(pts[1] - pts[0], pts[i] - pts[0]);
+            if (n.LengthSquared() > 1e-6f)
+                return Vector3.Normalize(n);
+        }
+        return Vector3.UnitZ; // fallback if degenerate
+    }
     public static Vector3 GetCentroid(TriangleObject obj)
         => GetCentroid(obj.Vertices.Take(obj.FillVertexCount).ToArray());
     public static Vector3 GetCentroid(ReadOnlySpan<Vector3> vertices)
@@ -637,7 +627,15 @@ public static class ShapeUtils
         }
     }
 
-
+    public static TriangleObject InverseWindingOrder(TriangleObject obj)
+    {
+        var clone = obj.Clone();
+        for (int i = 0; i < obj.Triangles.Length; ++i)
+        {
+            clone.Triangles[i] = (obj.Triangles[i].X, obj.Triangles[i].Z, obj.Triangles[i].Y);
+        }
+        return clone;
+    }
     public static float Distance(Bounds a, Bounds b)
     {
         float dx = MathF.Max(b.Min.X - a.Max.X, a.Min.X - b.Max.X);
@@ -952,14 +950,15 @@ public static class ShapeUtils
 
     public static TriangleObject FlattenHierarchy(TriangleObject obj)
     {
-        return Merge(GetFlattenedHierarchyObjects(obj).OfType<TriangleObject>().Where(o => o.FillVertexCount > 0));
+        return Merge(false, GetFlattenedHierarchyObjects(obj).OfType<TriangleObject>().Where(o => o.FillVertexCount > 0));
     }
 
     public static IEnumerable<MediaObject> GetFlattenedHierarchyObjects(MediaObject obj)
     {
         return [obj, .. obj.SubObjects.SelectMany(GetFlattenedHierarchyObjects)];
     }
-    public static TriangleObject Merge(IEnumerable<TriangleObject> objs)
+
+    public static TriangleObject Merge(bool keepWorldPosition, params IEnumerable<TriangleObject> objs)
     {
         List<Vector3> fillVertices = [];
         List<Int3> fillTriangles = [];
@@ -969,7 +968,7 @@ public static class ShapeUtils
         int triangleOffset = 0;
         foreach (var objectInHierarchy in objs)
         {
-            fillVertices.AddRange(objectInHierarchy.Vertices.Take(objectInHierarchy.FillVertexCount));
+            fillVertices.AddRange(objectInHierarchy.Vertices.Take(objectInHierarchy.FillVertexCount).Select(v => Vector3.Transform(v, objectInHierarchy.LocalToWorldTRS)));
             fillTriangles.AddRange(objectInHierarchy.Triangles.Take(objectInHierarchy.FillTrianglesCount).Select(t => new Int3(triangleOffset + t.X, triangleOffset + t.Y, triangleOffset + t.Z)));
             fillColors.AddRange(objectInHierarchy.Colors.Take(objectInHierarchy.FillVertexCount));
             triangleOffset = fillTriangles.Count;
@@ -983,7 +982,7 @@ public static class ShapeUtils
         int fillTrianglesCount = fillTriangles.Count;
         foreach (var objectInHierarchy in objs)
         {
-            fillVertices.AddRange(objectInHierarchy.Vertices.Skip(objectInHierarchy.FillVertexCount));
+            fillVertices.AddRange(objectInHierarchy.Vertices.Skip(objectInHierarchy.FillVertexCount).Select(v => Vector3.Transform(v, objectInHierarchy.LocalToWorldTRS)));
             fillTriangles.AddRange(objectInHierarchy.Triangles.Skip(objectInHierarchy.FillTrianglesCount).Select(t => new Int3(triangleOffset + t.X, triangleOffset + t.Y, triangleOffset + t.Z)));
             fillColors.AddRange(objectInHierarchy.Colors.Skip(objectInHierarchy.FillVertexCount));
             triangleOffset = fillTriangles.Count;

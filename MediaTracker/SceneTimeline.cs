@@ -138,6 +138,7 @@ public class SceneTimeline
     //HashSet<IMediaObjectAnimator> addedAnimators = [];
     HashSet<IMediaObjectAnimator> completedAnimators = [];
     CGameCtnMediaClip clip = null!;
+    HashSet<CGameCtnMediaBlock> hiddenInEditorTimeline = [];
     #endregion
 
     #region Scene API
@@ -224,7 +225,7 @@ public class SceneTimeline
         }
        
     }
-    private void CompleteKeyframesForUnfinishedBlocks()
+    private void CompleteAndHideKeyframesForUnfinishedBlocks()
     {
         // Create keyframes for objects which only have 1
         foreach (var block in blockToRenderObjects.Keys)
@@ -234,13 +235,29 @@ public class SceneTimeline
                 if (keyCount == 0)
                 {
                     GenerateKeyFrame(block, 0);
-                    GenerateKeyFrame(block, (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
+                    if(hiddenInEditorTimeline.Contains(block))
+                        GenerateKeyFrame(block, 0);
+                    else
+                        GenerateKeyFrame(block, (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
                 }
                 else if (keyCount == 1)
                 {
-                    ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.Milliseconds;
-                    GenerateKeyFrame(block, lastKeyframeTime + (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
+                     
+                    ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
+                    if (hiddenInEditorTimeline.Contains(block))
+                        GenerateKeyFrame(block, lastKeyframeTime);
+                    else
+                        GenerateKeyFrame(block, lastKeyframeTime + (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
                 }
+                // This will not make it invisible in editor timeline!
+                //else if(keyCount > 1)
+                //{
+                //    if (hiddenInEditorTimeline.Contains(block))
+                //    {
+                //        ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
+                //        GenerateKeyFrame(block, lastKeyframeTime);
+                //    }
+                //}
             }
         }
     }
@@ -497,6 +514,22 @@ public class SceneTimeline
         }
     }
 
+    public void TrySetHiddenInIngameEditorTimeline(bool hidden, params ReadOnlySpan<MediaObject> objects)
+    {
+        foreach(var obj in objects)
+        {
+            EnsureAdded(obj);
+
+            var block = objectsInScene[obj].block;
+            if (block is not null)
+            {
+                if(hidden)
+                    hiddenInEditorTimeline.Add(block);
+                else
+                    hiddenInEditorTimeline.Remove(block);
+            }   
+        }
+    }
 
     #endregion
 
@@ -785,8 +818,9 @@ public class SceneTimeline
                 track.Chunks.Remove(cycleChunkId);
                 var cycleChunk = track.CreateChunk<CGameCtnMediaTrack.Chunk03078005>();
                 cycleChunk.Version = chunkBase.Version;
-                cycleChunk.U01 = firstBlock.Keys.FirstOrDefault()?.Time.TotalSeconds ?? 0;
-                cycleChunk.U02 = lastBlock.Keys.LastOrDefault()?.Time.TotalSeconds ?? 0;
+                track.IsCycling = true;
+                track.RepeatingSegmentStart = firstBlock.Keys.FirstOrDefault()?.Time ?? default;
+                track.RepeatingSegmentEnd = lastBlock.Keys.LastOrDefault()?.Time ?? default;
             }
         }
     }
@@ -816,7 +850,7 @@ public class SceneTimeline
 
         sceneBuilder.Build(this);
 
-        CompleteKeyframesForUnfinishedBlocks();
+        CompleteAndHideKeyframesForUnfinishedBlocks();
 
         if (animationSettings.UpdateTrackOrder)
             UpdateTrackOrder();

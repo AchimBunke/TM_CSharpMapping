@@ -283,5 +283,5 @@ public class Triangle3DRenderer : TriangleRenderer
 
 public static class Rendering
 {
-    public static IRenderer DefaultTriangleRenderer = new Triangle2DRenderer();
+    public static IRenderer DefaultTriangleRenderer = new Triangle3DRenderer();
 }

@@ -31,6 +31,8 @@ namespace TM_GenericMapping.Common
         {
             public bool UniformColor;
             public Color Color;
+            public bool IncludeInvisibleLayers;
+            public bool IncludeVisibleRoot;
 
             public TriangleGrouping Grouping;
 
@@ -39,21 +41,21 @@ namespace TM_GenericMapping.Common
                 {
                     UniformColor = false,
                     Color = Color.Black,
-                    Grouping = TriangleGrouping.Layers
+                    Grouping = TriangleGrouping.Layers,
+                    IncludeInvisibleLayers = false,
+                    IncludeVisibleRoot = false,
                 };
         }
 
         public static string ItemDirectoryPath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items");
         public static string BlockToItemExportDirectory = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items\BlockToItemExports\Nadeo");
-        public static bool TryConvert(CGameCtnAnchoredObject anchoredItem, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings, out TriangleObject triangleObj)
+        public static bool TryConvert(CGameItemModel itemModel, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings, out TriangleObject triangleObj)
         {
-            var ident = anchoredItem.ItemModel;
             try
             {
+                var ident = itemModel.Ident;
                 Logger.Debug($"Converting Item: {ident.Id}");
                 triangleObj = new TriangleObject() { Name = ident.Id };
-
-                var itemModel = Gbx.Parse<CGameItemModel>(System.IO.Path.Combine(ItemDirectoryPath, ident.Id)).Node;
                 var entityModel = itemModel.EntityModel;
 
                 if (entityModel is CPlugPrefab cPlugPrefabEntityModel)
@@ -95,6 +97,10 @@ namespace TM_GenericMapping.Common
                 {
                     return false;
                 }
+                foreach (var item in ShapeUtils.GetFlattenedHierarchyObjects(triangleObj).OfType<TriangleObject>())
+                {
+                    item.CanShareBlock = true;
+                }
 
                 return true;
 
@@ -102,9 +108,24 @@ namespace TM_GenericMapping.Common
             catch (Exception e)
             {
                 triangleObj = null!;
-                Logger.Error($"Failed to convert {ident}: {e.Message}");
+                Logger.Error($"Failed to convert {itemModel.Ident.Id}: {e.Message}");
             }
             return false;
+        }
+        public static bool TryConvert(CGameCtnAnchoredObject anchoredItem, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings, out TriangleObject triangleObj)
+        {
+            try
+            {
+                var ident = anchoredItem.ItemModel;
+                Logger.Debug($"Loading CGameItemModel: {ident.Id}");
+                var itemModel = Gbx.Parse<CGameItemModel>(System.IO.Path.Combine(ItemDirectoryPath, ident.Id)).Node;
+                return TryConvert(itemModel, materialLibrary, settings, out triangleObj);
+            }
+            catch (Exception)
+            {
+                triangleObj = null;
+                return false;
+            }
         }
         static Gbx<CGameItemModel> FindExtraItemModel(DirectoryInfo searchDirectory, string itemName)
         {
@@ -117,9 +138,14 @@ namespace TM_GenericMapping.Common
             {
                 if (layer is GeometryLayer geometryLayer)
                 {
-                    if (!geometryLayer.IsVisible || !layer.IsEnabled)
+                    if ((!geometryLayer.IsVisible && !settings.IncludeInvisibleLayers) || !layer.IsEnabled)
                     {
                         Logger.Trace($"Skipping crystal layer: {layer.LayerName} because its not enabled or visible");
+                        continue;
+                    }
+                    if(layer.LayerName == TrianglesUtils.VisibleRootLayerName && !settings.IncludeVisibleRoot)
+                    {
+                        Logger.Trace($"Skipping crystal layer: {layer.LayerName}");
                         continue;
                     }
                     ReadLayer(geometryLayer, obj, materialLibrary, settings);
@@ -282,7 +308,6 @@ namespace TM_GenericMapping.Common
                 }
             }
         }
-
         static void ReadMesh(CPlugSolid2Model mesh, TriangleObject obj, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings)
         {
             Dictionary<string, TriangleData> materialGroups = [];

@@ -57,7 +57,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         }
         OutlineWidth = width;
     }
-    public OutlineExtendsDirection OutlineExtends { get; init; }
+    public OutlineExtendsDirection OutlineExtends { get; init; } = OutlineExtendsDirection.Outwards;
 
     public bool CanFill { get; init; }
     public bool IsFilled { get; protected set; }
@@ -137,7 +137,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         bool withOutline = false,
         bool withFill = true,
         bool filled = true,
-        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Inwards,
+        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
         IRenderer renderer = null!) : this(withOutline, withFill, filled, outlineExtends, outlineWidth, uniqueVertices, renderer)
@@ -161,7 +161,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         bool withOutline = false,
         bool withFill = true,
         bool filled = true,
-        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Inwards,
+        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
         IRenderer renderer = null!) : this(renderer)
@@ -693,6 +693,7 @@ public class Line : TriangleObject
         Color? color = null,
         float width = 0.1f,
         bool closed = false,
+        OutlineExtendsDirection extendsDirection = OutlineExtendsDirection.Bidirectional,
         bool uniqueVertices = false,
         IRenderer renderer = null!) 
         : base(
@@ -700,7 +701,7 @@ public class Line : TriangleObject
             outlineColor: color,
             withOutline: true,
             withFill: false,
-            outlineExtends: OutlineExtendsDirection.Bidirectional,
+            outlineExtends: extendsDirection,
             outlineWidth: width,
             uniqueVertices: uniqueVertices,
             renderer: renderer)
@@ -736,6 +737,7 @@ public class Line : TriangleObject
     }
 
 }
+
 
 public abstract class ArcBase : TriangleObject
 {
