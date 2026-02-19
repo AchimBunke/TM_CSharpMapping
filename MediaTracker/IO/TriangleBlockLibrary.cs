@@ -3,6 +3,9 @@ using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.Common.IO;
 
+/// <summary>
+/// Allows easy access to sets of serialized TriangleObject data and querying
+/// </summary>
 public class TriangleBlockLibrary
 {
     public class LoadedTriangleBlockEntry
@@ -168,7 +171,7 @@ public class TriangleBlockLibrary
     }
 
 
-    public const string DefaultObjectLibraryPath = @"H:\Dev\Assets\Trackmania\MediaTrackerItems";
+    public static string DefaultObjectLibraryPath { get; set; } = Path.Combine(WindowsUtils.TrackmaniaPath, "MediaTrackerItems");
     public static TriangleBlockLibrary LoadDefaultTriangleBlockLibrary()
     {
         var library = new TriangleBlockLibrary() { LazyLoading = true };

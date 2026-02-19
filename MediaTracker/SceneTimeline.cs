@@ -40,6 +40,14 @@ public enum CameraMode
     Orthographic,
     Perspective
 }
+/// <summary>
+/// Only affects 2DTriangle rendering
+/// </summary>
+/// <param name="ViewBox"></param>
+/// <param name="Mode"></param>
+/// <param name="CameraPosition"></param>
+/// <param name="CameraLookAt"></param>
+/// <param name="FOV"></param>
 public record struct RenderData(Vector3 ViewBox, CameraMode Mode, Vector3 CameraPosition, Vector3 CameraLookAt, float FOV)
 {
     public static RenderData Default

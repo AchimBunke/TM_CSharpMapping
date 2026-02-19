@@ -4,11 +4,10 @@ using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
 using TM_GenericMapping.Common;
-using TM_GenericMapping.Items;
 using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
-namespace TM_GenericMapping.Common
+namespace TM_GenericMapping.Items
 {
     public struct TriangleToItemConverterSettings
     {
@@ -16,6 +15,9 @@ namespace TM_GenericMapping.Common
         public bool VisibleGeometry;
         public bool UseProvidedRenderer;
     }
+    /// <summary>
+    /// Converts TriangleObjects to items.
+    /// </summary>
     public static class TriangleToItemConverter
     {
         public const string NotCollidable = "NotCollidable";

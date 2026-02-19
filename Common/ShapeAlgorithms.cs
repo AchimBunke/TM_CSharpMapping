@@ -265,7 +265,6 @@ public static class ConvexHull3D
 }
 
 
-
 public static class ShapeUtils
 {
     public static Vector3[] CreateRegularPolygonPoints(int corners, float size = 1)

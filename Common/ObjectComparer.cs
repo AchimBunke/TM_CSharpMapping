@@ -4,6 +4,9 @@ using System.Text;
 
 namespace TM_GenericMapping.Common
 {
+    /// <summary>
+    /// Memberwise comparison of arbitrary objects using reflection 
+    /// </summary>
     public static class ObjectComparer
     {
         public enum Comparison

@@ -7,10 +7,16 @@ public static class BlocksUtils
 {
     extension(CGameCtnBlock block)
     {
+        /// <summary>
+        /// Gets AbsolutePositionInMap even if block is not in free mode.
+        /// </summary>
         public Vec3 AbsolutePositionInMapSave
         {
             get => block.IsFree ? (Vec3)block.AbsolutePositionInMap : BlockPositionToAbsolutePosition(block.Coord, block.Direction);
         }
+        /// <summary>
+        /// Gets YawPitchRoll even if block is not in free mode.
+        /// </summary>
         public Vec3 YawPitchRollSave
         {
             get => block.IsFree ? new Vec3(block.YawPitchRoll!.Value.X, block.YawPitchRoll!.Value.Y, block.YawPitchRoll!.Value.Z) : BlockDirectionToYawPitchRoll(block.Direction);
@@ -18,6 +24,7 @@ public static class BlocksUtils
     }
     extension(CGameCtnChallenge challenge)
     {
+        [Obsolete("Did fix PitchYawRoll before it was changed")]
         public CGameCtnAnchoredObject PlaceAnchoredObjectCorrect(Ident itemModel, Vec3 absolutePosition, Vec3 pitchYawRoll, Vec3 offsetPivot = default)
         {
             return challenge.PlaceAnchoredObject(itemModel, absolutePosition, (pitchYawRoll.Y, pitchYawRoll.X, pitchYawRoll.Z), offsetPivot);

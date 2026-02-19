@@ -28,7 +28,7 @@
             }
         }
 
-        public static float ToRadians(float angleDegrees) => angleDegrees * (MathF.PI / 180);
+        public static float ToRadians(float angleDegrees) => angleDegrees * Deg2Rad;
         public static float Deg2Rad => MathF.PI / 180f;
         public static float Rad2Deg => 180f / MathF.PI;
     }

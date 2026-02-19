@@ -1,6 +1,5 @@
 ﻿using DirectXTexNet;
 using System.Drawing;
-using System.Numerics;
 using System.Runtime.InteropServices;
 using static GBX.NET.Engines.Plug.CPlugMaterialUserInst;
 

@@ -3,5 +3,8 @@
     public static class WindowsUtils
     {
         public static string MyDocumentsPath => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        public static string TrackmaniaPath { get; set; } = Path.Combine(MyDocumentsPath, @"Trackmania");
+        public static string ItemDirectoryPath { get; set; } = Path.Combine(TrackmaniaPath, @"Items");
+
     }
 }

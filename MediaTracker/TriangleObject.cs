@@ -32,6 +32,9 @@ public interface IAABB
     Bounds GetAABB();
 }
 
+/// <summary>
+/// Only modify Triangles/Vertices/Colors directly if you know what your doing.
+/// </summary>
 public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable, IPointPath, IAABB
 {
     // Setter on shape ??

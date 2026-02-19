@@ -18,6 +18,11 @@ namespace TM_GenericMapping.Common
             return new Vector2(v.X, v.Y);
         }
 
+        /// <summary>
+        /// Parse from Editor++ copied position.
+        /// </summary>
+        /// <param name="s"></param>
+        /// <returns></returns>
         public static Vector3 FromString(string s)
         {
             var splits = s.Trim().TrimStart('<').TrimEnd('>').Split(",");

@@ -7,6 +7,11 @@ public static class Conversion
     public static Vector3 V3(float x, float y, float z) => new Vector3(x, y, z);
     public static Vector3 V3(float v) => new Vector3(v);
     public static Vector3 V3(Vector2 v) => v.ToVector3();
+    /// <summary>
+    /// Parses copied positions from Editor++
+    /// </summary>
+    /// <param name="v"></param>
+    /// <returns></returns>
     public static Vector3 V3(string v) => VectorUtils.FromString(v);
 
     public static Vector2 V2(float x, float y)=> new Vector2(x, y);

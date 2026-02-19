@@ -1,9 +1,6 @@
-﻿using GBX.NET.Engines.Plug;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Numerics;
-using System.Security.Cryptography;
 using TM_GenericMapping.Common;
-using static GBX.NET.Engines.Plug.CPlugVehicleCarPhyTuning;
 
 namespace TM_GenericMapping.Common;
 
@@ -21,6 +18,13 @@ public interface IMediaObjectAnimator
     IMediaObjectAnimator Repeat(int count = 1);
 
 }
+
+/// <summary>
+/// Executes animations of a MediaObject
+/// Acts as a decorator to itself - Calling animations will add them in parallel to itself.
+/// Note: Prefer AnimateProperty<> to MoveTo/ScaleBy/... because behavior is weird.
+/// </summary>
+/// <typeparam name="T"></typeparam>
 public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
 {
     protected List<IMediaObjectAnimation<T>> animations = [];

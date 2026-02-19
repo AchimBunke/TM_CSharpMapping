@@ -1,5 +1,4 @@
-﻿using System.Collections.ObjectModel;
-using System.Numerics;
+﻿using System.Numerics;
 using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.Common;
@@ -32,7 +31,9 @@ public interface ICloneable<T> where T: class
     T Clone();
 }
 
-
+/// <summary>
+/// Base of that is part of the SceneTimeline.
+/// </summary>
 public abstract class MediaObject : ICloneable<MediaObject>
 {
 
@@ -314,6 +315,7 @@ public abstract class MediaObject : ICloneable<MediaObject>
     }
 }
 
+[Obsolete]
 public class MediaObjectGroup : MediaObject
 {
     public MediaObjectGroup()

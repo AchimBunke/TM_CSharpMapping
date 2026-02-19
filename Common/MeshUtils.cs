@@ -3,13 +3,11 @@ using TM_GenericMapping.Common.IO;
 
 namespace TM_GenericMapping.Common;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
 
-
-public class QEMSimplifier
+/// <summary>
+/// Not sure if it works because its AI made.
+/// </summary>
+internal class QEMSimplifier
 {
     struct Quadric
     {

@@ -9,8 +9,12 @@ using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugMaterialUserInst;
 using Color = System.Drawing.Color;
 
-namespace TM_GenericMapping.Common
+namespace TM_GenericMapping.Items
 {
+    /// <summary>
+    /// Converts items to TriangleObjects.
+    /// Important: Cannot simply convert blocks. Use Openplanet plugin "BlockToItemExports" to create item variants first.
+    /// </summary>
     public static class ItemToTriangleObjectConverter
     {
         class TriangleData
@@ -20,6 +24,9 @@ namespace TM_GenericMapping.Common
             public List<Color> colors = new();
         }
 
+        /// <summary>
+        /// Defines grouping of vertex data into a single TriangleObject during conversion.
+        /// </summary>
         [Flags]
         public enum TriangleGrouping
         {
@@ -47,8 +54,8 @@ namespace TM_GenericMapping.Common
                 };
         }
 
-        public static string ItemDirectoryPath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items");
-        public static string BlockToItemExportDirectory = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items\BlockToItemExports\Nadeo");
+        public static string ItemDirectoryPath { get; set; } = WindowsUtils.ItemDirectoryPath;
+        public static string BlockToItemExportDirectory { get; set; } = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Items\BlockToItemExports\Nadeo");
         public static bool TryConvert(CGameItemModel itemModel, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings, out TriangleObject triangleObj)
         {
             try
@@ -180,7 +187,7 @@ namespace TM_GenericMapping.Common
                     var v0 = face.Vertices[0];
                     var v1 = face.Vertices[1];
                     var v2 = face.Vertices[2];
-                    TM_GenericMapping.Materials.Material material = null!;
+                    Materials.Material material = null!;
                     if (settings.UniformColor)
                     {
                         colors[v0.Index] = settings.Color;
@@ -249,7 +256,7 @@ namespace TM_GenericMapping.Common
                         var v2 = face.Vertices[2];
                         Color c0, c1, c2;
                         c0 = c1 = c2 = Color.Black;
-                        TM_GenericMapping.Materials.Material material = null!;
+                        Materials.Material material = null!;
                         if (settings.UniformColor)
                         {
                             c0 = settings.Color;
@@ -370,7 +377,7 @@ namespace TM_GenericMapping.Common
 
             string materialName = TextureSampling.MaterialLinkToMaterialName(materialInstance.Link);
             if (!materialLibrary.TryGetMaterial(materialName, out var material))
-                material = new TM_GenericMapping.Materials.Material();
+                material = new Materials.Material();
 
             for (int i = 0; i < visual.VertexStreams[0].Positions.Length; ++i)
             {

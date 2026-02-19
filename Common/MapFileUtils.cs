@@ -1,6 +1,6 @@
-﻿namespace TM_GenericMapping;
+﻿namespace TM_GenericMapping.Common;
 
-public static class TMUtils
+public static class MapFileUtils
 {
     public static string MapNameToFileName(string fileName)
     {

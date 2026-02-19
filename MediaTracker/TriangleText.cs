@@ -11,7 +11,9 @@ namespace TM_GenericMapping.Common;
 
 #pragma warning disable CA1416 // Validate platform compatibility
 
-
+/// <summary>
+/// High Poly count!!!
+/// </summary>
 public class TriangleText : TriangleObject
 {
 

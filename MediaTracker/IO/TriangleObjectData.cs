@@ -1,6 +1,5 @@
 ﻿using System.Drawing;
 using System.Numerics;
-using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.Common.IO
 {
@@ -10,6 +9,9 @@ namespace TM_GenericMapping.Common.IO
         void Read(BinaryReader r);
     }
 
+    /// <summary>
+    /// Serializable form of TriangleObjects
+    /// </summary>
     public class TriangleObjectData : IBinarySerializable
     {
         private const uint MagicNumber = 0x4D455348; // "MESH"

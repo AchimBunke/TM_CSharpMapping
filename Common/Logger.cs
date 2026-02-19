@@ -19,7 +19,9 @@ public enum LogLevel
     Warning = 3,
     Error = 4
 }
-
+/// <summary>
+/// Custom logger for console applications.
+/// </summary>
 public static class Logger
 {
     public static LogTarget Target { get; set; } = LogTarget.Console;

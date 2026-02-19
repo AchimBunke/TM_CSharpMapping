@@ -1,8 +1,6 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Game;
-using GBX.NET.Inputs;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 
 namespace TM_GenericMapping.Common;
 
@@ -101,6 +99,9 @@ public abstract class TriangleRenderer : IRenderer<TriangleObject>
     public abstract void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
 }
 
+/// <summary>
+/// Renders TriangleObjects to 2DTriangles 
+/// </summary>
 public class Triangle2DRenderer : TriangleRenderer
 {
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
@@ -178,14 +179,29 @@ public class Triangle2DRenderer : TriangleRenderer
     }
 
 }
+
+
+/// <summary>
+/// Renders TriangleObjects to 3DTriangles 
+/// </summary>
 public class Triangle3DRenderer : TriangleRenderer
 {
     /// <summary>
-    /// 
+    /// Makes 3D Triangles move with your car.
     /// </summary>
     public bool RelativeToPlayer { get; init; } = false;
+    /// <summary>
+    /// RelativeToPlayer triangles will disappear when player does not look in correct direction.
+    /// This property will create additional vertices preventing triangle idsappearing.
+    /// </summary>
     public bool EnsureVisibilityWhenRelativeToPlayer { get; init; } = false;
+    /// <summary>
+    /// Defines the distance of additional triangles when using EnsureVisibilityWhenRelativeToPlayer.
+    /// </summary>
     public float EnsureanceVerticesDistance { get; init; } = 10000f;
+    /// <summary>
+    /// Not sure if 8 triangles is safer!
+    /// </summary>
     public enum Ensurance
     {
         _4,

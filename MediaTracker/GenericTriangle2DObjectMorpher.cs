@@ -1,10 +1,12 @@
 ﻿using GBX.NET;
 using System.Numerics;
-using System.Security.Cryptography;
 using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.Common;
 
+/// <summary>
+/// Morph one TriangleObject into another one if geometry allows it.
+/// </summary>
 public class GenericTriangle2DObjectMorpher
 {
     Vector3[] sourceVertices;

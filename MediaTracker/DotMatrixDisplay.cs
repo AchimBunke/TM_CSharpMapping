@@ -1,9 +1,7 @@
 ﻿using GBX.NET;
 using System.Numerics;
-using System.Drawing;
-using Color = System.Drawing.Color;
 using TM_GenericMapping.Common;
-using System.Security;
+using Color = System.Drawing.Color;
 
 namespace TM_GenericMapping.Common;
 
