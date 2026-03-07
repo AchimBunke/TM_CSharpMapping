@@ -43,6 +43,10 @@ public static class QuaternionUtils
         {
             return Quaternion.CreateFromYawPitchRoll(pitchYawRoll.X, pitchYawRoll.Y, pitchYawRoll.Z);
         }
+        public static Quaternion CreateFromItemYawPitchRoll(Vec3 yawPitchRoll)
+        {
+            return Quaternion.CreateFromYawPitchRoll(yawPitchRoll.X, yawPitchRoll.Y, yawPitchRoll.Z);
+        }
 
         public static Quaternion CreateFromAxisAngleDegrees(Vector3 axis, float angleDegrees)
             => Quaternion.CreateFromAxisAngle(axis, MathUtils.Deg2Rad * angleDegrees);

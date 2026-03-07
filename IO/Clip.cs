@@ -1,5 +1,6 @@
 ﻿using GBX.NET.Engines.Game;
 using GBX.NET;
+using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.IO
 {
@@ -21,6 +22,8 @@ namespace TM_GenericMapping.IO
         {
             MediaClip = clip;
         }
+        public void Create(BlockTemplates templates)
+            => Create(MediaTrackerUtils.DeepCopyClip(templates.Clip));
         public void Open()
         {
             MediaClip = Gbx.Parse<CGameCtnMediaClip>(SavePath, ReadSettings).Node;

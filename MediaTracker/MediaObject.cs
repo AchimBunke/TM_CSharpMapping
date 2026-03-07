@@ -60,7 +60,7 @@ public abstract class MediaObject : ICloneable<MediaObject>
         }
     }
 
-    public HashSet<MediaObject> SubObjects { get; } = [];
+    public List<MediaObject> SubObjects { get; } = [];
     public MediaObject Parent { get; private set; } = null!;
     /// <summary>
     /// TODO: Change (only use for composite which should implement custom logic for shape creation!!)
@@ -269,6 +269,15 @@ public abstract class MediaObject : ICloneable<MediaObject>
         {
             SubObjects.Add(obj);
             obj.Parent = this;
+            obj.SetLocalToWorldTRSDirty();
+        }
+    }
+    public void RemoveSubObjects(params ReadOnlySpan<MediaObject> objs)
+    {
+        foreach (var obj in objs)
+        {
+            SubObjects.Remove(obj);
+            obj.Parent = null;
             obj.SetLocalToWorldTRSDirty();
         }
     }

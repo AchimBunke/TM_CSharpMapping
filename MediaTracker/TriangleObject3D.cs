@@ -52,6 +52,21 @@ public class TriangleObject3D : TriangleObject
     {
         Name = "TriangleObject3D";
     }
+
+    public TriangleObject3D(
+        ReadOnlySpan<Vector3> points,
+        ReadOnlySpan<Color> colors,
+        bool uniqueVertices = false,
+        IRenderer renderer = null!)
+      : base(points: points,
+          fillColors: colors,
+          filled: true,
+          withOutline: false,
+          uniqueVertices: uniqueVertices,
+          renderer: renderer)
+    {
+        Name = "TriangleObject3D";
+    }
     protected override Int3[] Triangulate(ReadOnlySpan<Vector3> points)
         => ConvexHull3D.Triangulate(points);
     public override TriangleObject3D Clone()

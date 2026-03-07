@@ -7,6 +7,7 @@ using TM_GenericMapping.Common;
 using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using Color = System.Drawing.Color;
+using System.Security.Cryptography.X509Certificates;
 
 namespace TM_GenericMapping.Common;
 
@@ -370,7 +371,12 @@ public static class ShapeUtils
         }
     }
 
-    public static void GeneratePolygonOutline(ReadOnlySpan<Vector3> points, float width, OutlineExtendsDirection outlineExtends, out List<Vector3> outlineVertices, out List<Int3> outlineTriangles)
+    public static void GeneratePolygonOutline(ReadOnlySpan<Vector3> points, 
+        float width, 
+        OutlineExtendsDirection outlineExtends, 
+        out List<Vector3> outlineVertices, 
+        out List<Int3> outlineTriangles,
+        Vector3? fallbackNormal = null)
     {
         ExceptionUtils.Ensure(points.Length >= 2, () => new ArgumentException("Polygon must have at least 2 vertices"));
         outlineVertices = new List<Vector3>();
@@ -391,7 +397,7 @@ public static class ShapeUtils
             Vector3 nextVertex = points[(i + 1) % points.Length];
 
             var tangent = CalculateTangent(currentVertex, previousVertex, nextVertex);
-            Vector3 planeNormal = ComputePlaneNormal(points);
+            Vector3 planeNormal = ComputePlaneNormal(points, fallbackNormal);
             Vector3 perpendicular = Vector3.Normalize(
                 Vector3.Cross(planeNormal, tangent));
 
@@ -432,7 +438,8 @@ public static class ShapeUtils
       float width,
       OutlineExtendsDirection outlineExtends,
       out List<Vector3> outlineVertices,
-      out List<Int3> outlineTriangles)
+      out List<Int3> outlineTriangles,
+      Vector3? fallbackNormal = null)
     {
         ExceptionUtils.Ensure(points.Length >= 2,
             () => new ArgumentException("Polygon must have at least 2 vertices"));
@@ -440,7 +447,7 @@ public static class ShapeUtils
         outlineVertices = new List<Vector3>();
         outlineTriangles = new List<Int3>();
 
-        Vector3 planeNormal = ComputePlaneNormal(points);
+        Vector3 planeNormal = ComputePlaneNormal(points, fallbackNormal);
 
         var innerVertices = new Vector3[points.Length];
         var outerVertices = points.ToArray();
@@ -504,7 +511,8 @@ public static class ShapeUtils
         float width,
         OutlineExtendsDirection outlineExtends, 
         out List<Vector3> outlineVertices, 
-        out List<Int3> outlineTriangles)
+        out List<Int3> outlineTriangles,
+        Vector3? fallbackNormal = null)
     {
         ExceptionUtils.Ensure(points.Length >= 2, () => new ArgumentException("PolyLine must have at least 2 points"));
         var pointsWithBoundaries = points.ToArray().ToList();
@@ -512,7 +520,7 @@ public static class ShapeUtils
         pointsWithBoundaries.Add(endBoundaryPoint);
         pointsWithBoundaries.Add(startBoundaryPoint);
 
-        GenerateClosedPolygonOutline(pointsWithBoundaries.ToArray(), width, outlineExtends, out outlineVertices, out outlineTriangles);
+        GenerateClosedPolygonOutline(pointsWithBoundaries.ToArray(), width, outlineExtends, out outlineVertices, out outlineTriangles, fallbackNormal);
 
         // remove start/end boundary and inner vertex
         outlineVertices.RemoveRange(outlineVertices.Count - 4, 4);
@@ -525,13 +533,14 @@ public static class ShapeUtils
       float width,
       OutlineExtendsDirection outlineExtends,
       out List<Vector3> outlineVertices,
-      out List<Int3> outlineTriangles)
+      out List<Int3> outlineTriangles,
+      Vector3? fallbackNormal = null)
     {
         ExceptionUtils.Ensure(points.Length >= 2, () => new ArgumentException("PolyLine must have at least 2 points"));
         var pointsWithBoundaries = points.ToArray().ToList();
 
 
-        GenerateClosedPolygonOutline(pointsWithBoundaries.ToArray(), width, outlineExtends, out outlineVertices, out outlineTriangles);
+        GenerateClosedPolygonOutline(pointsWithBoundaries.ToArray(), width, outlineExtends, out outlineVertices, out outlineTriangles, fallbackNormal);
 
         //// remove start/end boundary and inner vertex
         //outlineVertices.RemoveRange(outlineVertices.Count - 4, 4);
@@ -540,7 +549,7 @@ public static class ShapeUtils
         //outlineTriangles.RemoveRange(outlineTriangles.Count - 6, 6);
     }
 
-    static Vector3 ComputePlaneNormal(ReadOnlySpan<Vector3> pts)
+    static Vector3 ComputePlaneNormal(ReadOnlySpan<Vector3> pts, Vector3? fallbackNormal = null)
     {
         for (int i = 2; i < pts.Length; i++)
         {
@@ -548,7 +557,21 @@ public static class ShapeUtils
             if (n.LengthSquared() > 1e-6f)
                 return Vector3.Normalize(n);
         }
-        return Vector3.UnitZ; // fallback if degenerate
+
+        if (fallbackNormal != null)
+            return (Vector3)fallbackNormal;
+
+        // Collinear case → compute line direction
+        var dir = Vector3.Normalize(pts[1] - pts[0]);
+
+        // Pick a vector not parallel to dir
+        Vector3 arbitrary = Math.Abs(dir.Z) < 0.9f
+            ? Vector3.UnitZ
+            : Vector3.UnitX;
+
+        var normal = Vector3.Cross(dir, arbitrary);
+
+        return Vector3.Normalize(normal);
     }
     public static Vector3 GetCentroid(TriangleObject obj)
         => GetCentroid(obj.Vertices.Take(obj.FillVertexCount).ToArray());

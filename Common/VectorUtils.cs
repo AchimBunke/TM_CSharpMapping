@@ -1,4 +1,5 @@
 ﻿using GBX.NET;
+using System.Globalization;
 using System.Numerics;
 
 namespace TM_GenericMapping.Common
@@ -26,7 +27,7 @@ namespace TM_GenericMapping.Common
         public static Vector3 FromString(string s)
         {
             var splits = s.Trim().TrimStart('<').TrimEnd('>').Split(",");
-            return new Vector3(float.Parse(splits[0]), float.Parse(splits[1]), float.Parse(splits[2]));
+            return new Vector3(float.Parse(splits[0], CultureInfo.InvariantCulture), float.Parse(splits[1], CultureInfo.InvariantCulture), float.Parse(splits[2], CultureInfo.InvariantCulture));
         }
 
         public static Vector3 ToVector3(this Vector2 v)
@@ -39,6 +40,9 @@ namespace TM_GenericMapping.Common
 
         public static Vector3 Normalized(this Vector3 v)
             => Vector3.Normalize(v);
+
+        public static bool NearlyEqual(this Vector3 v1, Vector3 v2, float epsilon = float.Epsilon)
+            => MathUtils.NearlyEqual(v1.X, v2.X, epsilon) && MathUtils.NearlyEqual(v1.Y, v2.Y, epsilon) && MathUtils.NearlyEqual(v1.Z, v2.Z, epsilon);
 
     }
 }

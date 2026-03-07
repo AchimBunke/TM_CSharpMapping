@@ -143,10 +143,32 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : this(withOutline, withFill, filled, outlineExtends, outlineWidth, uniqueVertices, renderer)
+        IRenderer renderer = null!) : this(
+            points, 
+            Enumerable.Repeat(fillColor ?? Color.Black, points.Length).ToArray(), 
+            outlineColor,
+            withOutline,
+            withFill,
+            filled, 
+            outlineExtends,
+            outlineWidth, 
+            uniqueVertices, 
+            renderer)
+    {
+    }
+    public TriangleObject(ReadOnlySpan<Vector3> points,
+       ReadOnlySpan<Color> fillColors,
+       Color? outlineColor = null,
+       bool withOutline = false,
+       bool withFill = true,
+       bool filled = true,
+       OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
+       float outlineWidth = 0.1f,
+       bool uniqueVertices = false,
+       IRenderer renderer = null!) : this(withOutline, withFill, filled, outlineExtends, outlineWidth, uniqueVertices, renderer)
     {
         ShapePoints = points.ToArray();
-        CreateShape(points, fillColor ?? Color.Black, outlineColor ?? Color.Black);
+        CreateShape(points, fillColors.ToArray().Select(c=>c.ToVector4()).ToArray(), outlineColor ?? Color.Black);
         SetFilled(filled);
     }
     /// <summary>
@@ -304,19 +326,19 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
     protected virtual Int3[] Triangulate(ReadOnlySpan<Vector3> points)
         => EarClippingTriangulation.Triangulate(points);
 
-    protected virtual void CreateFilledShape(ReadOnlySpan<Vector3> points, Color fillColor, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
+    protected virtual void CreateFilledShape(ReadOnlySpan<Vector3> points, ReadOnlySpan<Vector4> fillColors, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
     {
         var fillTriangles = Triangulate(points).ToArray();
         var fillVertices = points.ToArray().ToArray();
         ShapeUtils.EnsureConsistentWinding(fillVertices, fillTriangles);
         if (uniqueVertices)
-            ShapeUtils.MakeVerticesUnique(fillVertices, fillTriangles, out vertices, out triangles);
+            ShapeUtils.MakeVerticesUnique(fillVertices, fillTriangles, fillColors, out vertices, out triangles, out colors);
         else
         {
             vertices = fillVertices.ToList();
             triangles = fillTriangles.ToList();
+            colors = fillColors.ToArray().ToList();
         }
-        colors = Enumerable.Repeat(fillColor.ToVector4(), fillVertices.Length).ToList();
     }
     protected virtual void CreateOutlineShape(ReadOnlySpan<Vector3> points, Color outlineColor, OutlineExtendsDirection extendsOutwards, bool uniqueVertices,  out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
     {
@@ -334,26 +356,28 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         colors = Enumerable.Repeat(outlineColor.ToVector4(), vertices.Count).ToList();
     }
     protected void CreateShape(ReadOnlySpan<Vector3> points, Color fillColor, Color outlineColor)
+        => CreateShape(points, Enumerable.Repeat(fillColor.ToVector4(), points.Length).ToArray(), outlineColor);
+    protected void CreateShape(ReadOnlySpan<Vector3> points, ReadOnlySpan<Vector4> fillColors, Color outlineColor)
     {
         List<Int3> triangles = [];
         List<Vector3> vertices = [];
         List<Vector4> colors = [];
         if (CanFill)
         {
-            CreateFilledShape(points, fillColor, HasUniqueVertices, out var fillVertices, out var fillTriangles, out var fillColors);
+            CreateFilledShape(points, fillColors, HasUniqueVertices, out var fillVertices, out var fillTriangles, out var outFillColors);
             triangles.AddRange(fillTriangles);
             vertices.AddRange(fillVertices);
             FillVertexCount = vertices.Count;
             FillTrianglesCount = triangles.Count;
-            colors.AddRange(fillColors);
+            colors.AddRange(outFillColors);
             IsFilled = true;
         }
         if (HasOutline)
         {
-            CreateOutlineShape(points, outlineColor, OutlineExtends, HasUniqueVertices, out var outlineVertices, out var outlineTriangles, out var outlineColors);
+            CreateOutlineShape(points, outlineColor, OutlineExtends, HasUniqueVertices, out var outlineVertices, out var outlineTriangles, out var outOutlineColors);
             triangles.AddRange(outlineTriangles.Select(t => t + new Int3(FillVertexCount, FillVertexCount, FillVertexCount)));
             vertices.AddRange(outlineVertices);
-            colors.AddRange(outlineColors);
+            colors.AddRange(outOutlineColors);
         }
         Triangles = triangles.ToArray();
         Vertices = vertices.ToArray();
@@ -692,8 +716,10 @@ public class TestObject : TriangleObject
 public class Line : TriangleObject
 {
     public bool IsClosed { get; init; } = false;
+    Vector3? FallbackNormal { get; init; } = null;
     public Line(ReadOnlySpan<Vector3> points,
         Color? color = null,
+        Vector3? fallbackNormal = null,
         float width = 0.1f,
         bool closed = false,
         OutlineExtendsDirection extendsDirection = OutlineExtendsDirection.Bidirectional,
@@ -713,6 +739,7 @@ public class Line : TriangleObject
         ExceptionUtils.Ensure(!closed || (closed && points.Length >= 3), () => new ArgumentException("Closed Line must have at least 3 points"));
         Name = "Line";
         IsClosed = closed;
+        FallbackNormal = fallbackNormal;
 
         ShapePoints = points.ToArray();
         CreateShape(ShapePoints, Color.Black, color ?? Color.Black);
@@ -723,13 +750,13 @@ public class Line : TriangleObject
         List<Int3> outlineTriangles;
         if (IsClosed)
         {
-            ShapeUtils.GenerateClosedPolyLineOutline(points, OutlineWidth, extendsOutwards, out outlineVertices, out outlineTriangles);
+            ShapeUtils.GenerateClosedPolyLineOutline(points, OutlineWidth, extendsOutwards, out outlineVertices, out outlineTriangles, FallbackNormal);
         }
         else
         {
             var boundaryStart = points[0] + (points[0] - points[1]);
             var boundaryEnd = points[^1] + (points[^1] - points[^2]);
-            ShapeUtils.GeneratePolyLineOutline(points, boundaryStart, boundaryEnd, OutlineWidth, extendsOutwards, out outlineVertices, out outlineTriangles);
+            ShapeUtils.GeneratePolyLineOutline(points, boundaryStart, boundaryEnd, OutlineWidth, extendsOutwards, out outlineVertices, out outlineTriangles, FallbackNormal);
         }
 
         if (uniqueVertices)
@@ -739,6 +766,20 @@ public class Line : TriangleObject
         colors = Enumerable.Repeat(outlineColor.ToVector4(), outlineVertices.Count).ToList();
     }
 
+}
+public class Line2D : Line
+{
+    public Line2D(
+        ReadOnlySpan<Vector3> points,
+        Color? color = null, 
+        float width = 0.1F, 
+        bool closed = false,
+        OutlineExtendsDirection extendsDirection = OutlineExtendsDirection.Bidirectional, 
+        bool uniqueVertices = false, 
+        IRenderer renderer = null) 
+        : base(points, color, Vector3.UnitZ, width, closed, extendsDirection, uniqueVertices, renderer)
+    {
+    }
 }
 
 
@@ -815,14 +856,14 @@ public abstract class ArcBase : TriangleObject
         outlineEndBoundaryPoint = other.outlineEndBoundaryPoint;
     }
 
-    protected override void CreateFilledShape(ReadOnlySpan<Vector3> points, Color fillColor, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
+    protected override void CreateFilledShape(ReadOnlySpan<Vector3> points, ReadOnlySpan<Vector4> fillColors, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
     {
         List<Vector3> pointsList = points.ToArray().ToList();
         if (filledToCenter && !IsClosed)
         {
             pointsList.Add(new Vector3(0, 0, 0));
         }
-        base.CreateFilledShape(pointsList.ToArray(), fillColor, uniqueVertices, out vertices, out triangles, out colors);
+        base.CreateFilledShape(pointsList.ToArray(), fillColors, uniqueVertices, out vertices, out triangles, out colors);
     }
     protected override void CreateOutlineShape(ReadOnlySpan<Vector3> points, Color outlineColor, OutlineExtendsDirection extendsOutwards, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
     {

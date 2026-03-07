@@ -15,6 +15,7 @@ public interface IRenderer
     public bool CanShareBlockWith(RenderObject obj, MediaObject other);
 
     public abstract int AddRenderDataToBlock(RenderObject obj, CGameCtnMediaBlock block);
+    public Vector3 DefaultPolygonNormal { get; }
 }
 public interface IRenderer<T> : IRenderer where T : RenderObject
 {
@@ -29,6 +30,7 @@ public abstract class TriangleRenderer : IRenderer<TriangleObject>
 {
     public HashSet<PostProcessingEffect> PostProcessingEffectsWorld { get; init; } = [];
 
+    public virtual Vector3 DefaultPolygonNormal => Vector3.UnitZ;
 
     public bool CanShareBlockWith(TriangleObject obj, MediaObject other)
     {
@@ -104,6 +106,7 @@ public abstract class TriangleRenderer : IRenderer<TriangleObject>
 /// </summary>
 public class Triangle2DRenderer : TriangleRenderer
 {
+    public override Vector3 DefaultPolygonNormal => Vector3.UnitZ;
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = MediaTrackerUtils.DeepCopyBlockTriangles2D(templates.Triangles2D);
@@ -154,7 +157,7 @@ public class Triangle2DRenderer : TriangleRenderer
         }
     }
 
-    protected Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    protected virtual Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
     {
         // Local → World
         var worldSpace = Vector3.Transform(vec3, obj.LocalToWorldTRS);
@@ -186,6 +189,7 @@ public class Triangle2DRenderer : TriangleRenderer
 /// </summary>
 public class Triangle3DRenderer : TriangleRenderer
 {
+    public override Vector3 DefaultPolygonNormal => Vector3.UnitY;
     /// <summary>
     /// Makes 3D Triangles move with your car.
     /// </summary>
