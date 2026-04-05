@@ -4,7 +4,6 @@ using LibTessDotNet.Double;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Numerics;
-using TM_GenericMapping.Common;
 using Color = System.Drawing.Color;
 
 namespace TM_GenericMapping.Common;
