@@ -6,15 +6,24 @@ namespace TM_GenericMapping.Common;
 public interface IAnimationParameter
 {
     public Easing Easing { get; }
-    public float Time { get; }
+    public ulong TimeMillis { get; }
+    public float Time => TimeMillis / 1000f;
     public bool ContinuosKeyFrames { get; }
 }
 public record AnimationParameter(
     Easing Easing = Easing.Linear,
-    float Time = 1f,
+    ulong TimeMillis = 1000,
     bool ContinuosKeyFrames = false) : IAnimationParameter
 {
+    public AnimationParameter(
+        Easing easing = Easing.Linear,
+        float time = 1f,
+        bool continuosKeyFrames = false) : this(easing, (ulong)(time * 1000), continuosKeyFrames)
+    {
+
+    }
     public AnimationParameter() : this(Easing.Linear, 1f, false) { }
+    public float Time => TimeMillis / 1000f;
 }
 
 public record Vector3AnimationParameter(Vector3 Vector, Space Space = Space.Local) : AnimationParameter();

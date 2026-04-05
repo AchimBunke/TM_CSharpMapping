@@ -1,6 +1,9 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Control;
 using GBX.NET.Engines.Game;
+using GBX.NET.Engines.MwFoundations;
+using GBX.NET.Serialization.Chunking;
+using System.Reflection;
 using TM_GenericMapping.Common;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
@@ -87,10 +90,7 @@ public static class MediaTrackerUtils
             Image = original.Image,
             Effect = DeepCopyEffect(original.Effect),
         };
-        foreach (var chunk in original.Chunks)
-        {
-            cpy.CreateChunk(chunk.Id);
-        }
+        DeepCopyChunks(original, cpy);
         return cpy;
     }
     public static CControlEffectSimi DeepCopyEffect(CControlEffectSimi original)
@@ -103,10 +103,7 @@ public static class MediaTrackerUtils
             ColorBlendMode = original.ColorBlendMode,
             Keys = original.Keys.Select(DeepCopyKey).ToList(),
         };
-        foreach (var chunk in original.Chunks)
-        {
-            cpy.CreateChunk(chunk.Id);
-        }
+        DeepCopyChunks(original, cpy);
         return cpy;
     }
     public static GBX.NET.Engines.Control.CControlEffectSimi.Key DeepCopyKey(GBX.NET.Engines.Control.CControlEffectSimi.Key original)
@@ -134,10 +131,7 @@ public static class MediaTrackerUtils
             Color = original.Color,
             Effect = DeepCopyEffect(original.Effect),
         };
-        foreach (var chunk in original.Chunks)
-        {
-            cpy.CreateChunk(chunk.Id);
-        }
+        DeepCopyChunks(original, cpy);
         return cpy;
     }
     public static CGameCtnMediaBlockTriangles3D DeepCopyBlockTriangles3D(CGameCtnMediaBlockTriangles3D original)
@@ -237,6 +231,24 @@ public static class MediaTrackerUtils
             Gbx.Parse<CGameCtnMediaClip>(TextTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText,
             Gbx.Parse<CGameCtnMediaClip>(ImageTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage
             );
+    }
+
+    public static void DeepCopyChunks(CMwNod original, CMwNod target)
+    {
+        foreach (var chunk in original.Chunks)
+        {
+            var chunkType = chunk.GetType();
+            var method = target.GetType()
+                .GetMethod(nameof(target.CreateChunk))!
+                .MakeGenericMethod(chunkType);
+
+            var newChunk = method.Invoke(target, null);
+
+            foreach (var field in chunkType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                field.SetValue(newChunk, field.GetValue(chunk));
+            }
+        }
     }
 
 

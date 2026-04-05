@@ -6,7 +6,7 @@ namespace TM_GenericMapping.Common;
 
 public interface IMediaObjectAnimator
 {
-    bool Update(float deltaTime);
+    bool Update(ulong deltaTimeMillis);
     bool Completed { get; }
     bool ContinuosKeyFrames { get; set; }
     ulong KeyframeGenerationRateMillis { get; set; }
@@ -14,6 +14,8 @@ public interface IMediaObjectAnimator
     void AddAnimation(IMediaObjectAnimation<MediaObject> animation);
     void Stop();
     void Pause();
+    bool Init();
+    bool Initialized { get; }
 
     IMediaObjectAnimator Repeat(int count = 1);
 
@@ -32,6 +34,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
     public T Target { get; init; }
     public bool Completed => animations.Count == 0;
     public bool ContinuosKeyFrames { get; set; } = false;
+    public bool Initialized { get; private set; } = false;
     public ulong KeyframeGenerationRateMillis { get; set; }
     ulong MillisSinceLastKeyFrameGeneration = 0;
     bool stopped = false;
@@ -44,15 +47,15 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
     {
         Target = obj;
     }
-    public bool Update(float deltaTime)
+    public bool Update(ulong deltaTimeMillis)
     {
         if (paused || stopped)
             return false;
-        MillisSinceLastKeyFrameGeneration += (ulong)(deltaTime * 1000);
+        MillisSinceLastKeyFrameGeneration += deltaTimeMillis;
         requiresKeyFrame |= ContinuosKeyFrames;
         foreach (var anim in animations.ToArray()) // ToArray because animations might be modified from within like stopping
         {
-            requiresKeyFrame |= anim.Update(Target, deltaTime);
+            requiresKeyFrame |= anim.Update(Target, deltaTimeMillis);
         }
         // remove completed, if removed keyframe!
         completedAnimations.AddRange(animations.Where(anim => anim.Completed));
@@ -81,6 +84,12 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
             return false;
         }
         
+    }
+    public bool Init()
+    {
+        var b = Update(0);
+        Initialized = true;
+        return b;
     }
 
     int repeats = 0;
@@ -112,7 +121,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
     bool WaitAnimation(T obj, float deltaTime, BooleanAnimationParameter animParams, AnimationData animData)
     {
         if (animData.LastFrame)
-            return true;
+            return animParams.Value;
         return false;
     }
     public MediaObjectAnimator<T> Wait(BooleanAnimationParameter animParameter)
@@ -127,7 +136,10 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         return this;
     }
     public MediaObjectAnimator<T> Wait(float time = 1f, bool endWithKeyFrame = false, bool continuosKeyFrames = false)
-        => Wait(new(endWithKeyFrame) { Time = time, ContinuosKeyFrames = continuosKeyFrames });
+        => WaitMillis(Time.Millis(time), endWithKeyFrame, continuosKeyFrames);
+    public MediaObjectAnimator<T> WaitMillis(ulong timeMillis = 1000, bool endWithKeyFrame = false, bool continuosKeyFrames = false)
+        => Wait(new(endWithKeyFrame) { TimeMillis = timeMillis, ContinuosKeyFrames = continuosKeyFrames });
+
 
 
     // MoveTo
@@ -158,7 +170,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         Easing easing = Easing.Linear,
         Space space = Space.Local,
         bool continuosKeyFrames = false)
-        => MoveTo(new(targetPostion, space) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+        => MoveTo(new(targetPostion, space) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
     public MediaObjectAnimator<T> MoveTo(
       ScreenPosition screenPos,
       float time = 1f,
@@ -194,7 +206,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         Easing easing = Easing.Linear,
         Space space = Space.Local,
         bool continuosKeyFrames = false)
-        => MoveTowards(new(targetPostion, speed) { Easing = easing, Space = space, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+        => MoveTowards(new(targetPostion, speed) { Easing = easing, Space = space, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
     public MediaObjectAnimator<T> MoveTowards(
        ScreenPosition screenPos,
       float time = 1f,
@@ -227,7 +239,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         float time = 1f,
         Space space = Space.Local,
         bool continuosKeyFrames = false)
-        => TranslateBy(new(translation) { Easing = Easing.Linear, Space = space, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+        => TranslateBy(new(translation) { Easing = Easing.Linear, Space = space, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     // ScaleTo
     bool ScaleToAnimation(T obj, float deltaTime, Vector3AnimationParameter animParams, AnimationData animData)
@@ -255,7 +267,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
        float time = 1f,
        Easing easing = Easing.Linear,
        bool continuosKeyFrames = false)
-       => ScaleTo(new(targetScale) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => ScaleTo(new(targetScale) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
 
 
@@ -284,7 +296,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
        InterpolationType easing = InterpolationType.Linear,
        Space space = Space.Local,
        bool continuosKeyFrames = false)
-       => ScaleBy(new(scale, space) { Interpolation = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => ScaleBy(new(scale, space) { Interpolation = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     */
 
@@ -304,7 +316,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
    Easing easing = Easing.Linear,
    Space space = Space.Local,
    bool continuosKeyFrames = false)
-   => RotateTo(new(Rotation: rotation, Space: space) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+   => RotateTo(new(Rotation: rotation, Space: space) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
     public MediaObjectAnimator<T> RotateTo(RotationAnimationParameters animParameter)
     {
         var animation = new MediaObjectAnimation<T, RotationAnimationParameters, AnimationData>()
@@ -344,7 +356,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
        float time = 1f,
        Space space = Space.Local,
        bool continuosKeyFrames = false)
-       => RotateBy(new(Axis: axis, Angle: angle, Space: space) { Easing = Easing.Linear, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => RotateBy(new(Axis: axis, Angle: angle, Space: space) { Easing = Easing.Linear, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
 
     bool RotationAnimation(T obj, float deltaTime, RotationAnimationParameters animParams, AnimationData animData)
@@ -372,7 +384,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
        float time = 1f,
        Space space = Space.Local,
        bool continuosKeyFrames = false)
-       => Rotation(new(Axis: axis, Angle: angleRad, Space: space) { Easing = Easing.Linear, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => Rotation(new(Axis: axis, Angle: angleRad, Space: space) { Easing = Easing.Linear, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     // Custom Anims
 
@@ -414,13 +426,13 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         bool continuosKeyFrames = false,
         D animationData = default)
         where D : AnimationData, new()
-        => CreateCustomAnimation(update, new AnimationParameter() { Time = time, ContinuosKeyFrames = continuosKeyFrames }, animationData);
+        => CreateCustomAnimation(update, new AnimationParameter() { TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames }, animationData);
 
     public static MediaObjectAnimation<T, AnimationParameter, AnimationData> CreateCustomAnimation(
         Func<T, float, AnimationParameter, AnimationData, bool> update,
         float time = 50f,
         bool continuosKeyFrames = false)
-        => CreateCustomAnimation(update, new AnimationParameter() { Time = time, ContinuosKeyFrames = continuosKeyFrames }, new AnimationData());
+        => CreateCustomAnimation(update, new AnimationParameter() { TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames }, new AnimationData());
 
 
     /// <summary>
@@ -467,19 +479,19 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         Easing easing = Easing.Linear,
         bool continuosKeyFrames = false)
         where D : AnimationData
-        => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, param, animationData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, Time = time, Easing = easing }, animationData);
+        => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, param, animationData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, TimeMillis = Time.Millis(time), Easing = easing }, animationData);
     public MediaObjectAnimator<T> CustomAnimation<D>(Func<T, float, D, bool> update, D animationData,
       float time = 1f,
        Easing easing = Easing.Linear,
       bool continuosKeyFrames = false)
       where D : AnimationData
-      => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, animationData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, Time = time, Easing = easing }, animationData);
+      => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, animationData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, TimeMillis = Time.Millis(time), Easing = easing }, animationData);
 
     public MediaObjectAnimator<T> CustomAnimation(Func<T, float, AnimationParameter, AnimationData, bool> update, 
         float time = 1f,
         Easing easing = Easing.Linear,
         bool continuosKeyFrames = false)
-        => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, param, animData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, Time = time , Easing = easing }, new AnimationData());
+        => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, param, animData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, TimeMillis = Time.Millis(time) , Easing = easing }, new AnimationData());
 
     /// <summary>
     ///  Custom animation function without parameters
@@ -490,7 +502,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
     public MediaObjectAnimator<T> CustomAnimation(Func<T, float, AnimationData, bool> update,
         float time = 1f,
         bool continuosKeyFrames = false)
-        => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, animData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, Time = time});
+        => CustomAnimation((t, deltaTime, param, animData) => update(t, deltaTime, animData), new AnimationParameter() { ContinuosKeyFrames = continuosKeyFrames, TimeMillis = Time.Millis(time)});
     public MediaObjectAnimator<T> CustomAnimation(Func<T, float, bool> update,
         float time = 1f,
         bool continuosKeyFrames = false)
@@ -613,7 +625,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         bool smoothVertexSkipping = false,
         Easing easing = Easing.Linear,
         bool continuosKeyFrames = false)
-        => FollowPath(new(followTarget, speed, offset, smoothVertexSkipping, startWithClosestPoint, mode) { ContinuosKeyFrames = continuosKeyFrames, Easing = easing, Time = time });
+        => FollowPath(new(followTarget, speed, offset, smoothVertexSkipping, startWithClosestPoint, mode) { ContinuosKeyFrames = continuosKeyFrames, Easing = easing, TimeMillis = Time.Millis(time) });
 
 
     // AnimationCurve
@@ -649,7 +661,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         float time,
         float playbackSpeed = 1f,
         bool continuosKeyFrames = false)
-   => AnimateProperty(new AnimationCurveAnimationParameter<T, TValue>(animCurve, propertySetter, playbackSpeed) { ContinuosKeyFrames = continuosKeyFrames, Time = time });
+   => AnimateProperty(new AnimationCurveAnimationParameter<T, TValue>(animCurve, propertySetter, playbackSpeed) { ContinuosKeyFrames = continuosKeyFrames, TimeMillis = Time.Millis(time) });
     public MediaObjectAnimator<T> AnimateProperty<TValue>(
         IAnimationCurve<TValue> animCurve,
         Action<T, TValue> propertySetter,
@@ -752,10 +764,26 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         float time = 1f,
         Easing easing = Easing.Linear,
         bool continuosKeyFrames = false)
-        => FollowSpline(new(spline) { Time = time, Easing = easing, ContinuosKeyFrames = continuosKeyFrames });
+        => FollowSpline(new(spline) { TimeMillis = Time.Millis(time), Easing = easing, ContinuosKeyFrames = continuosKeyFrames });
 
 
-
+    // SetData
+    public MediaObjectAnimator<T> SetData(Action<T> setter)
+    {
+        Func<T, float, AnimationParameter, AnimationData, bool> func = (obj, dt, ap, ad) =>
+        {
+            setter(obj);
+            return true;
+        };
+        var animation = new MediaObjectAnimation<T, AnimationParameter, AnimationData>()
+        {
+            Func = func,
+            AnimationParameter = new AnimationParameter(TimeMillis: 0),
+            AnimationData = new AnimationData(),
+        };
+        animations.Add(animation);
+        return this;
+    }
 
 }
 public class TriangleObjectAnimator<T> : MediaObjectAnimator<T> where T : TriangleObject
@@ -788,7 +816,7 @@ public class TriangleObjectAnimator<T> : MediaObjectAnimator<T> where T : Triang
        float time = 1f,
        Easing easing = Easing.Linear,
        bool continuosKeyFrames = false)
-       => OutlineWidth(new(width) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => OutlineWidth(new(width) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     // Morphs dynamically between two objects
     bool MorphAnimation(T obj, float deltaTime, GenericMorphAnimationParameter animParams, AnimationData animData)
@@ -815,7 +843,7 @@ public class TriangleObjectAnimator<T> : MediaObjectAnimator<T> where T : Triang
        float time = 1f,
        Easing easing = Easing.Linear,
        bool continuosKeyFrames = false)
-       => Morph(new(target) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => Morph(new(target) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     // Morphs dynamically between two objects
     bool HierarchicMorphAnimation(T obj, float deltaTime, GenericMorphAnimationParameter animParams, AnimationData animData)
@@ -842,7 +870,7 @@ public class TriangleObjectAnimator<T> : MediaObjectAnimator<T> where T : Triang
        float time = 1f,
        Easing easing = Easing.Linear,
        bool continuosKeyFrames = false)
-       => HierarchicMorph(new(target) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+       => HierarchicMorph(new(target) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
 
 }
@@ -885,14 +913,14 @@ public class DotMatrixDisplayAnimator<T> : TriangleObjectAnimator<T> where T : D
         float time = 1f,
         Easing easing = Easing.Linear,
         bool continuosKeyFrames = false)
-    => MorphText(new(target) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+    => MorphText(new(target) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     public MediaObjectAnimator<T> MorphText(
       string targetText,
       float time = 1f,
       Easing easing = Easing.Linear,
       bool continuosKeyFrames = false)
-         => MorphText(new DotMatrixDisplayMorphAnimationParameter(new DotMatrixDisplay(targetText, anchor: Target.Anchor)) { Easing = easing, Time = time, ContinuosKeyFrames = continuosKeyFrames });
+         => MorphText(new DotMatrixDisplayMorphAnimationParameter(new DotMatrixDisplay(targetText, anchor: Target.Anchor)) { Easing = easing, TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
 
     // FillText
@@ -932,7 +960,7 @@ public class DotMatrixDisplayAnimator<T> : TriangleObjectAnimator<T> where T : D
         bool reverse = false,
         float time = 1f,
         bool continuosKeyFrames = false)
-    => FillText(new(reverse) { Time = time, ContinuosKeyFrames = continuosKeyFrames });
+    => FillText(new(reverse) { TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 
     //// RandomizeCharacters
     //bool RandomizeCharactersAnimation(T obj, float deltaTime, FloatAnimationParameters animParams, AnimationData animData)
@@ -964,13 +992,13 @@ public class DotMatrixDisplayAnimator<T> : TriangleObjectAnimator<T> where T : D
     //    float speed = 1f,
     //    float time = 1f,
     //    bool continuosKeyFrames = false)
-    //=> RandomizeCharacters(new(speed) { Time = time, ContinuosKeyFrames = continuosKeyFrames });
+    //=> RandomizeCharacters(new(speed) { TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
 }
 public interface IMediaObjectAnimation<T> where T : MediaObject
 {
     void Reset();
     bool Completed { get; }
-    bool Update(T target, float deltaTime);
+    bool Update(T target, ulong deltaTimeMillis);
 }
 public class MediaObjectAnimation<T, AP, AD> : IMediaObjectAnimation<T>
     where T : MediaObject
@@ -987,12 +1015,12 @@ public class MediaObjectAnimation<T, AP, AD> : IMediaObjectAnimation<T>
         AnimationData.Reset();
     }
 
-    public bool Update(T target, float deltaTime)
+    public bool Update(T target, ulong deltaTimeMillis)
     {
         bool requiresKeyChange = AnimationParameter.ContinuosKeyFrames;
-        AnimationData.ElapsedTime += deltaTime;
+        AnimationData.ElapsedTimeMillis += deltaTimeMillis;
         AnimationData.LastFrame = AnimationData.ElapsedTime >= AnimationParameter.Time;
-        requiresKeyChange |= Func(target, deltaTime, AnimationParameter, AnimationData);
+        requiresKeyChange |= Func(target, deltaTimeMillis / 1000f, AnimationParameter, AnimationData);
         AnimationData.FirstFrame = false;
         if (AnimationData.ElapsedTime >= AnimationParameter.Time)
             AnimationData.Completed = true;
@@ -1003,13 +1031,14 @@ public class MediaObjectAnimation<T, AP, AD> : IMediaObjectAnimation<T>
 
 public class AnimationData
 {
-    public float ElapsedTime { get; set; }
+    public ulong ElapsedTimeMillis { get; set; }
+    public float ElapsedTime => ElapsedTimeMillis / 1000f;
     public bool Completed { get; set; }
     public bool FirstFrame { get; set; } = true;
     public bool LastFrame { get; set; } = false;
     public virtual void Reset()
     {
-        ElapsedTime = 0;
+        ElapsedTimeMillis = 0;
         Completed = false;
         FirstFrame = true;
         LastFrame = false;

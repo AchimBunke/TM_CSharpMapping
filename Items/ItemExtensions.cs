@@ -95,4 +95,24 @@ public static class ItemExtensions
         };
         return cpy;
     }
+
+    public static void CopyAnimationsTo(this CGameItemModel sourceItemModel, CGameItemModel targetItemModel)
+    {
+        if (!ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(sourceItemModel, out var sourceKinematicConstraint))
+            return;
+        if (!ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(targetItemModel, out var targetKinematicConstraint))
+            return;
+
+        targetKinematicConstraint.AngleMaxDeg = sourceKinematicConstraint.AngleMaxDeg;
+        targetKinematicConstraint.AngleMinDeg = sourceKinematicConstraint.AngleMinDeg;
+        targetKinematicConstraint.RotAnimFunc = sourceKinematicConstraint.RotAnimFunc;
+        targetKinematicConstraint.RotAxis = sourceKinematicConstraint.RotAxis;
+
+        targetKinematicConstraint.TransAnimFunc = sourceKinematicConstraint.TransAnimFunc;
+        targetKinematicConstraint.TransAxis = sourceKinematicConstraint.TransAxis;
+        targetKinematicConstraint.TransMin = sourceKinematicConstraint.TransMin;
+        targetKinematicConstraint.TransMax = sourceKinematicConstraint.TransMax;
+
+
+    }
 }

@@ -1,5 +1,7 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Game;
+using TM_GenericMapping.Abstractions;
+using static TM_GenericMapping.Common.Triangle3DRenderer;
 
 namespace TM_GenericMapping.Common;
 
@@ -61,4 +63,32 @@ public static class BlocksUtils
             Direction.West => new Vec3(90f, 0f, 0f),
             _ => throw new NotImplementedException(),
         } * MathUtils.Deg2Rad;
+
+    public static void MakeTrianglesRelative(CGameCtnMediaBlockTriangles3D triangleBlock, bool ensureVisibility = true, float ensuranceVerticesDistance = 10000)
+    {
+
+        triangleBlock.Chunks.Remove<CGameCtnMediaBlockTriangles3D.Chunk03029002>();
+        var chunk = triangleBlock.CreateChunk<CGameCtnMediaBlockTriangles3D.Chunk03029002>();
+        chunk.U01 = 0;
+
+        if (ensureVisibility)
+        {
+            triangleBlock.Vertices = [
+                ..triangleBlock.Vertices,
+                ..Enumerable.Repeat(new Vec4(), 4)
+                ];
+            foreach(var key in triangleBlock.Keys)
+            {
+                key.Positions = [
+                    ..key.Positions,
+                    new Vec3(-ensuranceVerticesDistance, 0, -ensuranceVerticesDistance),
+                    new Vec3(-ensuranceVerticesDistance, 0, ensuranceVerticesDistance),
+                    new Vec3(ensuranceVerticesDistance, 0, -ensuranceVerticesDistance),
+                    new Vec3(ensuranceVerticesDistance, 0, ensuranceVerticesDistance)
+                ];
+            }
+        }
+
+    }
+
 }

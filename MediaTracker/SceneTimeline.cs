@@ -20,7 +20,8 @@ public record struct SceneAnimationSettings(
     ulong AnimationTickRateMillis,
     ulong MinKeyFrameTickRateMillis,
     float FallbackAnimationTimeSeconds,
-    bool UpdateTrackOrder)
+    bool UpdateTrackOrder,
+    long AnimationOffsetMillis = 0)
 {
     public static SceneAnimationSettings Default => new SceneAnimationSettings
     {
@@ -28,6 +29,7 @@ public record struct SceneAnimationSettings(
         MinKeyFrameTickRateMillis = 100,
         FallbackAnimationTimeSeconds = 1f,
         UpdateTrackOrder = true,
+        AnimationOffsetMillis = 0,
     };
 }
 public record class KeyFrameData()
@@ -198,8 +200,15 @@ public class SceneTimeline
     }
 
     public void Delayed(float delaySeconds, Action action)
+        => DelayedMillis((ulong)(delaySeconds * 1000), action);
+    public void DelayedMillis(ulong delayMillis, Action action)
     {
-        ulong targetTimeMillis = AnimationTimeMillis + (ulong)(delaySeconds * 1000f);
+        if(delayMillis == 0)
+        {
+            action();
+            return;
+        }
+        ulong targetTimeMillis = AnimationTimeMillis + delayMillis;
         delayedActions.Add(targetTimeMillis, action);
     }
 
@@ -561,8 +570,8 @@ public class SceneTimeline
     void AnimationUpdate()
     {
         PreAnimationUpdateTick?.Invoke(this);
-        UpdateAnimators();
         UpdateDelayedAction();
+        UpdateAnimators();
         UpdatePostProcessingEffects();
         if (AnimationTimeMillis >= nextKeyFrameTimeMillis)
         {
@@ -598,15 +607,31 @@ public class SceneTimeline
         foreach (var animatorQueue in animators.Values)
         {
             var animator = animatorQueue.Peek();
-            if (animator.Update(animationSettings.AnimationTickRateMillis / 1000f))
-                SetHierarchyRequiresKeyFrame(animator.Target);
-            if (animator.Completed)
-                justCompleted.Add(animator.Target);
+            if (animator.Initialized)
+            {
+                if (animator.Update(animationSettings.AnimationTickRateMillis))
+                    SetHierarchyRequiresKeyFrame(animator.Target);
+                if (animator.Completed)
+                    justCompleted.Add(animator.Target);
+            }
+            else
+            {
+                if (animator.Init())
+                    SetHierarchyRequiresKeyFrame(animator.Target);
+            }
         }
         foreach (var concurrentAnimator in concurrentAnimators)
         {
-            if (concurrentAnimator.Update(animationSettings.AnimationTickRateMillis / 1000f))
-                SetHierarchyRequiresKeyFrame(concurrentAnimator.Target);
+            if (concurrentAnimator.Initialized)
+            {
+                if (concurrentAnimator.Update(animationSettings.AnimationTickRateMillis))
+                    SetHierarchyRequiresKeyFrame(concurrentAnimator.Target);
+            }
+            else
+            {
+                if (concurrentAnimator.Init())
+                    SetHierarchyRequiresKeyFrame(concurrentAnimator.Target);
+            }
         }
         completedAnimators.UnionWith(justCompleted.Select(a => animators[a].Dequeue()));
 
@@ -619,6 +644,16 @@ public class SceneTimeline
         }
         completedAnimators.UnionWith(concurrentAnimators.Where(a => a.Completed));
         concurrentAnimators.RemoveWhere(a => a.Completed);
+
+
+        // init queued animation with elapsedTime = 0
+        foreach (var newAnimatorKV in animators.Where(kv => justCompleted.Contains(kv.Key)))
+        {
+            var animatorQueue = newAnimatorKV.Value;
+            var newAnimator = animatorQueue.Peek();
+            if (newAnimator.Init())
+                SetHierarchyRequiresKeyFrame(newAnimator.Target);
+        }
     }
     void UpdateDelayedAction()
     {
@@ -747,7 +782,7 @@ public class SceneTimeline
             if (key == null)
             {
                 key = obj.Renderer.CreateAndAddEmptyKey(block);
-                key.Time = TimeSingle.FromMilliseconds(keyFrameTime);
+                key.Time = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
             }
             // generate keyframe data for obj
             obj.Renderer.SetKeyFrameData(obj, block, key, idx, RenderData, GetPPEffectData(obj));
@@ -829,6 +864,8 @@ public class SceneTimeline
                 track.IsCycling = true;
                 track.RepeatingSegmentStart = firstBlock.Keys.FirstOrDefault()?.Time ?? default;
                 track.RepeatingSegmentEnd = lastBlock.Keys.LastOrDefault()?.Time ?? default;
+                if (track.RepeatingSegmentStart.Value.TotalMilliseconds < 0)
+                    Logger.Warn($"Cycling will not work on track {track.Name} because it starts before time=0");
             }
         }
     }
@@ -874,6 +911,34 @@ public class SceneTimeline
 public interface ISceneScript
 {
     void Build(SceneTimeline scene);
+
+    static Clip CreateClip<T>(string clipOutPath) where T : ISceneScript, new()
+        => CreateClip<T>(clipOutPath, SceneAnimationSettings.Default);
+
+    static Clip CreateClip<T>(string clipOutPath, SceneAnimationSettings sceneAnimSettings) where T : ISceneScript, new()
+    {
+        var blockTemplates = MediaTrackerUtils.CreateBlockTemplates();
+
+        var clip = new Clip() { SavePath = clipOutPath };
+        clip.Create(MediaTrackerUtils.DeepCopyClip(blockTemplates.Clip));
+ 
+        var scene = new SceneTimeline()
+        {
+            RenderData = new RenderData
+            {
+                ViewBox = new Vector3(10, 10, 100),
+                Mode = CameraMode.Orthographic,
+                CameraPosition = new Vector3(0, 0, 0),
+                FOV = MathF.PI / 2
+            },
+            BlockTemplates = blockTemplates,
+        };
+        var sceneBuilder = new T();
+        scene.Animate(clip.MediaClip, sceneAnimSettings, sceneBuilder);
+
+        return clip;
+
+    }
 }
 public abstract class SceneBuilder : ISceneScript
 {

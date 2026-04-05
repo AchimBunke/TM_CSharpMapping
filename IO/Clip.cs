@@ -9,10 +9,14 @@ namespace TM_GenericMapping.IO
         public required string SavePath { get; set; }
 
 
-        GbxReadSettings ReadSettings { get; set; } = new GbxReadSettings()
+        public GbxReadSettings ReadSettings { get; set; } = new GbxReadSettings()
         {
             CloseStream = true,
             SafeSkippableChunks = true,
+        };
+        public GbxWriteSettings WriteSettings { get; set; } = new GbxWriteSettings()
+        {
+            CloseStream = true,
         };
 
         public bool IsOpen => MediaClip is not null;
@@ -36,6 +40,15 @@ namespace TM_GenericMapping.IO
                 Directory.CreateDirectory(directory);
             }
             MediaClip.Save(SavePath);
+        }
+
+        public void Save(Stream outputStream)
+        {
+            MediaClip.Save(outputStream, WriteSettings);
+        }
+        public void Open(Stream clipStream)
+        {
+            MediaClip = Gbx.Parse<CGameCtnMediaClip>(clipStream, ReadSettings).Node;
         }
     }
 }

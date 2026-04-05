@@ -118,7 +118,6 @@ public static class TriangleObjectSerializer
             current.FillTrianglesCount = current.Triangles.Length;
             current.FillVertexCount = current.Vertices.Length;
 
-
             subObjects.Add(current);
 
             vList = new();
@@ -137,7 +136,7 @@ public static class TriangleObjectSerializer
             switch (p[0])
             {
                 case "mtllib":
-                    LoadMtl(p[1]);
+                    //LoadMtl(p[1]);
                     break;
 
                 case "o":
@@ -197,7 +196,7 @@ public static class TriangleObjectSerializer
         FlushObject();
 
         foreach(var o in subObjects)
-            root.SubObjects.Add(o);
+            root.AddSubObjects(o);
         return root;
     }
 }
