@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using TM_GenericMapping.MediaTracker;
 
 namespace TM_GenericMapping.Common;
 
@@ -80,3 +81,6 @@ public class ArrayAnimationData<T> : AnimationData
         Data = [];
     }
 }
+
+public record StoredVertexAnimationParameter(StoredVertexAnimation StoredAnimation) : AnimationParameter;
+public class StoredVertexAnimationData : AnimationData { public int CurrentAnimationFrame { get; set; } }

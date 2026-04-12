@@ -101,6 +101,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
     public int VertexIdxOffset => 0;
 
     IEnumerable<IMorphable> IMorphable.SubObjects => SubObjects.OfType<IMorphable>();
+    public IEnumerable<TriangleObject> SubTriangleObjects => SubObjects.OfType<TriangleObject>();
 
     protected TriangleObject(IRenderer renderer) : base(renderer ?? Rendering.DefaultTriangleRenderer)
     {

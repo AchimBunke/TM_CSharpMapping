@@ -1,6 +1,7 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Game;
 using System.Numerics;
+using TM_GenericMapping.IO;
 
 namespace TM_GenericMapping.Common;
 
@@ -22,10 +23,10 @@ public class TriangleOptimizer
 
         // ===== OPTIONS =====
         public bool EnableQuantization = true;
-        public float QuantizationStep = 0.01f;
+        public float QuantizationStep = 0.0125f;
 
         public bool EnableZeroClamp = true;
-        public float ZeroThreshold = 0.005f;
+        public float ZeroThreshold = 0.0125f / 2;
 
         public bool EnableNormalizeRange = false;
         public float TargetNormalizationRange = 10f;
@@ -66,14 +67,19 @@ public class TriangleOptimizer
 
     public OptimizationResult OptimizeClip(CGameCtnMediaClip clip)
     {
+        return OptimizeTracks(clip?.Tracks?.ToArray() ?? []);
+    }
+
+    public OptimizationResult OptimizeTracks(params ReadOnlySpan<CGameCtnMediaTrack> tracks)
+    {
         var result = new OptimizationResult();
 
-        if (clip.Tracks == null || clip.Tracks.Count == 0) return result;
+        if (tracks.IsEmpty) return result;
 
         float computedStep = 0f;
-        foreach (var track in clip.Tracks)
+        foreach (var track in tracks)
         {
-            var trackResult = OptimizeTrackInternal(track);
+            var trackResult = OptimizeTrack(track);
             result.BlocksProcessed += trackResult.BlocksProcessed;
             result.KeysProcessed += trackResult.KeysProcessed;
             result.VerticesProcessed += trackResult.VerticesProcessed;
@@ -85,12 +91,11 @@ public class TriangleOptimizer
             result.ZeroBytesBeforeOptimization += trackResult.ZeroBytesBeforeOptimization;
             result.ZeroBytesAfterOptimization += trackResult.ZeroBytesAfterOptimization;
         }
-        result.ComputedStep = result.IsStepComputed ? computedStep / clip.Tracks.Count : 0f;
+        result.ComputedStep = result.IsStepComputed ? computedStep / tracks.Length : 0f;
         return result;
     }
 
-
-    public OptimizationResult OptimizeTrackInternal(CGameCtnMediaTrack track)
+    public OptimizationResult OptimizeTrack(CGameCtnMediaTrack track)
     {
         var result = new OptimizationResult();
         if (track?.Blocks == null) return result;
