@@ -2,9 +2,7 @@
 using GBX.NET.Engines.Control;
 using GBX.NET.Engines.Game;
 using GBX.NET.Engines.MwFoundations;
-using GBX.NET.Serialization.Chunking;
 using System.Reflection;
-using TM_GenericMapping.Common;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
 
@@ -216,9 +214,14 @@ public static class MediaTrackerUtils
     public static string ImageTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\ImageTemplate.Clip.Gbx");
     public static string TextTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\TextTemplate.Clip.Gbx");
 
+    public static bool UseCustomTemplates = false;
+
     public static BlockTemplates CreateBlockTemplates()
     {
-        var emptyTrackClip = Gbx.Parse<CGameCtnMediaClip>(TrackTemplatePath).Node;
+        CGameCtnMediaClip emptyTrackClip = UseCustomTemplates ? 
+            Gbx.Parse<CGameCtnMediaClip>(TrackTemplatePath).Node : 
+            Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle2DTemplate.Clip.Gbx")).Node;
+
         var emptyTrack = emptyTrackClip.Tracks[0];
         var emptyClip = DeepCopyClip(emptyTrackClip);
         emptyClip.Tracks.Clear();
@@ -226,10 +229,19 @@ public static class MediaTrackerUtils
         return new BlockTemplates(
             emptyClip,
             emptyTrack,
-            Gbx.Parse<CGameCtnMediaClip>(Triangles2DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D,
-            Gbx.Parse<CGameCtnMediaClip>(Triangles3DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D,
-            Gbx.Parse<CGameCtnMediaClip>(TextTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText,
-            Gbx.Parse<CGameCtnMediaClip>(ImageTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage
+            UseCustomTemplates ? 
+                Gbx.Parse<CGameCtnMediaClip>(Triangles2DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle2DTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(Triangles3DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle3DTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(TextTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("TextTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(ImageTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("ImageTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage
+
             );
     }
 

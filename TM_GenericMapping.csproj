@@ -9,7 +9,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
     <PackageId>TM_CSharpMapping</PackageId>
-    <Version>0.1.4</Version>
+    <Version>0.1.6</Version>
     <Authors>Achim Bunke</Authors>
     <Description>CSharp library for Trackmania map and MediaTracker editing.</Description>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -31,6 +31,10 @@
 
   <ItemGroup>
     <Folder Include="Blocks\" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <EmbeddedResource Include="Templates\*.Gbx" />
   </ItemGroup>
 
   <ItemGroup>
