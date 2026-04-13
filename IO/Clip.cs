@@ -50,5 +50,10 @@ namespace TM_GenericMapping.IO
         {
             MediaClip = Gbx.Parse<CGameCtnMediaClip>(clipStream, ReadSettings).Node;
         }
+
+        public async Task OpenAsync(Stream clipStream)
+        {
+            MediaClip = (await Gbx.ParseAsync<CGameCtnMediaClip>(clipStream, ReadSettings)).Node;
+        }
     }
 }

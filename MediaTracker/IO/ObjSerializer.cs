@@ -36,15 +36,17 @@ public static class ObjSerializer
     }
     public sealed class StreamObjSource : IObjSource
     {
-        private readonly Dictionary<string, Func<Stream>> _files;
+        private readonly Dictionary<string, MemoryStream> _files;
 
-        public StreamObjSource(IEnumerable<(string name, Func<Stream> open)> files)
-            => _files = files.ToDictionary(x => x.name, x => x.open);
+        public StreamObjSource(Dictionary<string, MemoryStream> files) => _files = files;
 
         public Stream Open(string name)
-            => _files.TryGetValue(name, out var f)
-                ? f()
-                : throw new FileNotFoundException($"Stream source has no entry for '{name}'");
+        {
+            if (!_files.TryGetValue(name, out var ms))
+                throw new FileNotFoundException($"Stream source has no entry for '{name}'");
+            ms.Position = 0;
+            return ms;
+        }
 
         public bool Exists(string name) => _files.ContainsKey(name);
     }
@@ -340,7 +342,7 @@ public static class ObjSerializer
 
             if (positions.Count != totalReferenceVertices)
             {
-                Console.Error.WriteLine(
+                Logger.Error(
                     $"[LoadAnimationFromObj] Frame {frameIndex} ({Path.GetFileName(orderedFrameNames[frameIndex])}) " +
                     $"has {positions.Count} vertices but reference has {totalReferenceVertices}. Skipping.");
                 continue;

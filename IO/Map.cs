@@ -33,6 +33,10 @@ public class Map
     {
         Challenge = Gbx.Parse<CGameCtnChallenge>(MapPath, ReadSettings).Node;
     }
+    public async Task OpenAsync()
+    {
+        Challenge = (await Gbx.ParseAsync<CGameCtnChallenge>(MapPath, ReadSettings)).Node;
+    }
     public void Save()
     {
         if (!string.IsNullOrWhiteSpace(SaveName))

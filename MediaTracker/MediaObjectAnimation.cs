@@ -890,7 +890,7 @@ public class TriangleObjectAnimator<T> : MediaObjectAnimator<T> where T : Triang
     bool StoredVertexAnimation(T obj, float deltaTime, StoredVertexAnimationParameter animParams, StoredVertexAnimationData animData)
     {
         var animationFrameCount = animParams.StoredAnimation.VertexAnimationFrames.Length;
-        var desiredKeyFrameIdx = Math.Min((int)((animationFrameCount - 1) * animData.ElapsedTime / animParams.Time), animationFrameCount - 1);
+        var desiredKeyFrameIdx = (int)Math.Min(((ulong)animationFrameCount - 1) * animData.ElapsedTimeMillis / animParams.TimeMillis, (ulong)animationFrameCount - 1);
         if (!animData.FirstFrame && desiredKeyFrameIdx == animData.CurrentAnimationFrame)
             return false;
         // only here if new keyframe
@@ -915,6 +915,11 @@ public class TriangleObjectAnimator<T> : MediaObjectAnimator<T> where T : Triang
         float time = 1f,
         bool continuosKeyFrames = false)
         => StoredVertexAnimation(new StoredVertexAnimationParameter(storedVertexAnimation) { TimeMillis = Time.Millis(time), ContinuosKeyFrames = continuosKeyFrames });
+    public MediaObjectAnimator<T> StoredVertexAnimation(
+       StoredVertexAnimation storedVertexAnimation,
+       ulong timeBetweenKeyframes = 100,
+       bool continuosKeyFrames = false)
+       => StoredVertexAnimation(new StoredVertexAnimationParameter(storedVertexAnimation) { TimeMillis = timeBetweenKeyframes * ((ulong)storedVertexAnimation.VertexAnimationFrames.Length - 1), ContinuosKeyFrames = continuosKeyFrames });
 
 }
 public class DotMatrixDisplayAnimator<T> : TriangleObjectAnimator<T> where T : DotMatrixDisplay
