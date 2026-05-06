@@ -1,6 +1,7 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
+using System.Reflection;
 using TM_GenericMapping.Messaging;
 
 namespace TM_GenericMapping.Items;
@@ -22,6 +23,7 @@ public class MeshExtractor
         {
             normalizedMeshResult.Value.PlacementParam = item.DefaultPlacement;
             normalizedMeshResult.Value.IconWebP = item.IconWebP;
+            normalizedMeshResult.Value.Icon = item.Icon;
             return normalizedMeshResult;
         }
 
@@ -33,13 +35,13 @@ public class MeshExtractor
         // Two-pass: group split vertices by material first, then concatenate
         // so each material produces a contiguous index range (NormalizedSubmesh)
 
-        var positions = new List<Vec3>();
-        var normals = new List<Vec3>();
-        var uv0 = new List<Vec2>();
-        var uv1 = new List<Vec2>();
-
         // per-material buckets of indices (into the shared vertex buffer)
-        var buckets = new Dictionary<CPlugMaterialUserInst, List<int>>();
+        var buckets = new Dictionary<CPlugMaterialUserInst, (
+            List<Vec3> positions,
+            List<Vec3> normals,
+            List<Vec2> texCoords,
+            List<Vec2> lightmapCoords,
+            List<int> indices)>();
 
         foreach (var layer in crystal.Layers)
         {
@@ -53,7 +55,7 @@ public class MeshExtractor
 
                 if (!buckets.TryGetValue(mat, out var bucket))
                 {
-                    bucket = new List<int>();
+                    bucket = (new(), new(), new(), new(), new());
                     buckets[mat] = bucket;
                 }
 
@@ -69,56 +71,50 @@ public class MeshExtractor
 
                     foreach (var corner in corners)
                     {
-                        bucket.Add(positions.Count);
-                        positions.Add(sourcePositions[corner.Index]);
-                        uv0.Add(corner.TexCoord);
-                        uv1.Add(corner.LightmapCoord);
-                        normals.Add(Vec3.Zero); // filled below
+                        bucket.indices.Add(bucket.positions.Count);
+                        bucket.positions.Add(sourcePositions[corner.Index]);
+                        bucket.texCoords.Add(corner.TexCoord);
+                        bucket.lightmapCoords.Add(corner.LightmapCoord);
+                        bucket.normals.Add(Vec3.Zero); // computed below
                     }
                 }
             }
         }
 
+        var submeshes = new List<NormalizedSubmesh>();
+
         // concatenate buckets into final index buffer, recording submesh ranges
         var indices = new List<int>();
-        var submeshes = new List<NormalizedSubmesh>();
+
 
         foreach (var (mat, bucket) in buckets)
         {
+            var posArr = bucket.positions.ToArray();
+            var idxArr = bucket.indices.ToArray();
+            var nrmArr = ComputeSmoothNormals(posArr, idxArr);
+
             submeshes.Add(new NormalizedSubmesh
             {
-                IndexStart = indices.Count,
-                IndexCount = bucket.Count,
-                Material = mat
+                Positions = posArr,
+                Normals = nrmArr,
+                TexCoords = bucket.texCoords.Count > 0 ? bucket.texCoords.ToArray() : null,
+                LightmapCoords = bucket.lightmapCoords.Count > 0 ? bucket.lightmapCoords.ToArray() : null,
+                Colors = null, // crystal has no vertex colors
+                Indices = idxArr,
+                Material = mat,
             });
-            indices.AddRange(bucket);
         }
 
-        var posArr = positions.ToArray();
-        var idxArr = indices.ToArray();
 
-        var nrmArr = ComputeSmoothNormals(positions.ToArray(), indices.ToArray());
-
-        var mesh = new NormalizedMesh
+        return ToolResult.Success(new NormalizedMesh
         {
-            Positions = posArr,
-            Normals = nrmArr,
-            TexCoords = uv0.ToArray(),
-            LightmapCoords = uv1.ToArray(),
-            Indices = idxArr,
             Submeshes = submeshes.ToArray(),
             SourceData = crystal
-        };
-        return ToolResult.Success(mesh, nameof(MeshExtractor));
+        }, nameof(MeshExtractor));
     }
 
     ToolResult<NormalizedMesh> ExtractFromSolid2Model(CPlugSolid2Model solid2Model)
     {
-        var positions = new List<Vec3>();
-        var normals = new List<Vec3>();
-        var uv0 = new List<Vec2>();
-        var uv1 = new List<Vec2>();
-        var indices = new List<int>();
         var submeshes = new List<NormalizedSubmesh>();
 
         foreach (var shaded in solid2Model.ShadedGeoms)
@@ -127,35 +123,32 @@ public class MeshExtractor
             if (visual is not CPlugVisualIndexedTriangles vit)
                 continue;
 
-            int indexStart = indices.Count;
-            int vertOffset = positions.Count;
+            var stream = vit.VertexStreams[0];
 
-            var vertexStream = visual.VertexStreams[0];
-            positions.AddRange(vertexStream.Positions);
-            normals.AddRange(vertexStream.Normals);
-            if(vertexStream.UVs.Count > 0)
-                uv0.AddRange(vertexStream.UVs[0]);
-            if(vertexStream.UVs.Count > 1)
-                uv1.AddRange(vertexStream.UVs[1]);
+            var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
+              BindingFlags.NonPublic | BindingFlags.Instance);
+            var tangentsUs = (Vec3[])tangentUsField?.GetValue(stream);
 
-            foreach (var idx in vit.IndexBuffer.Indices)
-                indices.Add(vertOffset + idx);
+            var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
+              BindingFlags.NonPublic | BindingFlags.Instance);
+            var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
 
             submeshes.Add(new NormalizedSubmesh
             {
-                IndexStart = indexStart,
-                IndexCount = indices.Count - indexStart,
-                Material = solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst
+                Positions = stream.Positions,
+                Normals = stream.Normals,
+                TexCoords = stream.UVs.TryGetValue(0, out var uv0) ? uv0 : null,
+                LightmapCoords = stream.UVs.TryGetValue(1, out var uv1) ? uv1 : null,
+                Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
+                Indices = vit.IndexBuffer.Indices,
+                Material = solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst,
+                TangentUs = tangentsUs,
+                TangentVs = tangentVs,
             });
         }
 
         return ToolResult.Success(new NormalizedMesh
         {
-            Positions = positions.ToArray(),
-            Normals = normals.ToArray(),
-            TexCoords = uv0.ToArray(),
-            LightmapCoords = uv1.ToArray(),
-            Indices = indices.ToArray(),
             Submeshes = submeshes.ToArray(),
             SourceData = solid2Model
         }, nameof(MeshExtractor));
@@ -192,5 +185,44 @@ public class MeshExtractor
                 normals[i] = normals[i].GetNormalized();
 
         return normals;
+    }
+
+    static (Vec3[] tangentUs, Vec3[] tangentVs) ComputeTangents(
+    Vec3[] positions, Vec3[] normals, Vec2[] uvs, int[] indices)
+    {
+        var tangents = new Vec3[positions.Length];
+        var bitangents = new Vec3[positions.Length];
+
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            int i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
+
+            var edge1 = positions[i1] - positions[i0];
+            var edge2 = positions[i2] - positions[i0];
+            var deltaUV1 = uvs[i1] - uvs[i0];
+            var deltaUV2 = uvs[i2] - uvs[i0];
+
+            float denom = deltaUV1.X * deltaUV2.Y - deltaUV2.X * deltaUV1.Y;
+            if (MathF.Abs(denom) < 1e-6f) continue; // degenerate UV
+            float r = 1f / denom;
+
+            var tangent = (edge1 * deltaUV2.Y - edge2 * deltaUV1.Y) * r;
+            var bitangent = (edge2 * deltaUV1.X - edge1 * deltaUV2.X) * r;
+
+            tangents[i0] += tangent; tangents[i1] += tangent; tangents[i2] += tangent;
+            bitangents[i0] += bitangent; bitangents[i1] += bitangent; bitangents[i2] += bitangent;
+        }
+
+        // orthogonalize against normal (Gram-Schmidt)
+        for (int i = 0; i < positions.Length; i++)
+        {
+            var n = normals[i];
+            var t = tangents[i];
+
+            tangents[i] = (t - n * Vec3.GetDotProduct(n, t)).GetNormalized();
+            bitangents[i] = (bitangents[i]).GetNormalized();
+        }
+
+        return (tangents, bitangents);
     }
 }

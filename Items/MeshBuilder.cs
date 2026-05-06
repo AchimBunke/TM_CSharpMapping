@@ -43,6 +43,7 @@ public class MeshBuilder
     CPlugSurface SurfaceTemplate => DynaObjectModelTemplate.DynaShape;
     CPlugSurface.Mesh SurfaceMeshTemplate => SurfaceTemplate.Surf as CPlugSurface.Mesh;
 
+
     Ident ident;
 
     MeshBuilderSettings _settings;
@@ -68,8 +69,33 @@ public class MeshBuilder
 
 
         var surfMesh = ItemExtensions.DeepCloneObject(SurfaceMeshTemplate);
-        surfMesh.Vertices = mesh.Positions;
-        surfMesh.Triangles = BuildSurfaceTriangles(mesh);
+
+        // merge all submesh positions and indices into one surface
+        var allPositions = new List<Vec3>();
+        var allTriangles = new List<CPlugSurface.Mesh.Triangle>();
+
+        foreach (var subMesh in mesh.Submeshes)
+        {
+            int vertOffset = allPositions.Count;
+            allPositions.AddRange(subMesh.Positions);
+
+            for (int i = 0; i < subMesh.Indices.Length; i += 3)
+            {
+                allTriangles.Add(new CPlugSurface.Mesh.Triangle
+                {
+                    Indices = new Int3(
+                        vertOffset + subMesh.Indices[i],
+                        vertOffset + subMesh.Indices[i + 1],
+                        vertOffset + subMesh.Indices[i + 2]),
+                    SurfaceIndex = 0,
+                    U02 = (byte)subMesh.Material.SurfacePhysicId,
+                    U03 = 0
+                });
+            }
+        }
+
+        surfMesh.Vertices = allPositions.ToArray();
+        surfMesh.Triangles = allTriangles.ToArray();
 
         surface.Surf = surfMesh; 
         var chunk = surface.GetChunk<Chunk0900C003>();
@@ -81,27 +107,7 @@ public class MeshBuilder
     // Replace with convex hull later if physics behavior needs it
     public CPlugSurface BuildDynaSurface(NormalizedMesh mesh)
         => BuildSurface(mesh);
-
-    CPlugSurface.Mesh.Triangle[] BuildSurfaceTriangles(NormalizedMesh mesh)
-    {
-        var tris = new List<CPlugSurface.Mesh.Triangle>(mesh.Indices.Length / 3);
-
-        foreach(var subMesh in mesh.Submeshes)
-        {
-            for (int i = subMesh.IndexStart; i < subMesh.IndexCount; i+=3)
-            {
-                tris.Add(new CPlugSurface.Mesh.Triangle
-                {
-                    Indices = new Int3(mesh.Indices[i], mesh.Indices[i + 1], mesh.Indices[i + 2]),
-                    SurfaceIndex = 0,
-                    U02 = (byte)subMesh.Material.SurfacePhysicId,
-                    U03 = 0
-                });
-            }
-        }
-
-        return tris.ToArray();
-    }
+ 
 
     // ─────────────────────────────────────────────
     // Solid2Model — Option A: mutate existing
@@ -150,11 +156,12 @@ public class MeshBuilder
         // otherwise construct empty (may be missing required chunks)
         CPlugSolid2Model solid;
         if (mesh.SourceData is CPlugSolid2Model source)
-            solid = ItemExtensions.DeepCloneObject(source);
+            return ItemExtensions.DeepCloneObject(source);// immediate return
         else
             solid = ItemExtensions.DeepCloneObject(Solid2ModelTemplate);
-        
+
         PopulateSolid2Model(solid, mesh);
+
         return solid;
     }
 
@@ -211,7 +218,7 @@ public class MeshBuilder
                 MaterialName = string.Empty,
             };
             materials.Add(material);
-            var layer = BuildLayer(mesh, submesh, material);
+            var layer = BuildLayer(submesh, material);
             layer.LayerId = $"Layer{layers.Count}";
             layers.Add(layer);
         
@@ -226,42 +233,57 @@ public class MeshBuilder
     // Visual builder (shared)
     // ─────────────────────────────────────────────
 
-    CPlugVisualIndexedTriangles BuildIndexedTrianglesVisual(NormalizedMesh mesh, NormalizedSubmesh submesh)
+    CPlugVisualIndexedTriangles BuildIndexedTrianglesVisual(NormalizedMesh mesh, NormalizedSubmesh subMesh)
     {
-        // extract the vertex range used by this submesh's indices
-        // remap global indices to local (0-based) for this submesh
-        var globalIndices = mesh.Indices
-            .Skip(submesh.IndexStart)
-            .Take(submesh.IndexCount)
-            .ToArray();
+        var uvs = new SortedDictionary<int, Vec2[]>();
+        var colors = new SortedDictionary<int, int[]>();
 
-        // collect unique vertex indices used by this submesh
-        var uniqueIndices = globalIndices.Distinct().Order().ToArray();
-        var remapTable = uniqueIndices
-            .Select((globalIdx, localIdx) => (globalIdx, localIdx))
-            .ToDictionary(x => x.globalIdx, x => x.localIdx);
-
-        var uVs = new SortedDictionary<int, Vec2[]>();
-
-        if (mesh.TexCoords.Length == mesh.Positions.Length)
-            uVs[0] = uniqueIndices.Select(i => mesh.TexCoords[i]).ToArray();   
-        if(mesh.LightmapCoords.Length == mesh.Positions.Length)
-            uVs[1] = uniqueIndices.Select(i => mesh.LightmapCoords[i]).ToArray();
+        if (subMesh.TexCoords is not null)
+            uvs[0] = subMesh.TexCoords;
+        if (subMesh.LightmapCoords is not null)
+            uvs[1] = subMesh.LightmapCoords;
+        if (subMesh.Colors is not null)
+            colors[0] = subMesh.Colors;
 
         var vertexStream = ItemExtensions.DeepCloneObject(VertexStreamTemplate);
-        vertexStream.Positions = uniqueIndices.Select(i => mesh.Positions[i]).ToArray();
-        vertexStream.Normals = uniqueIndices.Select(i => mesh.Normals[i]).ToArray();
-        vertexStream.UVs = uVs;
+        vertexStream.Positions = subMesh.Positions.ToArray();
+        vertexStream.Normals = subMesh.Normals.ToArray();
+        vertexStream.UVs = uvs;
+        vertexStream.Colors = colors;
 
         // fix data decl
         var dataDeclField = typeof(CPlugVertexStream).GetField("dataDecls",
             BindingFlags.NonPublic | BindingFlags.Instance);
         var dataDecls = (dataDeclField.GetValue(vertexStream) as CPlugVertexStream.DataDecl[]).ToList();
-        if (uVs.Count <= 0)
+        if (uvs.Count <= 0)
             dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
-        if (uVs.Count <= 1)
+        if (uvs.Count <= 1)
             dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord1);
+        if (colors.Count <= 0)
+            dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.Color0);
+        else
+            dataDecls.Insert(2 ,new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16});
 
+        if(colors.Count > 0)
+        {
+            dataDecls.ElementAt(0).Flags1 = 9438208;
+
+            dataDecls.ElementAt(1).Flags1 = 277879813;
+
+            dataDecls.ElementAt(2).Flags1 = 546310152;
+
+            dataDecls.ElementAt(3).Flags1 = 546308618;
+            dataDecls.ElementAt(3).Flags2 = 80;
+            dataDecls.ElementAt(3).Offset = 20;
+
+            dataDecls.ElementAt(4).Flags1 = 277879826;
+            dataDecls.ElementAt(4).Flags2 = 112;
+            dataDecls.ElementAt(4).Offset = 28;
+
+            dataDecls.ElementAt(5).Flags1 = 277879828;
+            dataDecls.ElementAt(5).Flags2 = 128;
+            dataDecls.ElementAt(5).Offset = 32;
+        }
         dataDeclField.SetValue(vertexStream, dataDecls.ToArray());
 
         // Set flags to match what data is actually present
@@ -279,8 +301,21 @@ public class MeshBuilder
             BindingFlags.NonPublic | BindingFlags.Instance);
         countField?.SetValue(vertexStream, vertexStream.Positions.Length);
 
+        if(uvs.TryGetValue(0, out var uv0))
+        {
+            var tangentUs = typeof(CPlugVertexStream).GetField("tangentUs",
+               BindingFlags.NonPublic | BindingFlags.Instance);
+            tangentUs?.SetValue(vertexStream, subMesh.TangentUs);
+        }
+        if (uvs.TryGetValue(1, out var uv1))
+        {
+            var tangentVs = typeof(CPlugVertexStream).GetField("tangentVs",
+               BindingFlags.NonPublic | BindingFlags.Instance);
+            tangentVs?.SetValue(vertexStream, subMesh.TangentVs);
+        }
+
         var indexBuffer = ItemExtensions.DeepCloneObject(IndexBufferTemplate);
-        indexBuffer.Indices = globalIndices.Select(i => remapTable[i]).ToArray();
+        indexBuffer.Indices = subMesh.Indices.ToArray();
         indexBuffer.Flags = 2;
 
         var indexedTriangles = ItemExtensions.DeepCloneObject(IndexedTrianglesTemplate);
@@ -289,7 +324,7 @@ public class MeshBuilder
         if (TryGetBoundingBox(mesh, out var bb))
             indexedTriangles.BoundingBox = bb;
         else
-            indexedTriangles.BoundingBox = BuildBoxAligned(mesh);
+            indexedTriangles.BoundingBox = BuildBoxAligned(subMesh);
 
         var countProperty= typeof(CPlugVisualIndexedTriangles).GetProperty("Count",
             BindingFlags.NonPublic | BindingFlags.Instance);
@@ -298,34 +333,37 @@ public class MeshBuilder
         return indexedTriangles;
     }
 
+
     // ─────────────────────────────────────────────
     // GeometryLayer builder (shared)
     // ─────────────────────────────────────────────
-    CPlugCrystal.GeometryLayer BuildLayer(NormalizedMesh mesh, NormalizedSubmesh submesh, CPlugCrystal.Material material)
+    CPlugCrystal.GeometryLayer BuildLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material)
     {
         var layer = ItemExtensions.DeepCloneObject(LayerTemplate);
         layer.LayerName = "Geometry";
 
         var crystal = ItemExtensions.DeepCloneObject(CrystalTemplate);
-        crystal.Positions = mesh.Positions;
+        crystal.Positions = submesh.Positions;
+
         var group = crystal.Groups[0];
         group.Name = "part";
         crystal.Groups = [group];
-        List<CPlugCrystal.Face> faces = [];
 
-        for (int i = submesh.IndexStart; i < submesh.IndexStart + submesh.IndexCount; i += 3)
+        var faces = new List<CPlugCrystal.Face>();
+
+        for (int i = 0; i < submesh.Indices.Length; i += 3)
         {
-            CPlugCrystal.Vertex[] vertices = new CPlugCrystal.Vertex[3];
-            for (int v = 0; v < 3; ++v)
+            var vertices = new CPlugCrystal.Vertex[3];
+
+            for (int v = 0; v < 3; v++)
             {
-                var idx = mesh.Indices[i + v];
-                var lightmapCoord = mesh.LightmapCoords.Length == mesh.Positions.Length ? mesh.LightmapCoords[idx] : Vec2.Zero;
-                var texCoord = mesh.TexCoords.Length == mesh.Positions.Length ? mesh.TexCoords[idx] : Vec2.Zero;
-                var vertex = new CPlugCrystal.Vertex(idx, texCoord, lightmapCoord);
-                vertices[v] = vertex;
+                var idx = submesh.Indices[i + v];
+                var texCoord = submesh.TexCoords?[idx] ?? Vec2.Zero;
+                var lightmap = submesh.LightmapCoords?[idx] ?? Vec2.Zero;
+                vertices[v] = new CPlugCrystal.Vertex(idx, texCoord, lightmap);
             }
-            var face = new CPlugCrystal.Face(vertices, group, material, null);
-            faces.Add(face);
+
+            faces.Add(new CPlugCrystal.Face(vertices, group, material, null));
         }
 
         crystal.Faces = faces.ToArray();
@@ -353,12 +391,12 @@ public class MeshBuilder
         placementParam.PivotSnapDistance = -1;
         return placementParam;
     }
-    BoxAligned BuildBoxAligned(NormalizedMesh mesh)
+    BoxAligned BuildBoxAligned(NormalizedSubmesh subMesh)
     {
-        Vec3 min = mesh.Positions[0];
-        Vec3 max = mesh.Positions[0];
+        Vec3 min = subMesh.Positions[0];
+        Vec3 max = subMesh.Positions[0];
 
-        foreach (var p in mesh.Positions)
+        foreach (var p in subMesh.Positions)
         {
             min = Vector3.Min(min, p);
             max = Vector3.Max(max, p);
@@ -400,44 +438,50 @@ public class MeshBuilder
     }
 
 
+    void FillItemDataFromMesh(CGameItemModel item, NormalizedMesh mesh)
+    {
+        item.Name = "New Item";
+        item.Icon = mesh.Icon;
+        item.IconWebP = mesh.IconWebP;
+        item.Description = "No Description";
+        item.Ident = ident;
+        item.DefaultPlacement = BuildPlacementParam(mesh);
+
+        if(item.Icon == null && item.IconWebP == null)
+        {
+            item.RemoveChunk<CGameCtnCollector.HeaderChunk2E001004>();
+            item.Flags = (CGameCtnCollector.ECollectorFlags)8;
+
+        }
+    }
+
+
 
     public CGameItemModel BuildSolid2ModelItem(NormalizedMesh mesh)
     {
         var item = ItemExtensions.DeepCloneObject(entityModelTemplate);
-        item.Name = "New Item";
-        item.IconWebP = mesh.IconWebP;
-        item.Description = "No Description";
-        item.Ident = ident;
         (item.EntityModel as CGameCommonItemEntityModel).StaticObject.Mesh = BuildSolid2Model(mesh);
-        item.DefaultPlacement = BuildPlacementParam(mesh);
+        FillItemDataFromMesh(item, mesh);
         return item;
     }
 
     public CGameItemModel BuildCrystalItem(NormalizedMesh mesh)
     {
         var item = ItemExtensions.DeepCloneObject(entityModelEditionTemplate);
-        item.Name = "New Item";
-        item.IconWebP = mesh.IconWebP;
-        item.Description = "No Description";
-        item.Ident = ident;
         (item.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal = BuildCrystal(mesh);
-        item.DefaultPlacement = BuildPlacementParam(mesh);
+        FillItemDataFromMesh(item, mesh);
         return item;
     }
 
     public CGameItemModel BuildMovingItem(NormalizedMesh mesh)
     {
         var item = ItemExtensions.DeepCloneObject(movingItemTemplate);
-        item.Name = "New Item";
-        item.IconWebP = mesh.IconWebP;
-        item.Description = "No Description";
-        item.Ident = ident;
         ItemExtensions.TryGetDynaModelEntRef(item, out var entRef);
         entRef.Model = BuildDynaObjectModel(mesh);
-        item.DefaultPlacement = BuildPlacementParam(mesh);
+        FillItemDataFromMesh(item, mesh);
         return item;
     }
-
+ 
 
 
 
