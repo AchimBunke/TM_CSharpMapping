@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.Numerics;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.IO;
+using TM_GenericMapping.MediaTracker;
 using TmEssentials;
+using static GBX.NET.Engines.Game.CGameCtnChallenge.TMUnlimiter;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
 
 namespace TM_GenericMapping.Common;
@@ -61,7 +63,21 @@ public record BlockTemplates(
     CGameCtnMediaBlockTriangles2D Triangles2D,
     CGameCtnMediaBlockTriangles3D Triangles3D,
     CGameCtnMediaBlockText Text,
-    CGameCtnMediaBlockImage Image);
+    CGameCtnMediaBlockImage Image,
+    CGameCtnMediaBlockCameraGame PlayerCamera,
+    CGameCtnMediaBlockDOF DepthOfField,
+    CGameCtnMediaBlockCameraCustom CustomCamera)
+{
+    public CGameCtnMediaClip GetEmptyClip() => MediaTrackerUtils.DeepCopyClip(Clip);
+    public CGameCtnMediaTrack GetEmptyTrack() => MediaTrackerUtils.DeepCopyTrack(Track);
+    public CGameCtnMediaBlockTriangles2D GetEmptyTriangles2DBlock() => MediaTrackerUtils.DeepCopyBlockTriangles2D(Triangles2D);
+    public CGameCtnMediaBlockTriangles3D GetEmptyTriangles3DBlock() => MediaTrackerUtils.DeepCopyBlockTriangles3D(Triangles3D);
+    public CGameCtnMediaBlockText GetEmptyTextBlock() => MediaTrackerUtils.DeepCopyBlockText(Text);
+    public CGameCtnMediaBlockImage GetEmptyImageBlock() => MediaTrackerUtils.DeepCopyBlockImage(Image);
+    public CGameCtnMediaBlockCameraGame GetEmptyPlayerCameraBlock() => MediaTrackerUtils.DeepCopyBlockPlayerCamera(PlayerCamera);
+    public CGameCtnMediaBlockDOF GetEmptyDepthOfFieldBlock() => MediaTrackerUtils.DeepCopyBlockDepthOfField(DepthOfField);
+    public CGameCtnMediaBlockCameraCustom GetEmptyCustomCameraBlock() => MediaTrackerUtils.DeepCopyBlockCustomCamera(CustomCamera);
+}
 
 public enum ScreenPosition
 {
@@ -126,6 +142,9 @@ public class SceneTimeline
     Dictionary<CGameCtnMediaBlock, HashSet<RenderObject>> blockToRenderObjects = [];
     HashSet<CGameCtnMediaTrack> tracks = [];
 
+    // share ids
+    Dictionary<int, RenderObject> blockShareIdToRenderObject = [];
+
     //HashSet<IMediaObjectAnimator> animators = [];
     Dictionary<MediaObject, Queue<IMediaObjectAnimator>> animators = [];
     HashSet<IMediaObjectAnimator> concurrentAnimators = [];
@@ -152,6 +171,7 @@ public class SceneTimeline
     #endregion
 
     #region Scene API
+    public SceneCameraManager CameraManager { get; private set; }
     public IEnumerable<MediaObject> Objects => objects;
     public void Add(params ReadOnlySpan<MediaObject> newObjects)
     {
@@ -242,42 +262,7 @@ public class SceneTimeline
         }
        
     }
-    private void CompleteAndHideKeyframesForUnfinishedBlocks()
-    {
-        // Create keyframes for objects which only have 1
-        foreach (var block in blockToRenderObjects.Keys)
-        {
-            if (TryGetKeyFrameCount(block, out var keyCount))
-            {
-                if (keyCount == 0)
-                {
-                    GenerateKeyFrame(block, 0);
-                    if(hiddenInEditorTimeline.Contains(block))
-                        GenerateKeyFrame(block, 0);
-                    else
-                        GenerateKeyFrame(block, (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
-                }
-                else if (keyCount == 1)
-                {
-                     
-                    ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
-                    if (hiddenInEditorTimeline.Contains(block))
-                        GenerateKeyFrame(block, lastKeyframeTime);
-                    else
-                        GenerateKeyFrame(block, lastKeyframeTime + (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
-                }
-                // This will not make it invisible in editor timeline!
-                //else if(keyCount > 1)
-                //{
-                //    if (hiddenInEditorTimeline.Contains(block))
-                //    {
-                //        ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
-                //        GenerateKeyFrame(block, lastKeyframeTime);
-                //    }
-                //}
-            }
-        }
-    }
+
 
     public void ForceStopAllAnimations()
     {
@@ -555,6 +540,7 @@ public class SceneTimeline
     {
         BlockTemplates = MediaTrackerUtils.CreateBlockTemplates();
         RenderData = RenderData.Default;
+        CameraManager = new SceneCameraManager(this);
     }
 
     public float AnimationTickRateMillis => animationSettings.AnimationTickRateMillis;
@@ -698,26 +684,61 @@ public class SceneTimeline
     }
     void RegisterObject(MediaObject obj)
     {
-        CGameCtnMediaBlock newBlock = null;
-        CGameCtnMediaTrack newTrack = null;
+        CGameCtnMediaBlock block = null;
+        CGameCtnMediaTrack track = null;
         int idx = -1;
         if (obj is RenderObject renderObj)
         {
-            newBlock = renderObj.Renderer.CreateEmptyBlock(BlockTemplates);
-            idx = renderObj.Renderer.AddRenderDataToBlock(renderObj, newBlock);
-            newTrack = MediaTrackerUtils.DeepCopyTrack(BlockTemplates.Track);
-            newTrack.Name = renderObj.Name;
-            newTrack.Blocks.Add(newBlock);
+            // if use shared id then sharing blocks across hiearchies is possible
+            if (renderObj.BlockShareId is int blockShareId)
+            {
+                if(!blockShareIdToRenderObject.TryGetValue(blockShareId, out var blockOwner))
+                {
+                    blockOwner = renderObj;
+                    blockShareIdToRenderObject[blockShareId] = blockOwner;
+                    (block, track) = CreateAndRegisterBlock(renderObj);
+                }
+                else
+                {
+                    var existingGroupData = objectsInScene[blockOwner];
+                    block = existingGroupData.block;
+                    track = existingGroupData.track;
+                    blockToRenderObjects[block].Add(renderObj);
+                    requiresKeyFrame.Add(block);
+                }
+            }
+            else
+            {
+                (block, track) = CreateAndRegisterBlock(renderObj);
+            }
+            if (renderObj.Renderer is IKeysRenderer keysRenderer)
+                idx = keysRenderer.AddRenderDataToBlock(renderObj, block);
+            else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
+            {
+                twoKeyRenderer.SetDataToStart(renderObj, block, this.RenderData);
+                (block as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
+            }
 
-            blockToRenderObjects[newBlock] = [renderObj];
-            blockToKeyFrameData[newBlock] = new KeyFrameData() { KeyFrameTickRateMillis = animationSettings.MinKeyFrameTickRateMillis };
-
-            clip.Tracks.Add(newTrack);
-            tracks.Add(newTrack);
-
-            requiresKeyFrame.Add(newBlock);
         }
-        objectsInScene[obj] = (newTrack, newBlock, idx);
+        if(obj is CameraObject cameraObj)
+        {
+            CameraManager.AddCamera(cameraObj);
+        }
+        objectsInScene[obj] = (track, block, idx);
+    }
+    (CGameCtnMediaBlock newBlock, CGameCtnMediaTrack newTrack) CreateAndRegisterBlock(RenderObject renderObj)
+    {
+        var newBlock = renderObj.Renderer.CreateEmptyBlock(BlockTemplates);
+        var newTrack = MediaTrackerUtils.DeepCopyTrack(BlockTemplates.Track);
+        newTrack.Name = renderObj.Name;
+        newTrack.Blocks.Add(newBlock);
+        clip.Tracks.Add(newTrack);
+        tracks.Add(newTrack);
+
+        blockToRenderObjects[newBlock] = [renderObj];
+        blockToKeyFrameData[newBlock] = new KeyFrameData() { KeyFrameTickRateMillis = animationSettings.MinKeyFrameTickRateMillis };
+        requiresKeyFrame.Add(newBlock);
+        return (newBlock, newTrack);
     }
 
     void RegisterSubObject(MediaObject obj)
@@ -731,19 +752,29 @@ public class SceneTimeline
             return;
         }
         // here i know parent is registered
-        if (obj is RenderObject renderObj && renderObj.CanShareBlock && TryFindNearestAvailableSharedParent(renderObj, out var sharedParent))
+        if(obj is RenderObject renderObj)
         {
-            var (commonTrack, commonBlock, _) = objectsInScene[sharedParent];
-            int idx = renderObj.Renderer.AddRenderDataToBlock(renderObj, commonBlock);
-            objectsInScene[renderObj] = (commonTrack, commonBlock, idx);
-            blockToRenderObjects[commonBlock].Add(renderObj);
+            // uses block sharing
+            if (TryFindSharedBlockOwner(renderObj, out var sharedBlockOwner))
+            {
+                var (commonTrack, commonBlock, _) = objectsInScene[sharedBlockOwner];
+                int idx = -1;
+                if (renderObj.Renderer is IKeysRenderer keysRenderer)
+                    idx = keysRenderer.AddRenderDataToBlock(renderObj, commonBlock);
+                else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
+                {
+                    twoKeyRenderer.SetDataToStart(renderObj, commonBlock, this.RenderData);
+                    (sharedBlockOwner as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
+                }
+                objectsInScene[renderObj] = (commonTrack, commonBlock, idx);
+                blockToRenderObjects[commonBlock].Add(renderObj);
 
-            requiresKeyFrame.Add(commonBlock);
-        }
-        else
-        {
-            // Creates 
-            RegisterObject(obj);
+                requiresKeyFrame.Add(commonBlock);
+            }
+            else
+            {
+                RegisterObject(renderObj);
+            }
         }
 
         // register hierarchy
@@ -753,21 +784,39 @@ public class SceneTimeline
         }
 
     }
-    bool TryFindNearestAvailableSharedParent(RenderObject obj, out RenderObject sharedParent)
+    bool TryFindSharedBlockOwner(RenderObject obj, out RenderObject sharedBlockOwner)
     {
-        var parent = obj.Parent;
-        while (parent != null)
+        // 1) Explicit group (strongest rule)
+        if (obj.BlockShareId is int groupId)
+            return blockShareIdToRenderObject.TryGetValue(groupId, out sharedBlockOwner!);
+
+        // 2) Fallback: blockShareMode
+        switch (obj.BlockShareMode)
         {
-            if (parent is RenderObject renderParent && renderParent.CanShareBlock && renderParent.Renderer.CanShareBlockWith(renderParent, obj))
-            {
-                sharedParent = renderParent;
-                return true;
-            }
-            parent = parent.Parent;
+            case BlockShareMode.ToParent:
+            case BlockShareMode.Hierarchy:
+                {
+                    var parent = obj.Parent;
+                    while (parent != null)
+                    {
+                        if (parent is RenderObject renderParent 
+                            && (renderParent.BlockShareMode == BlockShareMode.FromChildren || renderParent.BlockShareMode == BlockShareMode.Hierarchy)
+                            && renderParent.Renderer.CanShareBlockWith(renderParent, obj))
+                        {
+                            sharedBlockOwner = renderParent;
+                            return true;
+                        }
+                        parent = parent.Parent;
+                    }
+                    sharedBlockOwner = null!;
+                    return false;
+                }
+            default:
+                sharedBlockOwner = null!;
+                return false;
         }
-        sharedParent = null;
-        return false;
     }
+   
     void GenerateKeyFrame(CGameCtnMediaBlock block)
     {
         GenerateKeyFrame(block, nextKeyFrameTimeMillis);
@@ -778,14 +827,22 @@ public class SceneTimeline
         foreach (var obj in blockToRenderObjects[block])
         {
             var (_, _, idx) = objectsInScene[obj];
-            // generate Key in first obj
-            if (key == null)
+            if (obj.Renderer is IKeysRenderer keysRenderer)
             {
-                key = obj.Renderer.CreateAndAddEmptyKey(block);
-                key.Time = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
+                // generate Key in first obj
+                if (key == null)
+                {
+                    key = keysRenderer.CreateAndAddEmptyKey(block);
+                    key.Time = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
+                }
+                // generate keyframe data for obj
+                keysRenderer.SetKeyFrameData(obj, block, key, idx, RenderData, GetPPEffectData(obj));
             }
-            // generate keyframe data for obj
-            obj.Renderer.SetKeyFrameData(obj, block, key, idx, RenderData, GetPPEffectData(obj));
+            else if (obj.Renderer is ITwoKeyRenderer twoKeyRenderer)
+            {
+                twoKeyRenderer.SetDataToEnd(obj, block, RenderData);
+                (block as CGameCtnMediaBlock.IHasTwoKeys).End = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
+            }
         }
 
 
@@ -802,20 +859,16 @@ public class SceneTimeline
             .ToArray();
         return new PostProcessingEffectData(worldEffects, ndcEffects);
     }
-    bool TryGetKeyFrameCount(RenderObject obj, out int keyFrameCount)
-    {
-        if (objectsInScene.TryGetValue(obj, out var val))
-        {
-            return TryGetKeyFrameCount(val.block, out keyFrameCount);
-        }
-        keyFrameCount = -1;
-        return false;
-    }
+
     bool TryGetKeyFrameCount(CGameCtnMediaBlock block, out int keyFrameCount)
     {
         if (block is IHasKeys hasKeys)
         {
             keyFrameCount = hasKeys.Keys.Count();
+            return true;
+        }else if(block is IHasTwoKeys twoKeys)
+        {
+            keyFrameCount = twoKeys.Start.TotalMilliseconds == twoKeys.End.TotalMilliseconds ? 1 : 2;
             return true;
         }
         keyFrameCount = -1;
@@ -866,6 +919,54 @@ public class SceneTimeline
                 track.RepeatingSegmentEnd = lastBlock.Keys.LastOrDefault()?.Time ?? default;
                 if (track.RepeatingSegmentStart.Value.TotalMilliseconds < 0)
                     Logger.Warn($"Cycling will not work on track {track.Name} because it starts before time=0");
+            }
+        }
+    }
+
+    private void CompleteAndHideKeyframesForUnfinishedBlocks()
+    {
+        // Create keyframes for objects which only have 1
+        foreach (var block in blockToRenderObjects.Keys)
+        {
+            if (TryGetKeyFrameCount(block, out var keyCount))
+            {
+                if (keyCount == 0)
+                {
+                    GenerateKeyFrame(block, 0);
+                    if (hiddenInEditorTimeline.Contains(block))
+                        GenerateKeyFrame(block, 0);
+                    else
+                        GenerateKeyFrame(block, (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
+                }
+                else if (keyCount == 1)
+                {
+                    if (block is IHasKeys hasKeys)
+                    {
+                        ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
+                        if (hiddenInEditorTimeline.Contains(block))
+                            GenerateKeyFrame(block, lastKeyframeTime);
+                        else
+                            GenerateKeyFrame(block, lastKeyframeTime + (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
+                    }
+                    else if (block is IHasTwoKeys twoKeys)
+                    {
+                        ulong lastKeyframeTime = (ulong)twoKeys.Start.TotalMilliseconds;
+                        if (hiddenInEditorTimeline.Contains(block))
+                            GenerateKeyFrame(block, lastKeyframeTime);
+                        else
+                            GenerateKeyFrame(block, lastKeyframeTime + (ulong)animationSettings.FallbackAnimationTimeSeconds * 1000);
+                    }
+                   
+                }
+                // This will not make it invisible in editor timeline!
+                //else if(keyCount > 1)
+                //{
+                //    if (hiddenInEditorTimeline.Contains(block))
+                //    {
+                //        ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
+                //        GenerateKeyFrame(block, lastKeyframeTime);
+                //    }
+                //}
             }
         }
     }
@@ -921,7 +1022,29 @@ public interface ISceneScript
 
         var clip = new Clip() { SavePath = clipOutPath };
         clip.Create(MediaTrackerUtils.DeepCopyClip(blockTemplates.Clip));
- 
+
+        CreateClip<T>(clip, sceneAnimSettings);
+
+        return clip;
+
+    }
+    static void CreateClip<T>(Clip clip) where T : ISceneScript, new()
+        => CreateClip<T>(clip, SceneAnimationSettings.Default);
+    static void CreateClip<T>(Clip clip, SceneAnimationSettings sceneAnimSettings) where T : ISceneScript, new()
+    {
+        var sceneBuilder = new T();
+        CreateClip(sceneBuilder, clip, sceneAnimSettings);
+    }
+
+    static void CreateClip<T>(T sceneScript, Clip clip) where T : ISceneScript
+         => CreateClip<T>(sceneScript, clip, SceneAnimationSettings.Default);
+    static void CreateClip<T>(T sceneScript, Clip clip, SceneAnimationSettings sceneAnimSettings) where T : ISceneScript
+        => CreateClip<T>(sceneScript, clip.MediaClip, sceneAnimSettings);
+    static void CreateClip<T>(T sceneScript, CGameCtnMediaClip clip) where T : ISceneScript
+        => CreateClip<T>(sceneScript, clip, SceneAnimationSettings.Default);
+    static void CreateClip<T>(T sceneScript, CGameCtnMediaClip clip, SceneAnimationSettings sceneAnimSettings) where T : ISceneScript
+    {
+        var blockTemplates = MediaTrackerUtils.CreateBlockTemplates();
         var scene = new SceneTimeline()
         {
             RenderData = new RenderData
@@ -933,11 +1056,8 @@ public interface ISceneScript
             },
             BlockTemplates = blockTemplates,
         };
-        var sceneBuilder = new T();
-        scene.Animate(clip.MediaClip, sceneAnimSettings, sceneBuilder);
-
-        return clip;
-
+        var sceneBuilder = sceneScript;
+        scene.Animate(clip, sceneAnimSettings, sceneBuilder);
     }
 }
 public abstract class SceneBuilder : ISceneScript
@@ -949,4 +1069,18 @@ public abstract class SceneBuilder : ISceneScript
         Build();
     }
     protected abstract void Build();
+}
+public class GenericSceneBuilder : SceneBuilder
+{
+    private readonly Action<SceneTimeline> buildAction;
+
+    public GenericSceneBuilder(Action<SceneTimeline> buildAction)
+    {
+        this.buildAction = buildAction;
+    }
+
+    protected override void Build()
+    {
+        buildAction(scene);
+    }
 }

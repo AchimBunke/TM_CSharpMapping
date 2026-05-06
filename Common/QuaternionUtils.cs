@@ -47,6 +47,8 @@ public static class QuaternionUtils
         {
             return Quaternion.CreateFromYawPitchRoll(yawPitchRoll.X, yawPitchRoll.Y, yawPitchRoll.Z);
         }
+        public static Quaternion CreateFromYawPitchRollDegrees(float yaw, float pitch, float roll)
+            => Quaternion.CreateFromYawPitchRoll(MathUtils.Deg2Rad * yaw, MathUtils.Deg2Rad * pitch, MathUtils.Deg2Rad * roll);
 
         public static Quaternion CreateFromAxisAngleDegrees(Vector3 axis, float angleDegrees)
             => Quaternion.CreateFromAxisAngle(axis, MathUtils.Deg2Rad * angleDegrees);
@@ -59,5 +61,44 @@ public static class QuaternionUtils
 
         public static Quaternion CreateFromZRotationDegrees(float angleDegrees)
            => CreateFromAxisAngleDegrees(Vector3.UnitZ, angleDegrees);
+
+        public Vector3 ToYawPitchRoll()
+        {
+            Vector3 result;
+            Quaternion q = quaternion;
+
+            // Pitch (X-axis rotation)
+            float sinp = 2f * (q.W * q.X - q.Y * q.Z);
+            if (MathF.Abs(sinp) >= 1f)
+                result.Y = MathF.CopySign(MathF.PI / 2f, sinp); // clamp
+            else
+                result.Y = MathF.Asin(sinp);
+
+            // Yaw (Y-axis rotation)
+            float siny_cosp = 2f * (q.W * q.Y + q.Z * q.X);
+            float cosy_cosp = 1f - 2f * (q.X * q.X + q.Y * q.Y);
+            result.X = MathF.Atan2(siny_cosp, cosy_cosp);
+
+            // Roll (Z-axis rotation)
+            float sinr_cosp = 2f * (q.W * q.Z + q.X * q.Y);
+            float cosr_cosp = 1f - 2f * (q.Z * q.Z + q.X * q.X);
+            result.Z = MathF.Atan2(sinr_cosp, cosr_cosp);
+
+            return new Vector3(result.X, result.Y, result.Z); // (yaw, pitch, roll)
+        }
+        public Vector3 ToPitchYawRoll()
+        {
+            var ypr = quaternion.ToYawPitchRoll();
+            return new Vector3(ypr.Y, ypr.X, ypr.Z); // (pitch, yaw, roll)
+        }
+
+        public static Quaternion CreateLookAt(Vector3 forward)
+            => CreateLookAt(forward, Vector3.UnitY);
+        public static Quaternion CreateLookAt(Vector3 forward, Vector3 up)
+        {
+            return Quaternion.CreateFromRotationMatrix(
+                Matrix4x4.CreateLookAt(Vector3.Zero, forward, Vector3.UnitY)
+            );
+        }
     }
 }

@@ -283,13 +283,13 @@ public abstract class MediaObject : ICloneable<MediaObject>
     }
 
 
-    //public virtual M Animate<M, T>(bool continuosKeyFrames = false)
+    //public virtual M Animate<M, T>(bool continuousKeyFrames = false)
     //    where T : MediaObject
     //    where M : MediaObjectAnimator<T>
-    //    => new MediaObjectAnimator<T>((T)this) { ContinuosKeyFrames = continuosKeyFrames } as M;
+    //    => new MediaObjectAnimator<T>((T)this) { continuousKeyFrames = continuousKeyFrames } as M;
 
-    public virtual MediaObjectAnimator<MediaObject> Animate(bool continuosKeyFrames = false, ulong keyframeGenerationRateMillis = 0)
-         => new MediaObjectAnimator<MediaObject>(this) { ContinuosKeyFrames = continuosKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis };
+    public virtual MediaObjectAnimator<MediaObject> Animate(bool continuousKeyFrames = false, ulong keyframeGenerationRateMillis = 0)
+         => new MediaObjectAnimator<MediaObject>(this) { continuousKeyFrames = continuousKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis };
 
     public abstract MediaObject Clone();
 
@@ -317,6 +317,11 @@ public abstract class MediaObject : ICloneable<MediaObject>
     {
         components.Add(component);
     }
+    public void AddComponent<T>() where T : IMediaObjectComponent, new()
+    {
+        AddComponent(new T());
+    }
+
     public void AddComponents(params ReadOnlySpan<IMediaObjectComponent> components)
     {
         foreach(var cmp in components)

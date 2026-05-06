@@ -44,7 +44,7 @@ public class DotMatrixDisplay : TriangleObject
         IsFilled = value;
     }
     public DotMatrixDisplay(ReadOnlySpan<char> text, float size = DefaultSize, float spacing = DefaultSpacing, Color? color = null, bool filled = true,
-        Anchor anchor = Anchor.Left, IRenderer renderer = null!)
+        Anchor anchor = Anchor.Left, IKeysRenderer renderer = null!)
         : base(withOutline: false, withFill: true, filled: filled, uniqueVertices: true, renderer: renderer)
     {
         Anchor = anchor;
@@ -297,8 +297,8 @@ public class DotMatrixDisplay : TriangleObject
         }
     }
 
-    public new DotMatrixDisplayAnimator<DotMatrixDisplay> Animate(bool continuosKeyFrames = false, ulong keyframeGenerationRateMillis = 0)
-     => new DotMatrixDisplayAnimator<DotMatrixDisplay>(this) { ContinuosKeyFrames = continuosKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis };
+    public new DotMatrixDisplayAnimator<DotMatrixDisplay> Animate(bool continuousKeyFrames = false, ulong keyframeGenerationRateMillis = 0)
+     => new DotMatrixDisplayAnimator<DotMatrixDisplay>(this) { continuousKeyFrames = continuousKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis };
 
 
 

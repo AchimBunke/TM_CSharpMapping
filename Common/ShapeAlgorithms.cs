@@ -934,6 +934,14 @@ public static class ShapeUtils
     public static void Extrude(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<Int3> triangles, Vector3 extrusion, out List<Vector3> outVertices, out List<Int3> outTriangles)
         => Extrude(vertices, triangles, Enumerable.Repeat(Color.Black.ToVector4(), vertices.Length).ToArray(), extrusion, out outVertices, out outTriangles, out _);
 
+    public static TriangleObject Extrude(TriangleObject o, Vector3 extrusion)
+    {
+        Extrude(o.Vertices.Take(o.FillVertexCount).ToArray(), o.Triangles.Take(o.FillTrianglesCount).ToArray(), o.Colors.Take(o.FillVertexCount).ToArray(), extrusion, out var vertices, out var triangles, out var colors);
+        return new TriangleObject(
+            points: vertices.ToArray(),
+             triangles: triangles.ToArray(),
+             colors: colors.Select(c => c.ToColor()).ToArray());
+    }
     static float SignedAreaXY(ReadOnlySpan<Vector3> v)
     {
         float area = 0;

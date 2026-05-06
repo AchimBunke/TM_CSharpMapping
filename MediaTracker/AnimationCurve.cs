@@ -166,6 +166,40 @@ public record class AnimationCurveFloat : IAnimationCurve<float>
                 WeightedMode.None)
         ]);
     }
+    public static AnimationCurveFloat FromLinear(params ReadOnlySpan<(float value, float time)> data)
+    {
+        if (data.Length == 0)
+            return new AnimationCurveFloat();
+
+        if (data.Length == 1)
+            return new AnimationCurveFloat([new AnimationCurveKeyFrame(data[0].time, data[0].value)]);
+
+        var keyFrames = new AnimationCurveKeyFrame[data.Length];
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            var (v, t) = data[i];
+            float inTangent = 0f;
+            float outTangent = 0f;
+
+            if (i > 0)
+            {
+                var prev = data[i - 1];
+                inTangent = (v - prev.value) / (t - prev.time);
+            }
+
+            if (i < data.Length - 1)
+            {
+                var next = data[i + 1];
+                outTangent = (next.value - v) / (next.time - t);
+            }
+
+            keyFrames[i] = new AnimationCurveKeyFrame(t, v, inTangent, 1, outTangent, 1, WeightedMode.None);
+        }
+
+        return new(keyFrames);
+    }
+
     public static AnimationCurveFloat FromData(params ReadOnlySpan<(float value, float time)> data)
     {
         var keyFrames = new AnimationCurveKeyFrame[data.Length];
@@ -319,6 +353,29 @@ public record class AnimationCurveVector3 : IAnimationCurve<Vector3>, IPointPath
     {
         var samples = SplineUtils.SampleCatmullRom(controlPoints, step);
         return FromValues(0f, step, samples);
+    }
+    public static AnimationCurveVector3 FromLinear(params ReadOnlySpan<(Vector3 value, float time)> data)
+    {
+        if (data.Length == 0)
+            return new AnimationCurveVector3(new AnimationCurveFloat(), new AnimationCurveFloat(), new AnimationCurveFloat());
+
+        var xData = new (float value, float time)[data.Length];
+        var yData = new (float value, float time)[data.Length];
+        var zData = new (float value, float time)[data.Length];
+
+        for (int i = 0; i < data.Length; i++)
+        {
+            var (v, t) = data[i];
+            xData[i] = (v.X, t);
+            yData[i] = (v.Y, t);
+            zData[i] = (v.Z, t);
+        }
+
+        return new(
+            AnimationCurveFloat.FromLinear(xData),
+            AnimationCurveFloat.FromLinear(yData),
+            AnimationCurveFloat.FromLinear(zData)
+        );
     }
 
 

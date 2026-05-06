@@ -6,6 +6,14 @@ using System.Numerics;
 
 namespace TM_GenericMapping.Common;
 
+public enum BlockShareMode : byte
+{
+    Standalone,
+    ToParent,
+    FromChildren,
+    Hierarchy,
+}
+
 /// <summary>
 /// Something thats rendered by a IRenderer.
 /// </summary>
@@ -13,7 +21,9 @@ public abstract class RenderObject : MediaObject
 {
 
     public int Order { get; set; } = 0;
-    public bool CanShareBlock { get; set; } = false;
+
+    public int? BlockShareId { get; set; }
+    public BlockShareMode BlockShareMode { get; set; } = BlockShareMode.Hierarchy;
 
     private List<PostProcessingEffect> _localWorldSpacePostProcessingEffects = new();
     public IReadOnlyList<PostProcessingEffect> LocalWorldSpacePostProcessingEffects => _localWorldSpacePostProcessingEffects;
@@ -28,7 +38,8 @@ public abstract class RenderObject : MediaObject
     {
         Order = other.Order;
         Renderer = other.Renderer;
-        CanShareBlock = other.CanShareBlock;
+        BlockShareMode = other.BlockShareMode;
+        BlockShareId = other.BlockShareId;
         _localWorldSpacePostProcessingEffects = other._localWorldSpacePostProcessingEffects.ToList();
         _localNDCPostProcessingEffects = other._localNDCPostProcessingEffects.ToList();
     }
@@ -43,5 +54,14 @@ public abstract class RenderObject : MediaObject
     {
         _localWorldSpacePostProcessingEffects.Add(effect);
     }
+    public void SetBlockSharingInHierarchy(BlockShareMode blockShareMode)
+    {
+        BlockShareMode = blockShareMode;
+        foreach (var child in SubObjects.OfType<RenderObject>())
+        {
+            child.SetBlockSharingInHierarchy(blockShareMode);
+        }
+    }
 }
+
 

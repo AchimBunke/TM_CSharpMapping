@@ -9,17 +9,17 @@ public interface IAnimationParameter
     public Easing Easing { get; }
     public ulong TimeMillis { get; }
     public float Time => TimeMillis / 1000f;
-    public bool ContinuosKeyFrames { get; }
+    public bool continuousKeyFrames { get; }
 }
 public record AnimationParameter(
     Easing Easing = Easing.Linear,
     ulong TimeMillis = 1000,
-    bool ContinuosKeyFrames = false) : IAnimationParameter
+    bool continuousKeyFrames = false) : IAnimationParameter
 {
     public AnimationParameter(
         Easing easing = Easing.Linear,
         float time = 1f,
-        bool continuosKeyFrames = false) : this(easing, (ulong)(time * 1000), continuosKeyFrames)
+        bool continuousKeyFrames = false) : this(easing, (ulong)(time * 1000), continuousKeyFrames)
     {
 
     }

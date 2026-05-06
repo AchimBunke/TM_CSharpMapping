@@ -16,7 +16,7 @@ namespace TM_GenericMapping.Common;
 public class TriangleText : TriangleObject
 {
 
-    public TriangleText(string character, Font font, IRenderer renderer = null!) 
+    public TriangleText(string character, Font font, IKeysRenderer renderer = null!) 
         : base(withOutline: false,
             withFill: true,
             filled: true,

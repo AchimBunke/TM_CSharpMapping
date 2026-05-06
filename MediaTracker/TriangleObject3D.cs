@@ -22,7 +22,7 @@ public class TriangleObject3D : TriangleObject
     /// <param name="renderer"></param>
     public TriangleObject3D(
         bool uniqueVertices = false,
-        IRenderer renderer = null!) 
+        IKeysRenderer renderer = null!) 
         : base(withOutline: false, withFill: true, filled: true, uniqueVertices: uniqueVertices, renderer: renderer)
     {
         Name = "TriangleObject3D";
@@ -32,7 +32,7 @@ public class TriangleObject3D : TriangleObject
         Color? fillColor = null,
         bool filled = true,
         bool uniqueVertices = false,
-        IRenderer renderer = null!)
+        IKeysRenderer renderer = null!)
         : base(points: points,
             fillColor: fillColor,
             filled: filled,
@@ -47,7 +47,7 @@ public class TriangleObject3D : TriangleObject
        ReadOnlySpan<Int3> triangles,
        ReadOnlySpan<Color> colors,
        bool uniqueVertices = false,
-       IRenderer renderer = null!
+       IKeysRenderer renderer = null!
        ) : base(points, triangles, colors, uniqueVertices, renderer)
     {
         Name = "TriangleObject3D";
@@ -57,7 +57,7 @@ public class TriangleObject3D : TriangleObject
         ReadOnlySpan<Vector3> points,
         ReadOnlySpan<Color> colors,
         bool uniqueVertices = false,
-        IRenderer renderer = null!)
+        IKeysRenderer renderer = null!)
       : base(points: points,
           fillColors: colors,
           filled: true,
@@ -80,7 +80,7 @@ public class Cuboid : TriangleObject3D
         Vector3 size,
         Color? fillColor = null,
         bool uniqueVertices = false,
-        IRenderer renderer = null!)
+        IKeysRenderer renderer = null!)
         : base(points: 
             [
                 new Vector3(-size.X / 2f, -size.Y / 2f, -size.Z / 2f),
@@ -106,7 +106,7 @@ public class Cube : Cuboid
         Color? fillColor = null,
         float size = 1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!)
+        IKeysRenderer renderer = null!)
         : base(size: new Vector3(size), fillColor: fillColor, uniqueVertices, renderer: renderer)
     {
         Name = "Cube";
@@ -119,7 +119,7 @@ public class Plane : TriangleObject3D
         float size,
         Color? color = null,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(points:
+        IKeysRenderer renderer = null!) : base(points:
             [
             new Vector3(-size / 2f, 0, size / 2f),
             new Vector3(size / 2f, 0, size / 2f),
@@ -140,7 +140,7 @@ public class Plane : TriangleObject3D
         Vector3 tr,
         Color? color = null,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(points:
+        IKeysRenderer renderer = null!) : base(points:
             [
             br, bl ,tl, tr
             ],
@@ -170,7 +170,7 @@ public class Sphere : TriangleObject3D
         Int2? resolution = null,
         Color? fillColor = null,
         bool uniqueVertices = false,
-        IRenderer renderer = null!)
+        IKeysRenderer renderer = null!)
         : base(uniqueVertices: uniqueVertices, renderer: renderer)
     {
         Resolution = resolution ?? (20, 20);
@@ -232,7 +232,7 @@ public class SweepShape : TriangleObject3D
         Vector3? forcedEndTangent = null,
         Color? color = null,
         bool uniqueVertices = false,
-        IRenderer renderer = null!)
+        IKeysRenderer renderer = null!)
         : base(uniqueVertices, renderer)
     {
         NumSections = sections;

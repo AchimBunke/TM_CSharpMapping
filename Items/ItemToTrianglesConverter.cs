@@ -106,7 +106,7 @@ namespace TM_GenericMapping.Items
                 }
                 foreach (var item in ShapeUtils.GetFlattenedHierarchyObjects(triangleObj).OfType<TriangleObject>())
                 {
-                    item.CanShareBlock = true;
+                    item.BlockShareMode = BlockShareMode.Hierarchy;
                 }
 
                 return true;
@@ -218,7 +218,7 @@ namespace TM_GenericMapping.Items
                    uniqueVertices: false)
                 {
                     Name = $"-{layer.LayerName}",
-                    CanShareBlock = settings.Grouping.HasFlag(TriangleGrouping.Layers),
+                    BlockShareMode = settings.Grouping.HasFlag(TriangleGrouping.Layers) ? BlockShareMode.Hierarchy : BlockShareMode.Standalone,
                 };
                 obj.AddSubObjects(triangleObject);
             }
@@ -309,7 +309,7 @@ namespace TM_GenericMapping.Items
                    uniqueVertices: false)
                     {
                         Name = $"-{materialName}",
-                        CanShareBlock = false,
+                        BlockShareMode = BlockShareMode.Standalone,
                     };
                     obj.AddSubObjects(triangleObject);
                 }
@@ -349,7 +349,7 @@ namespace TM_GenericMapping.Items
                        uniqueVertices: false)
                     {
                         Name = $"-Visual[{i}]",
-                        CanShareBlock = settings.Grouping.HasFlag(TriangleGrouping.Layers),
+                        BlockShareMode = settings.Grouping.HasFlag(TriangleGrouping.Layers) ? BlockShareMode.Hierarchy : BlockShareMode.Standalone,
                     };
                     obj.AddSubObjects(triangleObject);
                 }
@@ -365,7 +365,7 @@ namespace TM_GenericMapping.Items
                      uniqueVertices: false)
                     {
                         Name = $"-{matData.Key}",
-                        CanShareBlock = false,
+                        BlockShareMode = BlockShareMode.Standalone,
                     };
                     obj.AddSubObjects(triangleObject);
                 }

@@ -1,23 +1,31 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Game;
 using System.Numerics;
+using TM_GenericMapping.MediaTracker;
+using TmEssentials;
 
 namespace TM_GenericMapping.Common;
-
 
 public interface IRenderer
 {
     public CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates);
+    public bool CanShareBlockWith(RenderObject obj, MediaObject other);
+}
+public interface ITwoKeyRenderer : IRenderer
+{
+    public void SetDataToStart(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData);
+    public void SetDataToEnd(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData);
+}
+public interface IKeysRenderer : IRenderer
+{
     public IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block);
 
     public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
 
-    public bool CanShareBlockWith(RenderObject obj, MediaObject other);
 
     public abstract int AddRenderDataToBlock(RenderObject obj, CGameCtnMediaBlock block);
-    public Vector3 DefaultPolygonNormal { get; }
 }
-public interface IRenderer<T> : IRenderer where T : RenderObject
+public interface IKeysRenderer<T> : IKeysRenderer where T : RenderObject
 {
     public void SetKeyFrameData(T obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
 
@@ -25,29 +33,47 @@ public interface IRenderer<T> : IRenderer where T : RenderObject
 
     public abstract int AddRenderDataToBlock(T obj, CGameCtnMediaBlock block);
 }
+public abstract class KeysRendererBase<T> : IKeysRenderer<T> where T : RenderObject
+{
+    public abstract CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates);
+    public abstract void SetKeyFrameData(T obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
+    public abstract IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block);
+    public abstract bool CanShareBlockWith(T obj, MediaObject other);
+    public abstract int AddRenderDataToBlock(T obj, CGameCtnMediaBlock block);
+    public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+        => SetKeyFrameData((T)obj, block, key, idx, renderData, postProcessingEffectData);
+    public IKey CreateAndAddEmptyKey(RenderObject obj, CGameCtnMediaBlock block)
+        => CreateAndAddEmptyKey(block);
+    public bool CanShareBlockWith(RenderObject obj, MediaObject other)
+        => CanShareBlockWith((T)obj, other);
+    public int AddRenderDataToBlock(RenderObject obj, CGameCtnMediaBlock block)
+        => AddRenderDataToBlock((T)obj, block);
+}
+public interface ITwoKeyRenderer<T> : ITwoKeyRenderer where T : MediaObject
+{
+    public void SetDataToStart(T obj, CGameCtnMediaBlock block, RenderData renderData);
+    public void SetDataToEnd(T obj, CGameCtnMediaBlock block, RenderData renderData);
+}
 
-public abstract class TriangleRenderer : IRenderer<TriangleObject>
+public abstract class TriangleRenderer : KeysRendererBase<TriangleObject>
 {
     public HashSet<PostProcessingEffect> PostProcessingEffectsWorld { get; init; } = [];
 
     public virtual Vector3 DefaultPolygonNormal => Vector3.UnitZ;
 
-    public bool CanShareBlockWith(TriangleObject obj, MediaObject other)
+    public override bool CanShareBlockWith(TriangleObject obj, MediaObject other)
     {
         return (other is RenderObject ro) && obj.Renderer.GetType() == ro.Renderer.GetType();
     }
 
-    public IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
+    public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
     {
         var key = new CGameCtnMediaBlockTriangles.Key(block as CGameCtnMediaBlockTriangles);
         (block as CGameCtnMediaBlockTriangles).Keys.Add(key);
         return key;
     }
 
-    public abstract CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates);
-
-
-    public virtual int AddRenderDataToBlock(TriangleObject obj, CGameCtnMediaBlock block)
+    public virtual int AddTriangleDataToBlock(TriangleObject obj, CGameCtnMediaBlock block)
     {
         var triangleBlock = block as CGameCtnMediaBlockTriangles;
         int idx = triangleBlock.Vertices.Length;
@@ -56,6 +82,8 @@ public abstract class TriangleRenderer : IRenderer<TriangleObject>
         triangleBlock.Triangles = triangleBlock.Triangles.Concat(obj.Triangles.Select(t => t + triangleOffset)).ToArray();
         return idx;
     }
+    public override int AddRenderDataToBlock(TriangleObject obj, CGameCtnMediaBlock block)
+        => AddTriangleDataToBlock(obj, block);
 
     protected Vector3 ApplyGlobalWorldSpacePostProcessingEffects(Vector3 worldV, PostProcessingEffectData postProcessingEffectData)
     {
@@ -85,20 +113,6 @@ public abstract class TriangleRenderer : IRenderer<TriangleObject>
         }
         return worldV;
     }
-
-
-    public IKey CreateAndAddEmptyKey(RenderObject obj, CGameCtnMediaBlock block)
-        => CreateAndAddEmptyKey((TriangleObject)obj, block);
-
-    public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
-        => SetKeyFrameData((TriangleObject)obj, block, key, idx, renderData, postProcessingEffectData);
-
-    public bool CanShareBlockWith(RenderObject obj, MediaObject other)
-        => CanShareBlockWith((TriangleObject)obj, other);
-
-    public int AddRenderDataToBlock(RenderObject obj, CGameCtnMediaBlock block)
-        => AddRenderDataToBlock((TriangleObject)obj, block);
-    public abstract void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
 }
 
 /// <summary>
@@ -106,7 +120,6 @@ public abstract class TriangleRenderer : IRenderer<TriangleObject>
 /// </summary>
 public class Triangle2DRenderer : TriangleRenderer
 {
-    public override Vector3 DefaultPolygonNormal => Vector3.UnitZ;
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = MediaTrackerUtils.DeepCopyBlockTriangles2D(templates.Triangles2D);
@@ -303,5 +316,126 @@ public class Triangle3DRenderer : TriangleRenderer
 
 public static class Rendering
 {
-    public static IRenderer DefaultTriangleRenderer = new Triangle3DRenderer();
+    public static IKeysRenderer DefaultTriangleRenderer = new Triangle3DRenderer();
+}
+
+
+
+public class PlayerCameraRenderer : ITwoKeyRenderer<PlayerCameraObject>
+{
+    public bool CanShareBlockWith(RenderObject obj, MediaObject other)
+        => false;
+
+    public CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
+    {
+        var block = templates.GetEmptyPlayerCameraBlock();
+        block.End = block.Start;
+        return block;
+    }
+
+    public void SetDataToEnd(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData)
+        => SetDataToStart((PlayerCameraObject)obj, block, renderData);
+
+    public void SetDataToEnd(PlayerCameraObject obj, CGameCtnMediaBlock block, RenderData renderData)
+    {
+        var cameraBlock = block as CGameCtnMediaBlockCameraGame;
+        cameraBlock.GameCam = obj.CameraType;
+    }
+
+
+    public void SetDataToStart(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData)
+        => SetDataToStart((PlayerCameraObject)obj, block, renderData);
+
+    public void SetDataToStart(PlayerCameraObject obj, CGameCtnMediaBlock block, RenderData renderData)
+    {
+        var cameraBlock = block as CGameCtnMediaBlockCameraGame;
+        cameraBlock.GameCam = obj.CameraType;
+    }
+}
+
+
+public class DepthOfFieldRenderer : KeysRendererBase<DepthOfFieldObject>
+{
+    public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
+    {
+        var block = templates.GetEmptyDepthOfFieldBlock();
+        block.Keys.Clear();
+        return block;
+    }
+    public override void SetKeyFrameData(DepthOfFieldObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    {
+        var dofKey = key as CGameCtnMediaBlockDOF.Key;
+        dofKey.ZFocus = obj.FocusDistance;
+        dofKey.LensSize = obj.LensSize;
+        dofKey.Target = obj.Target;
+        dofKey.TargetPosition = obj.TargetPosition;
+
+    }
+    public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
+    {
+        var key = new CGameCtnMediaBlockDOF.Key();
+        (block as CGameCtnMediaBlockDOF).Keys.Add(key);
+        return key;
+    }
+
+    public override bool CanShareBlockWith(DepthOfFieldObject obj, MediaObject other)
+        => false;
+
+    public override int AddRenderDataToBlock(DepthOfFieldObject obj, CGameCtnMediaBlock block)
+    {
+        return 0;
+    }
+}
+public class CustomCameraRenderer : KeysRendererBase<CustomCameraObject>
+{
+    public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
+    {
+        var block = templates.GetEmptyCustomCameraBlock();
+        block.Keys.Clear();
+        return block;
+    }
+    public override void SetKeyFrameData(CustomCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    {
+        var camKey = key as CGameCtnMediaBlockCameraCustom.Key;
+        camKey.Position = obj.Position;
+        camKey.PitchYawRoll = obj.Rotation.ToPitchYawRoll();
+        camKey.U01 = 1065353216; // not sure what this does but its default
+        camKey.Anchor = obj.Anchor;
+        camKey.AnchorVis = obj.AnchorVisibility;
+        camKey.AnchorRot = obj.AnchorRotation;
+        camKey.Fov = obj.FOV;
+        camKey.Interpolation = obj.Interpolation;
+        camKey.NearZ = obj.NearClipPlane;
+        camKey.Target = obj.Target;
+        camKey.TargetPosition = obj.TargetPosition;
+        camKey.LeftTangent = new CGameCtnMediaBlockCameraCustom.InterpVal()
+        {
+            PitchYawRoll = Vector3.Zero,
+            Position = new Vector3(1, 0, 0),
+            TargetPosition = new Vector3(0, 0, 0),
+            Fov = obj.FOV,
+            NearZ = obj.NearClipPlane,
+        };
+        camKey.RightTangent = new CGameCtnMediaBlockCameraCustom.InterpVal()
+        {
+            PitchYawRoll = Vector3.Zero,
+            Position = new Vector3(1, 0, 0),
+            TargetPosition = new Vector3(0, 0, 0),
+            Fov = obj.FOV,
+            NearZ = obj.NearClipPlane,
+        };
+    }
+    public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
+    {
+        var key = new CGameCtnMediaBlockCameraCustom.Key();
+        (block as CGameCtnMediaBlockCameraCustom).Keys.Add(key);
+        return key;
+    }
+    public override bool CanShareBlockWith(CustomCameraObject obj, MediaObject other)
+        => false;
+
+    public override int AddRenderDataToBlock(CustomCameraObject obj, CGameCtnMediaBlock block)
+    {
+        return 0;
+    }
 }

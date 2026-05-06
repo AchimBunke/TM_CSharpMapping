@@ -5,6 +5,7 @@ using GBX.NET.Engines.MwFoundations;
 using System.Reflection;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
+using static GBX.NET.Engines.Game.CGameCtnMediaClipGroup;
 
 namespace TM_GenericMapping.Common;
 
@@ -74,6 +75,10 @@ public static class MediaTrackerUtils
                 cpy.Blocks.Add(DeepCopyBlockTriangles3D(mt3));
             else if (block is CGameCtnMediaBlockTriangles2D mt2)
                 cpy.Blocks.Add(DeepCopyBlockTriangles2D(mt2));
+            else if (block is CGameCtnMediaBlockCameraGame mcg)
+                cpy.Blocks.Add(DeepCopyBlockPlayerCamera(mcg));
+            else if (block is CGameCtnMediaBlockDOF dof)
+                cpy.Blocks.Add(DeepCopyBlockDepthOfField(dof));
             else
             {
                 throw new NotImplementedException();
@@ -137,13 +142,55 @@ public static class MediaTrackerUtils
         var cpy = new CGameCtnMediaBlockTriangles3D()
         {
             Keys = original.Keys.Select(k => DeepCopyTriangle3DKey(k, original)).ToList(),
-            Triangles = original.Triangles.ToArray(),
             Vertices = original.Vertices.ToArray(),
+            Triangles = original.Triangles.ToArray(),
+           
         };
         foreach (var chunk in original.Chunks)
         {
             cpy.Chunks.Add(chunk);
         }
+        return cpy;
+    }
+
+    public static CGameCtnMediaBlockCameraGame DeepCopyBlockPlayerCamera(CGameCtnMediaBlockCameraGame original)
+    {
+        var cpy = new CGameCtnMediaBlockCameraGame()
+        {
+            Start = original.Start,
+            End = original.End,
+            CamFarClipPlane = original.CamFarClipPlane,
+            CamFov = original.CamFov,
+            CamNearClipPlane = original.CamNearClipPlane,
+            CamPitchYawRoll = original.CamPitchYawRoll,
+            CamPosition = original.CamPosition,
+            ClipEntId = original.ClipEntId,
+            GameCam = original.GameCam,
+            GameCamId = original.GameCamId,
+            GameCamOld = original.GameCamOld,
+        };
+        DeepCopyChunks(original, cpy);
+        return cpy;
+    }
+    public static CGameCtnMediaBlockDOF DeepCopyBlockDepthOfField(CGameCtnMediaBlockDOF original)
+    {
+        var cpy = new CGameCtnMediaBlockDOF()
+        {
+            Keys = original.Keys.Select(k => DeepCopyDOFKey(k)).ToList(),
+        };
+
+        DeepCopyChunks(original, cpy);
+        return cpy;
+    }
+
+    public static CGameCtnMediaBlockCameraCustom DeepCopyBlockCustomCamera(CGameCtnMediaBlockCameraCustom original)
+    {
+        var cpy = new CGameCtnMediaBlockCameraCustom()
+        {
+            Keys = original.Keys.Select(k => DeepCopyCustomCameraKey(k)).ToList(),
+        };
+
+        DeepCopyChunks(original, cpy);
         return cpy;
     }
 
@@ -154,6 +201,71 @@ public static class MediaTrackerUtils
         {
             Time = original.Time,
             Positions = original.Positions.ToArray(),
+        };
+        return cpy;
+    }
+    public static CGameCtnMediaBlockFxBlurDepth.Key DeepCopyFxBlurDepthKey(CGameCtnMediaBlockFxBlurDepth.Key original)
+    {
+        var cpy = new CGameCtnMediaBlockFxBlurDepth.Key()
+        {
+            Time = original.Time,
+            LensSize = original.LensSize,
+            FocusZ = original.FocusZ,
+            ForceFocus = original.ForceFocus,
+        };
+        return cpy;
+    }
+    public static CGameCtnMediaBlockDOF.Key DeepCopyDOFKey(CGameCtnMediaBlockDOF.Key original)
+    {
+        var cpy = new CGameCtnMediaBlockDOF.Key()
+        {
+            Time = original.Time,
+            LensSize = original.LensSize,
+            Target = original.Target,
+            TargetPosition = original.TargetPosition,
+            ZFocus = original.ZFocus,
+        };
+        return cpy;
+    }
+    public static CGameCtnMediaBlockCameraCustom.Key DeepCopyCustomCameraKey(CGameCtnMediaBlockCameraCustom.Key original)
+    {
+        var cpy = new CGameCtnMediaBlockCameraCustom.Key()
+        {
+            Time = original.Time,
+            Anchor = original.Anchor,
+            AnchorRot = original.AnchorRot,
+            AnchorVis = original.AnchorVis,
+            Fov = original.Fov,
+            Interpolation = original.Interpolation,
+            NearZ = original.NearZ,
+            PitchYawRoll = original.PitchYawRoll,
+            Position = original.Position,
+            Target = original.Target,
+            TargetPosition = original.TargetPosition,
+            U01 = original.U01,
+            U02 = original.U02,
+            U03 = original.U03,
+            U04 = original.U04,
+            U05 = original.U05,
+            U06 = original.U06,
+            U07 = original.U07,
+            U08 = original.U08,
+            U09 = original.U09,
+            LeftTangent = DeepCopyInterpVal(original.LeftTangent),
+            RightTangent = DeepCopyInterpVal(original.RightTangent),
+        };
+        return cpy;
+    }
+    public static CGameCtnMediaBlockCameraCustom.InterpVal DeepCopyInterpVal(CGameCtnMediaBlockCameraCustom.InterpVal original)
+    {
+        var cpy = new CGameCtnMediaBlockCameraCustom.InterpVal()
+        {
+            Fov = original.Fov,
+            NearZ = original.NearZ,
+            PitchYawRoll = original.PitchYawRoll,
+            Position = original.Position,
+            TargetPosition = original.TargetPosition,
+            U01 = original.U01,
         };
         return cpy;
     }
@@ -213,6 +325,9 @@ public static class MediaTrackerUtils
     public static string TrackTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\Triangle2DTemplate.Clip.Gbx");
     public static string ImageTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\ImageTemplate.Clip.Gbx");
     public static string TextTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\TextTemplate.Clip.Gbx");
+    public static string PlayerCameraTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\PlayerCameraTemplate.Clip.Gbx");
+    public static string DepthOfFieldTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\DepthOfFieldTemplate.Clip.Gbx");
+    public static string CustomCameraTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\CustomCameraTemplate.Clip.Gbx");
 
     public static bool UseCustomTemplates = false;
 
@@ -240,7 +355,16 @@ public static class MediaTrackerUtils
                 Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("TextTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText,
             UseCustomTemplates ?
                 Gbx.Parse<CGameCtnMediaClip>(ImageTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("ImageTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("ImageTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(PlayerCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraGame :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("PlayerCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraGame,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(DepthOfFieldTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("DepthOfFieldTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(CustomCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("CustomCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom    
 
             );
     }
@@ -263,6 +387,17 @@ public static class MediaTrackerUtils
         }
     }
 
-
+    public static Trigger CreateEmptyTrigger()
+    {
+        var trigger = new Trigger()
+        {
+            U01 = -1,
+            U02 = -1,
+            U03 = -1,
+            U04 = 0,
+            Coords = []
+        };
+        return trigger;
+    }
 
 }

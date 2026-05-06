@@ -1,5 +1,6 @@
 ﻿using System.Drawing;
 using System.Numerics;
+using System.Reflection.Metadata;
 
 namespace TM_GenericMapping.Common.IO
 {
@@ -15,7 +16,7 @@ namespace TM_GenericMapping.Common.IO
     public class TriangleObjectData : IBinarySerializable
     {
         private const uint MagicNumber = 0x4D455348; // "MESH"
-        private const byte Version = 3;
+        private const byte Version = 4;
 
         public Vector3[] Vertices;
         public Color[] Colors;
@@ -32,7 +33,9 @@ namespace TM_GenericMapping.Common.IO
         public bool CanFill;
         public bool IsFilled;
         public bool HasUniqueVertices;
-        public bool CanShareBlock;
+        public BlockShareMode BlockShareMode;
+        public int? BlockShareId;
+        public bool HasBlockShareId;
 
         public TriangleObjectData[] SubObjects;
         public ISerializableComponent[] SerializableComponents;
@@ -52,7 +55,7 @@ namespace TM_GenericMapping.Common.IO
             w.Write(CanFill);
             w.Write(IsFilled);
             w.Write(HasUniqueVertices);
-            w.Write(CanShareBlock);
+            w.Write((byte)BlockShareMode);
 
             w.Write(LocalPosition.X);
             w.Write(LocalPosition.Y);
@@ -102,7 +105,15 @@ namespace TM_GenericMapping.Common.IO
             {
                 foreach (var cmp in SerializableComponents)
                 {
-                    string typeName = cmp.GetType().AssemblyQualifiedName!;
+                    string typeName;
+                    if (Version < 4)
+                    {
+                        typeName = cmp.GetType().AssemblyQualifiedName!;
+                    }
+                    else
+                    {
+                        typeName = ComponentRegistry.GetId(cmp.GetType());
+                    }
                     w.Write(typeName);
                     using var ms = new MemoryStream();
                     using var bw = new BinaryWriter(ms);
@@ -113,6 +124,12 @@ namespace TM_GenericMapping.Common.IO
                     w.Write(data);
                 }
             }
+
+            if (Version < 4)
+                return;
+
+            w.Write(HasBlockShareId);
+            w.Write(BlockShareId ?? 0);
         }
         public void Read(BinaryReader r)
         {
@@ -138,7 +155,15 @@ namespace TM_GenericMapping.Common.IO
             CanFill = r.ReadBoolean();
             IsFilled = r.ReadBoolean();
             HasUniqueVertices = r.ReadBoolean();
-            CanShareBlock = r.ReadBoolean();
+
+            if(version < 4)
+            {
+                bool canShareBlock = r.ReadBoolean();
+                BlockShareMode = canShareBlock ? BlockShareMode.Hierarchy : BlockShareMode.Standalone;
+            } 
+            else
+                BlockShareMode = (BlockShareMode)r.ReadByte();
+
 
             LocalPosition = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
             LocalRotation = new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
@@ -203,12 +228,39 @@ namespace TM_GenericMapping.Common.IO
 
                 using var ms = new MemoryStream(data);
                 using var br = new BinaryReader(ms);
+                ISerializableComponent cmp = null!;
+                if (version < 4)
+                {
+                    if (type == null) // probably old version < v3
+                    {
+                        // strip assembly info → keep only full type name
+                        string fullName = typeName.Split(',')[0];
 
-                var cmp = (ISerializableComponent)Activator.CreateInstance(type)!;
+                        type = AppDomain.CurrentDomain
+                            .GetAssemblies()
+                            .Select(a => a.GetType(fullName, false))
+                            .FirstOrDefault(t => t != null)!;
+                    }
+                    if (type == null)
+                        throw new InvalidOperationException($"Type not found: {typeName}");
+                    cmp = (ISerializableComponent)Activator.CreateInstance(type)!;
+                  
+                }
+                else
+                {
+                    cmp = ComponentRegistry.Create(typeName);
+                }
+
+
                 cmp.Deserialize(br, version);
-
                 SerializableComponents[i] = cmp;
             }
+
+            if (version < 4)
+                return;
+
+            HasBlockShareId = r.ReadBoolean();
+            BlockShareId = r.ReadInt32();
         }
 
         public TriangleObjectData Copy()

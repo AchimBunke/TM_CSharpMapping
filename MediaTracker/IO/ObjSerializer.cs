@@ -342,9 +342,9 @@ public static class ObjSerializer
 
             if (positions.Count != totalReferenceVertices)
             {
-                Logger.Error(
-                    $"[LoadAnimationFromObj] Frame {frameIndex} ({Path.GetFileName(orderedFrameNames[frameIndex])}) " +
-                    $"has {positions.Count} vertices but reference has {totalReferenceVertices}. Skipping.");
+                //Logger.Error(
+                //    $"[LoadAnimationFromObj] Frame {frameIndex} ({Path.GetFileName(orderedFrameNames[frameIndex])}) " +
+                //    $"has {positions.Count} vertices but reference has {totalReferenceVertices}. Skipping.");
                 continue;
             }
             ApplyFramePositions(reference, positions, frameIndex, frames);

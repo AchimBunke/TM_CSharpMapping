@@ -1,4 +1,7 @@
-﻿namespace TM_GenericMapping.Common;
+﻿using System.Collections.ObjectModel;
+using System.Reflection;
+
+namespace TM_GenericMapping.Common;
 
 
 public interface IMediaObjectComponent { }
@@ -19,6 +22,8 @@ public interface ISerializableComponent : IMediaObjectComponent
     void Serialize(BinaryWriter w, int version);
     void Deserialize(BinaryReader r, int version);
 }
+
+[ComponentId("BuildInTypeList")]
 public class BuildInTypeListComponent : ISerializableComponent, ICloneableComponent
 {
     public List<object> Items { get; set; } = [];
@@ -89,5 +94,58 @@ public class BuildInTypeListComponent : ISerializableComponent, ICloneableCompon
 
             }
         }
+    }
+}
+
+
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class ComponentIdAttribute : Attribute
+{
+    public string Id { get; }
+
+    public ComponentIdAttribute(string id)
+    {
+        Id = id;
+    }
+}
+public static class ComponentRegistry
+{
+    private static readonly Dictionary<Type, string> typeToId = new();
+    private static readonly Dictionary<string, Func<ISerializableComponent>> map = new();
+
+    static ComponentRegistry()
+    {
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            foreach (var type in asm.GetTypes())
+            {
+                if (type.IsAbstract || !typeof(ISerializableComponent).IsAssignableFrom(type))
+                    continue;
+
+                var attr = type.GetCustomAttribute<ComponentIdAttribute>();
+                if (attr == null)
+                    continue;
+
+                if (map.ContainsKey(attr.Id))
+                    throw new Exception($"Duplicate ComponentId: {attr.Id}");
+
+                typeToId[type] = attr.Id;
+                map[attr.Id] = () => (ISerializableComponent)Activator.CreateInstance(type)!;
+            }
+        }
+    }
+    public static ISerializableComponent Create(string id)
+    {
+        if (!map.TryGetValue(id, out var ctor))
+            throw new Exception($"Unknown component id: {id}");
+
+        return ctor();
+    }
+    public static string GetId(Type type)
+    {
+        if (!typeToId.TryGetValue(type, out var id))
+            throw new Exception($"Unknown component type: {type.FullName}");
+
+        return id;
     }
 }

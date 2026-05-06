@@ -103,9 +103,8 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
     IEnumerable<IMorphable> IMorphable.SubObjects => SubObjects.OfType<IMorphable>();
     public IEnumerable<TriangleObject> SubTriangleObjects => SubObjects.OfType<TriangleObject>();
 
-    protected TriangleObject(IRenderer renderer) : base(renderer ?? Rendering.DefaultTriangleRenderer)
+    protected TriangleObject(IKeysRenderer renderer) : base(renderer ?? Rendering.DefaultTriangleRenderer)
     {
-        CanShareBlock = true;
         Name = "TriangleObject";
     }
 
@@ -144,7 +143,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : this(
+        IKeysRenderer renderer = null!) : this(
             points, 
             Enumerable.Repeat(fillColor ?? Color.Black, points.Length).ToArray(), 
             outlineColor,
@@ -166,7 +165,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
        float outlineWidth = 0.1f,
        bool uniqueVertices = false,
-       IRenderer renderer = null!) : this(withOutline, withFill, filled, outlineExtends, outlineWidth, uniqueVertices, renderer)
+       IKeysRenderer renderer = null!) : this(withOutline, withFill, filled, outlineExtends, outlineWidth, uniqueVertices, renderer)
     {
         ShapePoints = points.ToArray();
         CreateShape(points, fillColors.ToArray().Select(c=>c.ToVector4()).ToArray(), outlineColor ?? Color.Black);
@@ -190,7 +189,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : this(renderer)
+        IKeysRenderer renderer = null!) : this(renderer)
     {
         if (!withFill && !withOutline)
             throw new ArgumentException("One of Outline or Fill must be set to create shape");
@@ -207,14 +206,14 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         ReadOnlySpan<Int3> triangles,
         ReadOnlySpan<Color> colors,
         bool uniqueVertices = false,
-        IRenderer renderer = null!
+        IKeysRenderer renderer = null!
         ) : this(points, triangles, colors.ToArray().Select(c=>c.ToVector4()).ToArray(), uniqueVertices, renderer){}
     public TriangleObject(
         ReadOnlySpan<Vector3> points,
         ReadOnlySpan<Int3> triangles,
         ReadOnlySpan<Vector4> colors,
         bool uniqueVertices = false,
-        IRenderer renderer = null!
+        IKeysRenderer renderer = null!
         ) : this(
             withOutline: false,
             withFill: true,
@@ -235,7 +234,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         SetFilled(true);
     }
 
-    public TriangleObject(TriangleObjectData data, IRenderer renderer = null!) : this(renderer)
+    public TriangleObject(TriangleObjectData data, IKeysRenderer renderer = null!) : this(renderer)
     {
         Vertices = data.Vertices;
         Colors = data.Colors.Select(c => ColorUtils.ToVector4(c)).ToArray();
@@ -249,10 +248,12 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         CanFill = data.CanFill;
         IsFilled = data.IsFilled;
         HasUniqueVertices = data.HasUniqueVertices;
-        CanShareBlock = data.CanShareBlock;
+        BlockShareMode = data.BlockShareMode;
         LocalPosition = data.LocalPosition;
         LocalRotation = data.LocalRotation;
         LocalScale = data.LocalScale;
+        if(data.HasBlockShareId)
+            BlockShareId = data.BlockShareId;
         AddSubObjects(data.SubObjects.Select(s => new TriangleObject(s)).ToArray());
         AddComponents(data.SerializableComponents);
     }
@@ -272,12 +273,15 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
             CanFill = CanFill,
             IsFilled = IsFilled,
             HasUniqueVertices = HasUniqueVertices,
-            CanShareBlock = CanShareBlock,
+            BlockShareMode= BlockShareMode,
+            BlockShareId = BlockShareId,
+            HasBlockShareId = BlockShareId.HasValue,
             LocalPosition = LocalPosition,
             LocalRotation = LocalRotation,
             LocalScale = LocalScale,
             SubObjects = SubObjects.Where(s => s is TriangleObject).Select(s => (s as TriangleObject).AsTriangleObjectData()).ToArray(),
             SerializableComponents = Components.OfType<ISerializableComponent>().ToArray(),
+
         };
         return triangleObjectData;
     }
@@ -385,8 +389,8 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
         Colors = colors.ToArray();
     }
 
-    public new TriangleObjectAnimator<TriangleObject> Animate(bool continuosKeyFrames = false, ulong keyframeGenerationRateMillis = 0)
-        => new TriangleObjectAnimator<TriangleObject>(this) { ContinuosKeyFrames = continuosKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis};
+    public new TriangleObjectAnimator<TriangleObject> Animate(bool continuousKeyFrames = false, ulong keyframeGenerationRateMillis = 0)
+        => new TriangleObjectAnimator<TriangleObject>(this) { continuousKeyFrames = continuousKeyFrames, KeyframeGenerationRateMillis = keyframeGenerationRateMillis};
 
     public bool CanMorph()
         => !HasOutline && HasUniqueVertices;
@@ -452,7 +456,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
 }
 public class TriangleGroup : TriangleObject
 {
-    public TriangleGroup(IRenderer renderer = null!) : base(renderer)
+    public TriangleGroup(IKeysRenderer renderer = null!) : base(renderer)
     {
         Name = "TriangleGroup";
     }
@@ -511,7 +515,7 @@ public class Rectangle : TriangleObject
         bool filled = true,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             points: new Vector3[] { new Vector3(-width / 2f, -height / 2f, 0), new Vector3(width / 2f, -height / 2f, 0), new Vector3(width / 2f, height / 2f, 0), new Vector3(-width / 2f, height / 2f, 0) },
             fillColor: fillColor,
             outlineColor: outlineColor,
@@ -543,7 +547,7 @@ public class Square : Rectangle
         bool filled = true,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             width: size,
             height: size,
             fillColor: fillColor,
@@ -562,7 +566,7 @@ public class Square : Rectangle
 
 public class SquareDot : Square
 {
-    public SquareDot(Color? color = null, IRenderer renderer = null!) : base(
+    public SquareDot(Color? color = null, IKeysRenderer renderer = null!) : base(
         size: 0.1f, 
         fillColor: color,
         withOutline: false,
@@ -585,7 +589,7 @@ public class Triangle : TriangleObject
         float outlineWidth = 0.1f,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Inwards,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             points: cornerPoints,
             fillColor: fillColor,
             outlineColor: outlineColor,
@@ -609,7 +613,7 @@ public class Triangle : TriangleObject
         float outlineWidth = 0.1f,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Inwards,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : this(cornerPoints: [new Vector3(width / 2f, -height / 2f, 0), new Vector3(0, height / 2f, 0), new Vector3(-width / 2f, -height / 2f, 0)],
+        IKeysRenderer renderer = null!) : this(cornerPoints: [new Vector3(width / 2f, -height / 2f, 0), new Vector3(0, height / 2f, 0), new Vector3(-width / 2f, -height / 2f, 0)],
             fillColor: fillColor,
             outlineColor: outlineColor,
             withOutline: withOutline,
@@ -725,7 +729,7 @@ public class Line : TriangleObject
         bool closed = false,
         OutlineExtendsDirection extendsDirection = OutlineExtendsDirection.Bidirectional,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) 
+        IKeysRenderer renderer = null!) 
         : base(
             points: points,
             outlineColor: color,
@@ -777,7 +781,7 @@ public class Line2D : Line
         bool closed = false,
         OutlineExtendsDirection extendsDirection = OutlineExtendsDirection.Bidirectional, 
         bool uniqueVertices = false, 
-        IRenderer renderer = null) 
+        IKeysRenderer renderer = null) 
         : base(points, color, Vector3.UnitZ, width, closed, extendsDirection, uniqueVertices, renderer)
     {
     }
@@ -833,7 +837,7 @@ public abstract class ArcBase : TriangleObject
         float outlineWidth = 0.1f,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Bidirectional,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             withOutline: withOutline,
             withFill: withFill,
             filled: filled,
@@ -902,7 +906,7 @@ public class CircularArc : ArcBase
         float outlineWidth = 0.1f,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Bidirectional,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             angle: angle,
             numComponents: numComponents,
             filledToCenter: filledToCenter,
@@ -955,7 +959,7 @@ public class Circle : CircularArc
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Bidirectional,
         float outlineWidth = 0.1f,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             radius: radius,
             angle: MathF.PI * 2f,
             numComponents: numComponents,
@@ -1002,7 +1006,7 @@ public class EllipticalArc : ArcBase
         float outlineWidth = 0.1f,
         OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Bidirectional,
         bool uniqueVertices = false,
-        IRenderer renderer = null!) : base(
+        IKeysRenderer renderer = null!) : base(
             angle: angle,
             numComponents: numComponents,
             filledToCenter: filledToCenter,
@@ -1057,7 +1061,7 @@ public class Ellipse : EllipticalArc
        float outlineWidth = 0.1f,
        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Bidirectional,
        bool uniqueVertices = false, 
-       IRenderer renderer = null!) : base(
+       IKeysRenderer renderer = null!) : base(
            radiusX: radiusX,
            radiusY: radiusY,
            angle: MathF.PI * 2f,
