@@ -3,22 +3,47 @@
 namespace TM_GenericMapping.Messaging;
 
 
+public interface IToolResult
+{
+    public ToolOutcome Outcome { get; }
+    public string ToolId { get; }
+    public string? ErrorCode { get; }
+    public object? Data { get; }
+}
+public interface IToolResult<T> : IToolResult
+{
+    public T Value { get; }
+}
+public static class ToolResultExtensions
+{
+    extension(IToolResult toolResult)
+    {
+        public bool IsSuccess => toolResult.Outcome == ToolOutcome.Success;
+        public bool IsFailure => toolResult.Outcome == ToolOutcome.Failure;
+    }
+}
+
 public readonly record struct None
 {
     public static readonly None Value = default;
 }
-public readonly record struct ToolFailure
+public readonly record struct ToolFailure : IToolResult
 {
+    public ToolOutcome Outcome => ToolOutcome.Failure;
     public required string ToolId { get; init; }
     public required string ErrorCode { get; init; }
     public object? Data { get; init; }
 }
-public readonly record struct ToolSuccess
+public readonly record struct ToolSuccess : IToolResult
 {
     public required string ToolId { get; init; }
+    public ToolOutcome Outcome => ToolOutcome.Success;
+    public string ErrorCode => string.Empty;
+    public object? Data => null;
 }
 
-public readonly record struct ToolResult<T>
+
+public readonly record struct ToolResult<T> : IToolResult<T>
 {
     public required ToolOutcome Outcome { get; init; }
     public required string ToolId { get; init; }
@@ -26,9 +51,6 @@ public readonly record struct ToolResult<T>
     public T Value { get; init; }
     public string? ErrorCode { get; init; }
     public object? Data { get; init; }
-
-
-    public bool IsSuccess => Outcome == ToolOutcome.Success;
 
 
     //public static implicit operator T(ToolResult<T> result) => result.Value;
