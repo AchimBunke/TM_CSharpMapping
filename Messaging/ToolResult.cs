@@ -105,4 +105,11 @@ public static class ToolResult
             ErrorCode = errorCode,
             Data = data
         };
+    public static ToolFailure Fail(IToolResult toolResult)
+        => new ToolFailure
+        {
+            ToolId = toolResult.ToolId,
+            ErrorCode = toolResult.ErrorCode,
+            Data = toolResult.Data
+        };
 }

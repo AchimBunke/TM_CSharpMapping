@@ -441,18 +441,10 @@ public class MeshBuilder
     void FillItemDataFromMesh(CGameItemModel item, NormalizedMesh mesh)
     {
         item.Name = "New Item";
-        item.Icon = mesh.Icon;
-        item.IconWebP = mesh.IconWebP;
+        ChunkSafeItemOperations.SetIcon(item, mesh.Icon, mesh.IconWebP);
         item.Description = "No Description";
         item.Ident = ident;
         item.DefaultPlacement = BuildPlacementParam(mesh);
-
-        if(item.Icon == null && item.IconWebP == null)
-        {
-            item.RemoveChunk<CGameCtnCollector.HeaderChunk2E001004>();
-            item.Flags = (CGameCtnCollector.ECollectorFlags)8;
-
-        }
     }
 
 

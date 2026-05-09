@@ -12,5 +12,10 @@ public static class ErrorCodes
 
         public const string MeshExtractionFailed = "MovingItemCreator.MeshExtractionFailed";
     }
+    public static class EmbeddedItemExtractor
+    {
+        public const string MissingEmbeddedData = "EmbeddedItemExtractor.MissingEmbeddedZipData";
+        //public const string ItemParsingFailed = "EmbeddedItemExtractor.ItemParsingFailed";
+    }
 
 }

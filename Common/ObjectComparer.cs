@@ -12,6 +12,45 @@ public static class ObjectComparer
         None = 0,
         PrivateFields = 1,
     }
+    public static void PrintDifferences<T>(T obj1, T obj2, ObjectComparerFlags flags = ObjectComparerFlags.None)
+    {
+        var differences = GetDifferences(obj1, obj2, flags);
+        if (differences.Count == 0)
+        {
+            Console.WriteLine("Objects are equal.");
+        }
+        else
+        {
+            Console.WriteLine("Differences:");
+            foreach (var diff in differences)
+            {
+                Console.WriteLine(diff);
+            }
+        }
+    }
+    public static void LogDifferences<T>(T obj1, T obj2, string logFile, ObjectComparerFlags flags = ObjectComparerFlags.None)
+    {
+        var differences = GetDifferences(obj1, obj2, flags);
+
+        using var writer = new StreamWriter(logFile, append: false) { AutoFlush = true };
+        var originalOut = Console.Out; // save original
+        Console.SetOut(writer);
+
+        if (differences.Count == 0)
+        {
+            Console.WriteLine("Objects are equal.");
+        }
+        else
+        {
+            Console.WriteLine("Differences:");
+            foreach (var diff in differences)
+            {
+                Console.WriteLine(diff);
+            }
+        }
+
+        Console.SetOut(originalOut); // restore console
+    }
     public static List<string> GetDifferences<T>(T obj1, T obj2, ObjectComparerFlags flags = ObjectComparerFlags.None)
     {
         var differences = new List<string>();

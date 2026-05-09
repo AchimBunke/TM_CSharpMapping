@@ -13,6 +13,16 @@ namespace TM_GenericMapping.Items;
 public class MovingItemCreator
 {
 
+    [Flags]
+    public enum MergeOptions
+    {
+        None = 0,
+
+        UseTemplateAnimations = 1 << 0,
+        UseTemplateIcon = 1 << 1,
+        UseTemplatePlacement = 1 << 2,
+
+    }
 
     public struct MovingItemCreatorSettings
     {
@@ -22,12 +32,16 @@ public class MovingItemCreator
         public int? TranslationAnimationCount { get; init; } = null;
         public CGameItemModel? MovingItemAnimationTemplate { get; init; } = null;
         public IReadOnlyDictionary<string, string> MaterialLinkReplacements { get; init; } = new Dictionary<string, string>();
+        public MergeOptions MergeOptions { get; init; } = MergeOptions.None;
     }
 
     MovingItemCreatorSettings _settings;
     MeshBuilder _meshBuilder;
     MeshExtractor _meshExtractor;
-    public MovingItemCreator() : this(new(), new(),new MovingItemCreatorSettings())
+    public MovingItemCreator() : this(new MovingItemCreatorSettings())
+    {
+    }
+    public MovingItemCreator(MovingItemCreatorSettings settings) : this(new(), new(), settings)
     {
     }
     public MovingItemCreator(MeshExtractor meshExtractor, MeshBuilder meshBuilder, MovingItemCreatorSettings settings)
@@ -47,22 +61,41 @@ public class MovingItemCreator
         var movingItem = _meshBuilder.BuildMovingItem(extractResult.Value);
 
         ReplaceMaterialLinks(movingItem);
-        if (_settings.MovingItemAnimationTemplate != null)
+        if (_settings.MovingItemAnimationTemplate != null && _settings.MergeOptions.HasFlag(MergeOptions.UseTemplateAnimations))
             CopyAnimations(_settings.MovingItemAnimationTemplate, movingItem);
         ChangeAnimations(movingItem);
 
-        movingItem.Icon = sourceItem.Icon;
-        movingItem.IconWebP = sourceItem.IconWebP;
+        CopyItemData(movingItem, sourceItem, _settings.MovingItemAnimationTemplate);
+
+        return ToolResult.Success(movingItem, nameof(MovingItemCreator));
+
+    }
+    void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel template)
+    {
+
+        ChunkSafeItemOperations.SetIcon(movingItem, sourceItem.Icon, sourceItem.IconWebP);
         movingItem.DefaultPlacement = sourceItem.DefaultPlacement;
         movingItem.GroundPoint = sourceItem.GroundPoint;
         movingItem.Name = sourceItem.Name + " Moving";
         movingItem.OrbitalCenterHeightFromGround = sourceItem.OrbitalCenterHeightFromGround;
         movingItem.OrbitalPreviewAngle = sourceItem.OrbitalPreviewAngle;
         movingItem.OrbitalRadiusBase = sourceItem.OrbitalRadiusBase;
-        //movingItem.Node.PainterGroundMargin = item.Node.PainterGroundMargin;
 
-        return ToolResult.Success(movingItem, nameof(MovingItemCreator));
+        if (template == null)
+            return;
 
+        if (_settings.MergeOptions.HasFlag(MergeOptions.UseTemplateIcon))
+        {
+            ChunkSafeItemOperations.SetIcon(movingItem, template.Icon, template.IconWebP);
+        }
+        if(_settings.MergeOptions.HasFlag(MergeOptions.UseTemplatePlacement))
+        {
+            movingItem.DefaultPlacement = template.DefaultPlacement;
+            movingItem.GroundPoint = template.GroundPoint;
+            movingItem.OrbitalCenterHeightFromGround = template.OrbitalCenterHeightFromGround;
+            movingItem.OrbitalPreviewAngle = template.OrbitalPreviewAngle;
+            movingItem.OrbitalRadiusBase = template.OrbitalRadiusBase;
+        }
     }
     void ReplaceMaterialLinks(CGameItemModel item)
     {
@@ -77,8 +110,9 @@ public class MovingItemCreator
     }
     void CopyAnimations(CGameItemModel from, CGameItemModel to)
     {
-        ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(from, out var kinematicSource);
-        ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(to, out var kinematicTarget);
+        if(!ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(from, out var kinematicSource)||
+            !ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(to, out var kinematicTarget))
+            return;
         kinematicTarget.AngleMaxDeg = kinematicSource.AngleMaxDeg;
         kinematicTarget.AngleMinDeg = kinematicSource.AngleMinDeg;
         kinematicTarget.RotAxis = kinematicSource.RotAxis;

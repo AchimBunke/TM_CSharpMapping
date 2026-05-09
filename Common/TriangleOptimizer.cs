@@ -2,6 +2,7 @@
 using GBX.NET.Engines.Game;
 using System.Numerics;
 using TM_GenericMapping.IO;
+using TM_GenericMapping.Messaging;
 
 namespace TM_GenericMapping.Common;
 
@@ -65,45 +66,45 @@ public class TriangleOptimizer
 
     public TriangleOptimizerSettings Settings { get; set; } = new TriangleOptimizerSettings();
 
-    public OptimizationResult OptimizeClip(CGameCtnMediaClip clip)
+    public ToolResult<OptimizationResult> OptimizeClip(CGameCtnMediaClip clip)
     {
         return OptimizeTracks(clip?.Tracks?.ToArray() ?? []);
     }
 
-    public OptimizationResult OptimizeTracks(params ReadOnlySpan<CGameCtnMediaTrack> tracks)
+    public ToolResult<OptimizationResult> OptimizeTracks(params ReadOnlySpan<CGameCtnMediaTrack> tracks)
     {
         var result = new OptimizationResult();
 
-        if (tracks.IsEmpty) return result;
+        if (tracks.IsEmpty) return ToolResult.Success(result, nameof(TriangleOptimizer));
 
         float computedStep = 0f;
         foreach (var track in tracks)
         {
             var trackResult = OptimizeTrack(track);
-            result.BlocksProcessed += trackResult.BlocksProcessed;
-            result.KeysProcessed += trackResult.KeysProcessed;
-            result.VerticesProcessed += trackResult.VerticesProcessed;
-            result.VerticesChanged += trackResult.VerticesChanged;
-            result.VerticesZeroed += trackResult.VerticesZeroed;
-            result.VerticesTemporallySnapped += trackResult.VerticesTemporallySnapped;
-            computedStep += trackResult.ComputedStep;
-            result.IsStepComputed = trackResult.IsStepComputed;
-            result.ZeroBytesBeforeOptimization += trackResult.ZeroBytesBeforeOptimization;
-            result.ZeroBytesAfterOptimization += trackResult.ZeroBytesAfterOptimization;
+            result.BlocksProcessed += trackResult.Value.BlocksProcessed;
+            result.KeysProcessed += trackResult.Value.KeysProcessed;
+            result.VerticesProcessed += trackResult.Value.VerticesProcessed;
+            result.VerticesChanged += trackResult.Value.VerticesChanged;
+            result.VerticesZeroed += trackResult.Value.VerticesZeroed;
+            result.VerticesTemporallySnapped += trackResult.Value.VerticesTemporallySnapped;
+            computedStep += trackResult.Value.ComputedStep;
+            result.IsStepComputed = trackResult.Value.IsStepComputed;
+            result.ZeroBytesBeforeOptimization += trackResult.Value.ZeroBytesBeforeOptimization;
+            result.ZeroBytesAfterOptimization += trackResult.Value.ZeroBytesAfterOptimization;
         }
         result.ComputedStep = result.IsStepComputed ? computedStep / tracks.Length : 0f;
-        return result;
+        return ToolResult.Success(result, nameof(TriangleOptimizer));
     }
 
-    public OptimizationResult OptimizeTrack(CGameCtnMediaTrack track)
+    public ToolResult<OptimizationResult> OptimizeTrack(CGameCtnMediaTrack track)
     {
         var result = new OptimizationResult();
-        if (track?.Blocks == null) return result;
+        if (track?.Blocks == null) return ToolResult.Success(result, nameof(TriangleOptimizer));
 
         foreach (var block in track.Blocks.OfType<CGameCtnMediaBlockTriangles>())
             OptimizeBlock(block, result);
 
-        return result;
+        return ToolResult.Success(result, nameof(TriangleOptimizer));
     }
 
     void OptimizeBlock(CGameCtnMediaBlockTriangles block, OptimizationResult result)
