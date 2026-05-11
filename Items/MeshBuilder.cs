@@ -88,7 +88,7 @@ public class MeshBuilder
                         vertOffset + subMesh.Indices[i + 1],
                         vertOffset + subMesh.Indices[i + 2]),
                     SurfaceIndex = 0,
-                    U02 = (byte)subMesh.Material.SurfacePhysicId,
+                    U02 = 0/*(byte)subMesh.Material.SurfacePhysicId*/,
                     U03 = 0
                 });
             }

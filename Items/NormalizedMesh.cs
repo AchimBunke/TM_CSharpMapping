@@ -18,6 +18,15 @@ public class NormalizedSubmesh
     public Vec3[]? TangentUs { get; set; }  // per vertex, same length as Positions
     public Vec3[]? TangentVs { get; set; }  // per vertex, same length as Positions
 
+    public NormalizedMesh AsMesh()
+    {
+        return new NormalizedMesh()
+        {
+            Submeshes = [this],
+        };
+    }
+
+
 }
 public class NormalizedMesh
 {

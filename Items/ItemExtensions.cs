@@ -138,6 +138,15 @@ public static class ItemExtensions
         }
         return solid != null;
     }
+    public static bool TryGetStaticObjectModel(this CGameItemModel item, out CPlugStaticObjectModel staticObjectModel)
+    {
+        staticObjectModel = null;
+        if (TryGetStaticModelEntRef(item, out var entRef))
+            staticObjectModel = entRef.Model as CPlugStaticObjectModel;
+        if (item.EntityModel is CGameCommonItemEntityModel commonItemEntityModel)
+            staticObjectModel = commonItemEntityModel.StaticObject;
+        return staticObjectModel != null;
+    }
     public static bool TryGetDynaObjectModel(this CGameItemModel item, out CPlugDynaObjectModel dynaObjectModel)
     {
         dynaObjectModel = null;
@@ -154,6 +163,23 @@ public static class ItemExtensions
             foreach (var ent in ents)
             {
                 if (ent.Model is CPlugDynaObjectModel dyna)
+                {
+                    entRef = ent;
+                    break;
+                }
+            }
+        }
+        return entRef != null;
+    }
+    public static bool TryGetStaticModelEntRef(this CGameItemModel item, out CPlugPrefab.EntRef entRef)
+    {
+        entRef = null;
+        if (item.EntityModel is CPlugPrefab prefab)
+        {
+            var ents = prefab.Ents.ToList();
+            foreach (var ent in ents)
+            {
+                if (ent.Model is CPlugStaticObjectModel staticObject)
                 {
                     entRef = ent;
                     break;

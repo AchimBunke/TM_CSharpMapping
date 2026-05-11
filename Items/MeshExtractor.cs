@@ -30,7 +30,7 @@ public class MeshExtractor
         return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedMesh);
     }
 
-    ToolResult<NormalizedMesh> ExtractFromCrystal(CPlugCrystal crystal)
+    public ToolResult<NormalizedMesh> ExtractFromCrystal(CPlugCrystal crystal)
     {
         // Two-pass: group split vertices by material first, then concatenate
         // so each material produces a contiguous index range (NormalizedSubmesh)
@@ -113,7 +113,7 @@ public class MeshExtractor
         }, nameof(MeshExtractor));
     }
 
-    ToolResult<NormalizedMesh> ExtractFromSolid2Model(CPlugSolid2Model solid2Model)
+    public ToolResult<NormalizedMesh> ExtractFromSolid2Model(CPlugSolid2Model solid2Model)
     {
         var submeshes = new List<NormalizedSubmesh>();
 
@@ -122,29 +122,12 @@ public class MeshExtractor
             var visual = solid2Model.Visuals[shaded.VisualIndex];
             if (visual is not CPlugVisualIndexedTriangles vit)
                 continue;
+            
+            var subMeshResult = ExtractFromVisual(vit, solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst);
+            if (subMeshResult.IsFailure)
+                return ToolResult.Fail(subMeshResult);
 
-            var stream = vit.VertexStreams[0];
-
-            var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
-              BindingFlags.NonPublic | BindingFlags.Instance);
-            var tangentsUs = (Vec3[])tangentUsField?.GetValue(stream);
-
-            var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
-              BindingFlags.NonPublic | BindingFlags.Instance);
-            var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
-
-            submeshes.Add(new NormalizedSubmesh
-            {
-                Positions = stream.Positions,
-                Normals = stream.Normals,
-                TexCoords = stream.UVs.TryGetValue(0, out var uv0) ? uv0 : null,
-                LightmapCoords = stream.UVs.TryGetValue(1, out var uv1) ? uv1 : null,
-                Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
-                Indices = vit.IndexBuffer.Indices,
-                Material = solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst,
-                TangentUs = tangentsUs,
-                TangentVs = tangentVs,
-            });
+            submeshes.Add(subMeshResult.Value);
         }
 
         return ToolResult.Success(new NormalizedMesh
@@ -153,7 +136,35 @@ public class MeshExtractor
             SourceData = solid2Model
         }, nameof(MeshExtractor));
     }
-    ToolResult<NormalizedMesh> ExtractFromDynaModel(CPlugDynaObjectModel dynaObjectModel)
+
+    public ToolResult<NormalizedSubmesh> ExtractFromVisual(CPlugVisualIndexedTriangles visual, CPlugMaterialUserInst material)
+    {
+        var stream = visual.VertexStreams[0];
+
+        var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
+          BindingFlags.NonPublic | BindingFlags.Instance);
+        var tangentsUs = (Vec3[])tangentUsField?.GetValue(stream);
+
+        var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
+          BindingFlags.NonPublic | BindingFlags.Instance);
+        var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
+
+        var mesh = new NormalizedSubmesh
+        {
+            Positions = stream.Positions,
+            Normals = stream.Normals,
+            TexCoords = stream.UVs.TryGetValue(0, out var uv0) ? uv0 : null,
+            LightmapCoords = stream.UVs.TryGetValue(1, out var uv1) ? uv1 : null,
+            Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
+            Indices = visual.IndexBuffer.Indices,
+            Material = material,
+            TangentUs = tangentsUs,
+            TangentVs = tangentVs,
+        };
+        return ToolResult.Success(mesh, nameof(MeshExtractor));
+    }
+
+    public ToolResult<NormalizedMesh> ExtractFromDynaModel(CPlugDynaObjectModel dynaObjectModel)
     {
         // surfaces (DynaShape/StaticShape) are intentionally ignored here —
         // they will be generated separately from NormalizedMesh when writing the item
@@ -162,6 +173,7 @@ public class MeshExtractor
             return ExtractFromSolid2Model(dynaObjectModel.Mesh);
         return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
     }
+
     static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices)
     {
         var normals = new Vec3[positions.Length];
@@ -186,7 +198,6 @@ public class MeshExtractor
 
         return normals;
     }
-
     static (Vec3[] tangentUs, Vec3[] tangentVs) ComputeTangents(
     Vec3[] positions, Vec3[] normals, Vec2[] uvs, int[] indices)
     {
