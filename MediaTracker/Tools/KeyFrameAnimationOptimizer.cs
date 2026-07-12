@@ -1,7 +1,7 @@
 ﻿using GBX.NET.Engines.Game;
 using System.Numerics;
 
-namespace TM_GenericMapping.Common;
+namespace TM_GenericMapping.MediaTracker.Tools;
 
 public class KeyFrameAnimationOptimizer
 {

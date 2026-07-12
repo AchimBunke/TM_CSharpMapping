@@ -65,6 +65,12 @@ public static class ObjectComparer
                ^ System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(a.Item2)
         );
 
+    public static bool IsEqual<T>(T obj1, T obj2, ObjectComparerFlags flags = ObjectComparerFlags.None)
+    {
+        var differences = GetDifferences(obj1, obj2, flags);
+        return differences.Count == 0;
+    }
+
     private static void Compare(object obj1, object obj2, HashSet<(object, object)> visited, List<string> differences, string path, ObjectComparerFlags flags)
     {
         // Both null — equal

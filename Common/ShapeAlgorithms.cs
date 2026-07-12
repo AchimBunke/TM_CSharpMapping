@@ -99,6 +99,9 @@ public static class EarClippingTriangulation
         }
         return area < 0;
     }
+
+   
+
 }
 
 public static class ConvexHull3D
@@ -980,7 +983,7 @@ public static class ShapeUtils
 
     public static TriangleObject FlattenHierarchy(TriangleObject obj)
     {
-        return Merge(false, GetFlattenedHierarchyObjects(obj).OfType<TriangleObject>().Where(o => o.FillVertexCount > 0));
+        return Merge(GetFlattenedHierarchyObjects(obj).OfType<TriangleObject>().Where(o => o.FillVertexCount > 0));
     }
 
     public static IEnumerable<MediaObject> GetFlattenedHierarchyObjects(MediaObject obj)
@@ -988,7 +991,7 @@ public static class ShapeUtils
         return [obj, .. obj.SubObjects.SelectMany(GetFlattenedHierarchyObjects)];
     }
 
-    public static TriangleObject Merge(bool keepWorldPosition, params IEnumerable<TriangleObject> objs)
+    public static TriangleObject Merge(params IEnumerable<TriangleObject> objs)
     {
         List<Vector3> fillVertices = [];
         List<Int3> fillTriangles = [];
@@ -1001,7 +1004,7 @@ public static class ShapeUtils
             fillVertices.AddRange(objectInHierarchy.Vertices.Take(objectInHierarchy.FillVertexCount).Select(v => Vector3.Transform(v, objectInHierarchy.LocalToWorldTRS)));
             fillTriangles.AddRange(objectInHierarchy.Triangles.Take(objectInHierarchy.FillTrianglesCount).Select(t => new Int3(triangleOffset + t.X, triangleOffset + t.Y, triangleOffset + t.Z)));
             fillColors.AddRange(objectInHierarchy.Colors.Take(objectInHierarchy.FillVertexCount));
-            triangleOffset = fillTriangles.Count;
+            triangleOffset = fillVertices.Count;
         }
 
         List<Vector3> edgeVertices = [];
@@ -1015,7 +1018,7 @@ public static class ShapeUtils
             fillVertices.AddRange(objectInHierarchy.Vertices.Skip(objectInHierarchy.FillVertexCount).Select(v => Vector3.Transform(v, objectInHierarchy.LocalToWorldTRS)));
             fillTriangles.AddRange(objectInHierarchy.Triangles.Skip(objectInHierarchy.FillTrianglesCount).Select(t => new Int3(triangleOffset + t.X, triangleOffset + t.Y, triangleOffset + t.Z)));
             fillColors.AddRange(objectInHierarchy.Colors.Skip(objectInHierarchy.FillVertexCount));
-            triangleOffset = fillTriangles.Count;
+            triangleOffset = fillVertices.Count;
         }
         return new TriangleObject(points: fillVertices.ToArray(),
             triangles: fillTriangles.ToArray(),
@@ -1212,8 +1215,129 @@ public static class ShapeUtils
                    (t.Z == a && t.X == b);
         }
     }
+
+    public static void ValidateCornerSize(ReadOnlySpan<Vector3> points, float size)
+    {
+        int n = points.Length;
+        for (int i = 0; i < n; i++)
+        {
+            Vector3 a = points[i];
+            Vector3 b = points[(i + 1) % n];
+            float edgeLength = Vector3.Distance(a, b);
+
+            // both corners of this edge consume 'size' from it
+            if (size * 2f > edgeLength)
+                throw new ArgumentException(
+                    $"Corner size {size} is too large for edge {i}→{i + 1} " +
+                    $"(length {edgeLength:F4}). Max size for this edge is {edgeLength / 2f:F4}.");
+        }
+    }
+    public static Vector3[] ProcessCorners(
+        ReadOnlySpan<Vector3> points,
+        float size,
+        CornerStyle style = CornerStyle.Round,
+        int roundSegments = 4)
+    {
+        ValidateCornerSize(points, size);
+
+        if (style == CornerStyle.None)
+            return points.ToArray();
+
+        var result = new List<Vector3>();
+        int n = points.Length;
+
+        for (int i = 0; i < n; i++)
+        {
+            Vector3 prev = points[(i - 1 + n) % n];
+            Vector3 curr = points[i];
+            Vector3 next = points[(i + 1) % n];
+
+            Vector3 toPrev = Vector3.Normalize(prev - curr);
+            Vector3 toNext = Vector3.Normalize(next - curr);
+
+            // Clamp size so it never overshoots an edge
+            float maxSize = MathF.Min(
+                Vector3.Distance(curr, prev),
+                Vector3.Distance(curr, next)) / 2f;
+
+            float s = MathF.Min(size, maxSize);
+
+            Vector3 p1 = curr + toPrev * s; // start of corner
+            Vector3 p2 = curr + toNext * s; // end of corner
+
+            if (style == CornerStyle.Bevel)
+            {
+                result.Add(p1);
+                result.Add(p2);
+            }
+            else // Round
+            {
+                // Find the arc center: it sits at curr + (bisector direction) * arcRadius
+                Vector3 bisector = Vector3.Normalize(toPrev + toNext);
+                float cosHalfAngle = Vector3.Dot(toPrev, bisector);
+                float arcRadius = s / cosHalfAngle;   // could also use s * MathF.Tan(halfAngle)
+                Vector3 arcCenter = curr + bisector * arcRadius;
+
+                // Sweep from p1 to p2 around arcCenter
+                float startAngle = MathF.Atan2(p1.Y - arcCenter.Y, p1.X - arcCenter.X);
+                float endAngle = MathF.Atan2(p2.Y - arcCenter.Y, p2.X - arcCenter.X);
+
+                // Ensure we sweep the short way (inward arc)
+                float sweep = endAngle - startAngle;
+                if (sweep > MathF.PI) sweep -= 2 * MathF.PI;
+                if (sweep < -MathF.PI) sweep += 2 * MathF.PI;
+
+                for (int j = 0; j <= roundSegments; j++)
+                {
+                    float t = (float)j / roundSegments;
+                    float angle = startAngle + sweep * t;
+                    result.Add(new Vector3(
+                        arcCenter.X + MathF.Cos(angle) * arcRadius,
+                        arcCenter.Y + MathF.Sin(angle) * arcRadius,
+                        0f));
+                }
+            }
+        }
+
+        return result.ToArray();
+    }
+
+    public static void MirrorVertices(TriangleObject obj, Vector3 planePoint, Vector3 planeNormal, bool mirrorHierarchy = true, bool fixWindingOrder = true)
+    {
+        var n = planeNormal.Normalized();
+        for (int i = 0; i < obj.Vertices.Length; ++i)
+        {
+            var v = obj.Vertices[i];
+            var toPoint = v - planePoint;
+
+            var d = Vector3.Dot(toPoint, n);
+
+            obj.Vertices[i] = v - 2 * Vector3.Dot(v - planePoint, n) * n;
+        }
+        if (fixWindingOrder)
+        {
+            for (int i = 0; i < obj.Triangles.Length; ++i)
+            {
+                var t = obj.Triangles[i];
+                obj.Triangles[i] = (t.X, t.Z, t.Y);
+            }
+        }
+        if (mirrorHierarchy)
+        {
+            foreach (var subObj in obj.SubTriangleObjects)
+                MirrorVertices(subObj, planePoint, planeNormal, mirrorHierarchy, fixWindingOrder);
+        }
+    }
+
+
 }
 
+public enum CornerStyle
+{
+    None,
+    Bevel,
+    Round
+}
 
 public struct Bounds
 {

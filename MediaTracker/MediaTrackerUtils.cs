@@ -195,6 +195,7 @@ public static class MediaTrackerUtils
     }
 
 
+
     public static CGameCtnMediaBlockTriangles3D.Key DeepCopyTriangle3DKey(CGameCtnMediaBlockTriangles3D.Key original, CGameCtnMediaBlockTriangles3D triangles)
     {
         var cpy = new CGameCtnMediaBlockTriangles3D.Key(triangles)
@@ -328,6 +329,8 @@ public static class MediaTrackerUtils
     public static string PlayerCameraTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\PlayerCameraTemplate.Clip.Gbx");
     public static string DepthOfFieldTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\DepthOfFieldTemplate.Clip.Gbx");
     public static string CustomCameraTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\CustomCameraTemplate.Clip.Gbx");
+    public static string PathCameraTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\PathCameraTemplate.Clip.Gbx");
+    public static string OrbitalCameraTemplatePath = Path.Combine(WindowsUtils.MyDocumentsPath, @"Trackmania\Replays\Clips\Templates\OrbitalCameraTemplate.Clip.Gbx");
 
     public static bool UseCustomTemplates = false;
 
@@ -364,8 +367,13 @@ public static class MediaTrackerUtils
                 Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("DepthOfFieldTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF,
             UseCustomTemplates ?
                 Gbx.Parse<CGameCtnMediaClip>(CustomCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("CustomCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom    
-
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("CustomCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(PathCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraPath :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("PathCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraPath,
+            UseCustomTemplates ?
+                Gbx.Parse<CGameCtnMediaClip>(OrbitalCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraOrbital :
+                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("OrbitalCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraOrbital
             );
     }
 

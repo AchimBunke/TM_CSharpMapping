@@ -14,13 +14,31 @@ public class MeshExtractor
         ToolResult<NormalizedMesh> normalizedMeshResult = default;
         if (ItemExtensions.TryGetCrystal(item, out var crystal))
             normalizedMeshResult = ExtractFromCrystal(crystal);
-        else if (ItemExtensions.TryGetSolid2Model(item, out var solid2Model))
-            normalizedMeshResult = ExtractFromSolid2Model(solid2Model);
         else if (ItemExtensions.TryGetDynaObjectModel(item, out var dynaModel))
             normalizedMeshResult = ExtractFromDynaModel(dynaModel);
+        else if (ItemExtensions.TryGetStaticObjectModel(item, out var staticModel))
+            normalizedMeshResult = ExtractFromStaticModel(staticModel);
+        // needs to be last because could cover static object model
+        else if (ItemExtensions.TryGetSolid2Model(item, out var solid2Model))
+            normalizedMeshResult = ExtractFromSolid2Model(solid2Model);
 
-        if(normalizedMeshResult.IsSuccess)
+        if (normalizedMeshResult.IsSuccess)
         {
+            if (ItemExtensions.TryGetTriggerSpecial(item, out var triggerSpecial))
+            {
+                normalizedMeshResult.Value.SurfaceData = triggerSpecial.TriggerShape;
+                normalizedMeshResult.Value.SurfaceType = SurfaceType.Special;
+            }
+            else if (ItemExtensions.TryGetTriggerWaypoint(item, out var triggerWaypoint))
+            {
+                normalizedMeshResult.Value.SurfaceData = triggerWaypoint.TriggerShape;
+                normalizedMeshResult.Value.SurfaceType = SurfaceType.Waypoint;
+            }
+            else if (ItemExtensions.TryGetTriggerShape(item, out var triggerShape))
+            {
+                normalizedMeshResult.Value.SurfaceData = triggerShape;
+            }
+
             normalizedMeshResult.Value.PlacementParam = item.DefaultPlacement;
             normalizedMeshResult.Value.IconWebP = item.IconWebP;
             normalizedMeshResult.Value.Icon = item.Icon;
@@ -173,6 +191,17 @@ public class MeshExtractor
             return ExtractFromSolid2Model(dynaObjectModel.Mesh);
         return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
     }
+    public ToolResult<NormalizedMesh> ExtractFromStaticModel(CPlugStaticObjectModel staticObjectModel)
+    {
+        // surfaces (DynaShape/StaticShape) are intentionally ignored here —
+        // they will be generated separately from NormalizedMesh when writing the item
+
+        if (staticObjectModel.Mesh is not null)
+            return ExtractFromSolid2Model(staticObjectModel.Mesh);
+        return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+    }
+
+
 
     static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices)
     {

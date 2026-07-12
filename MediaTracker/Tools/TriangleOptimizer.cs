@@ -1,10 +1,9 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Game;
 using System.Numerics;
-using TM_GenericMapping.IO;
 using TM_GenericMapping.Messaging;
 
-namespace TM_GenericMapping.Common;
+namespace TM_GenericMapping.MediaTracker.Tools;
 
 
 public class TriangleOptimizer

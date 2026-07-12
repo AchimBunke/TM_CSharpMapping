@@ -132,4 +132,16 @@ public static class RandomUtils
     {
         return Quaternion.CreateFromAxisAngle(axis, MathUtils.Deg2Rad * random.NextSingle(minAngle, maxAngle));
     }
+
+    public static Vector2 RandomInCircle(this Random random, float radius = 1)
+    {
+        float angle = 2f * MathF.PI * random.NextSingle();
+
+        float r = MathF.Sqrt(random.NextSingle()) * radius;
+
+        return new Vector2(
+            MathF.Cos(angle) * r,
+            MathF.Sin(angle) * r
+        );
+    }
 }

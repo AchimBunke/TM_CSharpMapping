@@ -39,24 +39,7 @@ public record class KeyFrameData()
     public required ulong KeyFrameTickRateMillis { get; set; } = 100;
     public ulong NextKeyFrameTargetMillis { get; set; } = 0;
 }
-public enum CameraMode
-{
-    Orthographic,
-    Perspective
-}
-/// <summary>
-/// Only affects 2DTriangle rendering
-/// </summary>
-/// <param name="ViewBox"></param>
-/// <param name="Mode"></param>
-/// <param name="CameraPosition"></param>
-/// <param name="CameraLookAt"></param>
-/// <param name="FOV"></param>
-public record struct RenderData(Vector3 ViewBox, CameraMode Mode, Vector3 CameraPosition, Vector3 CameraLookAt, float FOV)
-{
-    public static RenderData Default
-        => new RenderData(new Vector3(10, 10, 10), CameraMode.Orthographic, Vector3.Zero, Vector3.UnitZ, MathF.PI / 2f);
-}
+
 public record BlockTemplates(
     CGameCtnMediaClip Clip,
     CGameCtnMediaTrack Track,
@@ -66,7 +49,9 @@ public record BlockTemplates(
     CGameCtnMediaBlockImage Image,
     CGameCtnMediaBlockCameraGame PlayerCamera,
     CGameCtnMediaBlockDOF DepthOfField,
-    CGameCtnMediaBlockCameraCustom CustomCamera)
+    CGameCtnMediaBlockCameraCustom CustomCamera,
+    CGameCtnMediaBlockCameraPath PathCamera,
+    CGameCtnMediaBlockCameraOrbital OrbitalCamera)
 {
     public CGameCtnMediaClip GetEmptyClip() => MediaTrackerUtils.DeepCopyClip(Clip);
     public CGameCtnMediaTrack GetEmptyTrack() => MediaTrackerUtils.DeepCopyTrack(Track);
@@ -77,20 +62,12 @@ public record BlockTemplates(
     public CGameCtnMediaBlockCameraGame GetEmptyPlayerCameraBlock() => MediaTrackerUtils.DeepCopyBlockPlayerCamera(PlayerCamera);
     public CGameCtnMediaBlockDOF GetEmptyDepthOfFieldBlock() => MediaTrackerUtils.DeepCopyBlockDepthOfField(DepthOfField);
     public CGameCtnMediaBlockCameraCustom GetEmptyCustomCameraBlock() => MediaTrackerUtils.DeepCopyBlockCustomCamera(CustomCamera);
+    public CGameCtnMediaBlockCameraPath GetEmptyPathCameraBlock() => ObjectCloner.DeepCloneObject(PathCamera);
+    public CGameCtnMediaBlockCameraOrbital GetEmptyOrbitalCameraBlock() => ObjectCloner.DeepCloneObject(OrbitalCamera);
+
 }
 
-public enum ScreenPosition
-{
-    TOP,
-    BOTTOM,
-    LEFT,
-    RIGHT,
-    CENTER,
-    TOP_LEFT,
-    TOP_RIGHT,
-    BOTTOM_LEFT,
-    BOTTOM_RIGHT,
-}
+
 public class DuplicateKeyComparer<TKey>
                 :
              IComparer<TKey> where TKey : IComparable
@@ -109,11 +86,7 @@ public class DuplicateKeyComparer<TKey>
 
     #endregion
 }
-public static class ScreenPositionExtensions
-{
-    public static Func<ScreenPosition, Vector3> ScreenToVector3Function = (_) => throw new NotImplementedException("Function not set");
-    public static Vector3 ToVector3(this ScreenPosition screenPos) => ScreenToVector3Function(screenPos);
-}
+
 public static class WorldPositionExtensions
 {
     public static Vector3 StadiumSurfaceOffset = new Vector3(0, 8, 0);
@@ -126,7 +99,7 @@ public class SceneTimeline
 {
     #region Publics
     public BlockTemplates BlockTemplates { get; init; }
-    public RenderData RenderData { get; init; }
+
     #endregion
 
     #region Animation Fields
@@ -301,7 +274,7 @@ public class SceneTimeline
         if (IsInScene(obj))
             SetHierarchyRequiresKeyFrame(obj);
     }
-    public void SetPosition(MediaObject obj, ScreenPosition moveLocation, Space space = Space.Local) => SetPosition(obj, GetPosition(moveLocation), space);
+    public void SetPosition(MediaObject obj, ScreenPosition moveLocation, Space space = Space.Local) => SetPosition(obj, ScreenPositionExtensions.DefaultScreenToVector3Function(moveLocation), space);
     public void Translate(MediaObject obj, Vector3 position, Space space = Space.Local)
     {
         obj.Translate(position, space);
@@ -476,7 +449,7 @@ public class SceneTimeline
     /// </summary>
     public void ResetScreenPositionFunction()
     {
-        ScreenPositionExtensions.ScreenToVector3Function = GetPosition;
+        ScreenPositionExtensions.ScreenToVector3Function = ScreenPositionExtensions.DefaultScreenToVector3Function;
     }
 
     public void SetTrackCycling(bool cycleTrack = true, params ReadOnlySpan<MediaObject> objects)
@@ -539,7 +512,6 @@ public class SceneTimeline
     public SceneTimeline()
     {
         BlockTemplates = MediaTrackerUtils.CreateBlockTemplates();
-        RenderData = RenderData.Default;
         CameraManager = new SceneCameraManager(this);
     }
 
@@ -715,7 +687,7 @@ public class SceneTimeline
                 idx = keysRenderer.AddRenderDataToBlock(renderObj, block);
             else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
             {
-                twoKeyRenderer.SetDataToStart(renderObj, block, this.RenderData);
+                twoKeyRenderer.SetDataToStart(renderObj, block);
                 (block as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
             }
 
@@ -763,7 +735,7 @@ public class SceneTimeline
                     idx = keysRenderer.AddRenderDataToBlock(renderObj, commonBlock);
                 else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
                 {
-                    twoKeyRenderer.SetDataToStart(renderObj, commonBlock, this.RenderData);
+                    twoKeyRenderer.SetDataToStart(renderObj, commonBlock);
                     (sharedBlockOwner as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
                 }
                 objectsInScene[renderObj] = (commonTrack, commonBlock, idx);
@@ -836,11 +808,11 @@ public class SceneTimeline
                     key.Time = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
                 }
                 // generate keyframe data for obj
-                keysRenderer.SetKeyFrameData(obj, block, key, idx, RenderData, GetPPEffectData(obj));
+                keysRenderer.SetKeyFrameData(obj, block, key, idx, GetPPEffectData(obj));
             }
             else if (obj.Renderer is ITwoKeyRenderer twoKeyRenderer)
             {
-                twoKeyRenderer.SetDataToEnd(obj, block, RenderData);
+                twoKeyRenderer.SetDataToEnd(obj, block);
                 (block as CGameCtnMediaBlock.IHasTwoKeys).End = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
             }
         }
@@ -971,19 +943,7 @@ public class SceneTimeline
         }
     }
 
-    protected Vector3 GetPosition(ScreenPosition loc) => loc switch
-    {
-        ScreenPosition.TOP => new Vector3(0, RenderData.ViewBox.Y / ((16f / 9f) * 2f), 0),
-        ScreenPosition.BOTTOM => new Vector3(0, -RenderData.ViewBox.Y / ((16f / 9f) * 2f), 0),
-        ScreenPosition.LEFT => new Vector3(-RenderData.ViewBox.X / 2f, 0, 0),
-        ScreenPosition.RIGHT => new Vector3(RenderData.ViewBox.X / 2f, 0, 0),
-        ScreenPosition.CENTER => Vector3.Zero,
-        ScreenPosition.TOP_LEFT => new Vector3(-RenderData.ViewBox.X / 2f, RenderData.ViewBox.Y / ((16f / 9f) * 2f), 0),
-        ScreenPosition.TOP_RIGHT => new Vector3(RenderData.ViewBox.X / 2f, RenderData.ViewBox.Y / ((16f / 9f) * 2f), 0),
-        ScreenPosition.BOTTOM_LEFT => new Vector3(-RenderData.ViewBox.X / 2f, -RenderData.ViewBox.Y / ((16f / 9f) * 2f), 0),
-        ScreenPosition.BOTTOM_RIGHT => new Vector3(RenderData.ViewBox.X / 2f, -RenderData.ViewBox.Y / ((16f / 9f) * 2f), 0),
-        _ => throw new NotImplementedException(),
-    };
+ 
 
     #endregion
 
@@ -1047,13 +1007,6 @@ public interface ISceneScript
         var blockTemplates = MediaTrackerUtils.CreateBlockTemplates();
         var scene = new SceneTimeline()
         {
-            RenderData = new RenderData
-            {
-                ViewBox = new Vector3(10, 10, 100),
-                Mode = CameraMode.Orthographic,
-                CameraPosition = new Vector3(0, 0, 0),
-                FOV = MathF.PI / 2
-            },
             BlockTemplates = blockTemplates,
         };
         var sceneBuilder = sceneScript;

@@ -57,7 +57,6 @@ public class Example_Scenes
         SceneTimeline sceneTimeline = new SceneTimeline()
         {
             BlockTemplates = blockTemplates,
-            RenderData = RenderData.Default, // Necessary for 2D only
         };
         // The SceneScript/SceneBuilder contains your code to add objects, step forward in time, animate ...
         ISceneScript sceneBuilder = new MySceneBuilder();

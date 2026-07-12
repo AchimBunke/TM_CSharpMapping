@@ -636,7 +636,19 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         float curveDuration = animParams.Curve.Duration;
 
         // compute time along the curve, scaled by playback speed
-        float curveTime = animData.ElapsedTime * animParams.PlaybackSpeed;
+        float curveTime = (animData.ElapsedTime + animParams.TimeOffset)* animParams.PlaybackSpeed;
+
+        if (animParams.LoopAnimation)
+        {
+            curveTime %= curveDuration;
+            if (curveTime < 0f)
+                curveTime += curveDuration;
+        }
+        else
+        {
+            // clamp to curve duration
+            curveTime = MathF.Min(curveTime, curveDuration);
+        }
 
         // normalize
         float normalized = Math.Clamp(curveTime / animParams.Curve.Duration, 0f, 1f);
@@ -647,8 +659,6 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         // map back to curve time
         float easedCurveTime = eased * animParams.Curve.Duration;
 
-        // clamp to curve duration
-        curveTime = MathF.Min(curveTime, curveDuration);
 
         TValue value = animParams.Curve.Evaluate(animParams.Curve.StartTime + easedCurveTime, out bool isLinear);
         animParams.PropertySetter(obj, value);
@@ -672,20 +682,26 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         float time,
         float playbackSpeed = 1f,
         Easing easing = Easing.Linear,
+        bool loopAnimation = false,
+        float timeOffset = 0f,
         bool continuousKeyFrames = false)
-   => AnimateProperty(new AnimationCurveAnimationParameter<T, TValue>(animCurve, propertySetter, playbackSpeed) { continuousKeyFrames = continuousKeyFrames, TimeMillis = Time.Millis(time), Easing = easing });
+   => AnimateProperty(new AnimationCurveAnimationParameter<T, TValue>(animCurve, propertySetter, playbackSpeed, loopAnimation, timeOffset) { continuousKeyFrames = continuousKeyFrames, TimeMillis = Time.Millis(time), Easing = easing});
     public MediaObjectAnimator<T> AnimateProperty<TValue>(
         IAnimationCurve<TValue> animCurve,
         Action<T, TValue> propertySetter,
         float playbackSpeed = 1f,
         Easing easing = Easing.Linear,
+         bool loopAnimation = false,
+        float timeOffset = 0f,
         bool continuousKeyFrames = false)
-        => AnimateProperty(animCurve, propertySetter, time: animCurve.Duration / playbackSpeed, playbackSpeed, easing, continuousKeyFrames);
+        => AnimateProperty(animCurve, propertySetter, time: animCurve.Duration / playbackSpeed, playbackSpeed, easing, loopAnimation, timeOffset, continuousKeyFrames);
     public MediaObjectAnimator<T> AnimatePropertyExp<TValue>(
         IAnimationCurve<TValue> animCurve,
         Expression<Func<T, TValue>> propertySetter,
         float playbackSpeed = 1f,
         Easing easing = Easing.Linear,
+         bool loopAnimation = false,
+        float timeOffset = 0f,
         bool continuousKeyFrames = false)
     {
         // Build a value-only setter bound to Target
@@ -700,6 +716,8 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
             time: animCurve.Duration / playbackSpeed,
             playbackSpeed,
             easing,
+            loopAnimation,
+            timeOffset,
             continuousKeyFrames);
     }
     public MediaObjectAnimator<T> AnimatePropertyExp(
@@ -707,6 +725,8 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
      Expression<Func<T, Vector3>> propertySetter,
      float playbackSpeed = 1f,
      Easing easing = Easing.Linear,
+     bool loopAnimation = false,
+     float timeOffset = 0f,
      bool continuousKeyFrames = false)
     {
         var valueSetter = BuildSetter(propertySetter);
@@ -718,6 +738,8 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
             time: animCurve.Duration / playbackSpeed,
             playbackSpeed,
             easing,
+            loopAnimation,
+            timeOffset,
             continuousKeyFrames);
     }
     Action<TValue> BuildSetter<TValue>(Expression<Func<T, TValue>> expr)

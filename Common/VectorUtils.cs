@@ -44,5 +44,7 @@ namespace TM_GenericMapping.Common
         public static bool NearlyEqual(this Vector3 v1, Vector3 v2, float epsilon = float.Epsilon)
             => MathUtils.NearlyEqual(v1.X, v2.X, epsilon) && MathUtils.NearlyEqual(v1.Y, v2.Y, epsilon) && MathUtils.NearlyEqual(v1.Z, v2.Z, epsilon);
 
+
+        public static Vector4 ToVector4(this Vec4 v)=> new Vector4(v.X, v.Y, v.Z, v.W);
     }
 }

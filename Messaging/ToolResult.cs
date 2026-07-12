@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.Messaging;
 
@@ -73,6 +74,18 @@ public readonly record struct ToolResult<T> : IToolResult<T>
             ToolId = success.ToolId,
         };
 
+    public ToolResult<T2> Cast<T2>()
+    {
+        return new ToolResult<T2>
+        {
+            Outcome = this.Outcome,
+            ToolId = this.ToolId,
+            Value = (T2)(object)this.Value!,
+            ErrorCode = this.ErrorCode,
+            Data = this.Data
+        };
+    }
+
 }
 
 public static class ToolResult
@@ -112,4 +125,22 @@ public static class ToolResult
             ErrorCode = toolResult.ErrorCode,
             Data = toolResult.Data
         };
+
+
+
+
+    extension<T>(ToolResult<T> result)
+    {
+        public ToolResult<T2> Map<T2>(Func<T, T2> mapper)
+        {
+            return new ToolResult<T2>
+            {
+                Outcome = result.Outcome,
+                ToolId = result.ToolId,
+                Value = mapper(result.Value),
+                ErrorCode = result.ErrorCode,
+                Data = result.Data
+            };
+        }
+    }
 }

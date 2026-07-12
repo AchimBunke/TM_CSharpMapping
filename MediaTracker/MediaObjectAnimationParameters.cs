@@ -41,7 +41,7 @@ public record GenericMorphAnimationParameter(IMorphable Target) : AnimationParam
 
 public record DotMatrixDisplayMorphAnimationParameter(DotMatrixDisplay Target) : AnimationParameter;
 
-public record AnimationCurveAnimationParameter<T, TValue>(IAnimationCurve<TValue> Curve, Action<T, TValue> PropertySetter, float PlaybackSpeed) : AnimationParameter
+public record AnimationCurveAnimationParameter<T, TValue>(IAnimationCurve<TValue> Curve, Action<T, TValue> PropertySetter, float PlaybackSpeed, bool LoopAnimation, float TimeOffset) : AnimationParameter
     where T : MediaObject;
 
 public enum FollowMode

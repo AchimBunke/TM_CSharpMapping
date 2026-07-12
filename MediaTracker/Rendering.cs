@@ -13,21 +13,21 @@ public interface IRenderer
 }
 public interface ITwoKeyRenderer : IRenderer
 {
-    public void SetDataToStart(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData);
-    public void SetDataToEnd(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData);
+    public void SetDataToStart(MediaObject obj, CGameCtnMediaBlock block);
+    public void SetDataToEnd(MediaObject obj, CGameCtnMediaBlock block);
 }
 public interface IKeysRenderer : IRenderer
 {
     public IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block);
 
-    public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
+    public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData);
 
 
     public abstract int AddRenderDataToBlock(RenderObject obj, CGameCtnMediaBlock block);
 }
 public interface IKeysRenderer<T> : IKeysRenderer where T : RenderObject
 {
-    public void SetKeyFrameData(T obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
+    public void SetKeyFrameData(T obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData);
 
     public bool CanShareBlockWith(T obj, MediaObject other);
 
@@ -36,12 +36,12 @@ public interface IKeysRenderer<T> : IKeysRenderer where T : RenderObject
 public abstract class KeysRendererBase<T> : IKeysRenderer<T> where T : RenderObject
 {
     public abstract CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates);
-    public abstract void SetKeyFrameData(T obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData);
+    public abstract void SetKeyFrameData(T obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData);
     public abstract IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block);
     public abstract bool CanShareBlockWith(T obj, MediaObject other);
     public abstract int AddRenderDataToBlock(T obj, CGameCtnMediaBlock block);
-    public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
-        => SetKeyFrameData((T)obj, block, key, idx, renderData, postProcessingEffectData);
+    public void SetKeyFrameData(RenderObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
+        => SetKeyFrameData((T)obj, block, key, idx, postProcessingEffectData);
     public IKey CreateAndAddEmptyKey(RenderObject obj, CGameCtnMediaBlock block)
         => CreateAndAddEmptyKey(block);
     public bool CanShareBlockWith(RenderObject obj, MediaObject other)
@@ -51,8 +51,8 @@ public abstract class KeysRendererBase<T> : IKeysRenderer<T> where T : RenderObj
 }
 public interface ITwoKeyRenderer<T> : ITwoKeyRenderer where T : MediaObject
 {
-    public void SetDataToStart(T obj, CGameCtnMediaBlock block, RenderData renderData);
-    public void SetDataToEnd(T obj, CGameCtnMediaBlock block, RenderData renderData);
+    public void SetDataToStart(T obj, CGameCtnMediaBlock block);
+    public void SetDataToEnd(T obj, CGameCtnMediaBlock block);
 }
 
 public abstract class TriangleRenderer : KeysRendererBase<TriangleObject>
@@ -78,8 +78,39 @@ public abstract class TriangleRenderer : KeysRendererBase<TriangleObject>
         var triangleBlock = block as CGameCtnMediaBlockTriangles;
         int idx = triangleBlock.Vertices.Length;
         Int3 triangleOffset = (idx, idx, idx);
-        triangleBlock.Vertices = triangleBlock.Vertices.Concat(obj.Colors.Select(c => new Vec4(c.X, c.Y, c.Z, c.W))).ToArray();
-        triangleBlock.Triangles = triangleBlock.Triangles.Concat(obj.Triangles.Select(t => t + triangleOffset)).ToArray();
+
+        var oldVertices = triangleBlock.Vertices;
+        int oldLen = oldVertices.Length;
+        int addLen = obj.Colors.Length;
+
+        var newVertices = new Vec4[oldLen + addLen];
+
+        Array.Copy(oldVertices, newVertices, oldLen);
+
+        for (int i = 0; i < addLen; i++)
+        {
+            var c = obj.Colors[i];
+            newVertices[oldLen + i] = new Vec4(c.X, c.Y, c.Z, c.W);
+        }
+
+        triangleBlock.Vertices = newVertices;
+
+        var oldTris = triangleBlock.Triangles;
+        int oldTrisLen = oldTris.Length;
+        int addTrisLen = obj.Triangles.Length;
+
+        var newTriangles = new Int3[oldTrisLen + addTrisLen];
+        Array.Copy(oldTris, newTriangles, oldTrisLen);
+
+        for (int i = 0; i < addTrisLen; i++)
+        {
+            newTriangles[oldTrisLen + i] = triangleOffset + obj.Triangles[i];
+        }
+
+        triangleBlock.Triangles = newTriangles;
+
+        //triangleBlock.Vertices = triangleBlock.Vertices.Concat(obj.Colors.Select(c => new Vec4(c.X, c.Y, c.Z, c.W))).ToArray();
+        //triangleBlock.Triangles = triangleBlock.Triangles.Concat(obj.Triangles.Select(t => t + triangleOffset)).ToArray();
         return idx;
     }
     public override int AddRenderDataToBlock(TriangleObject obj, CGameCtnMediaBlock block)
@@ -113,6 +144,48 @@ public abstract class TriangleRenderer : KeysRendererBase<TriangleObject>
         }
         return worldV;
     }
+
+}
+
+public enum ScreenPosition
+{
+    TOP,
+    BOTTOM,
+    LEFT,
+    RIGHT,
+    CENTER,
+    TOP_LEFT,
+    TOP_RIGHT,
+    BOTTOM_LEFT,
+    BOTTOM_RIGHT,
+}
+public static class ScreenPositionExtensions
+{
+
+    public static Vector3 DefaultScreenToVector3Function(ScreenPosition loc)
+    {
+        const float halfH = Triangle2DRenderer.DefaultOrthographicSize;
+        const float halfW = halfH * (16f / 9f);
+
+        return loc switch
+        {
+            ScreenPosition.TOP => new Vector3(0, halfH, 0),
+            ScreenPosition.BOTTOM => new Vector3(0, -halfH, 0),
+            ScreenPosition.LEFT => new Vector3(-halfW, 0, 0),
+            ScreenPosition.RIGHT => new Vector3(halfW, 0, 0),
+            ScreenPosition.CENTER => Vector3.Zero,
+            ScreenPosition.TOP_LEFT => new Vector3(-halfW, halfH, 0),
+            ScreenPosition.TOP_RIGHT => new Vector3(halfW, halfH, 0),
+            ScreenPosition.BOTTOM_LEFT => new Vector3(-halfW, -halfH, 0),
+            ScreenPosition.BOTTOM_RIGHT => new Vector3(halfW, -halfH, 0),
+            _ => throw new NotImplementedException()
+        };
+    }
+
+    public static Func<ScreenPosition, Vector3> ScreenToVector3Function = (s) => DefaultScreenToVector3Function(s);
+    public static Vector3 ToVector3(this ScreenPosition screenPos) => ScreenToVector3Function(screenPos);
+
+
 }
 
 /// <summary>
@@ -120,6 +193,23 @@ public abstract class TriangleRenderer : KeysRendererBase<TriangleObject>
 /// </summary>
 public class Triangle2DRenderer : TriangleRenderer
 {
+    public const float DefaultOrthographicSize = 10f;
+    public IRenderingCamera Camera { get; set; } = null!;
+    public bool IsOrthographic { get; set; } = true;
+    public float OrthographicSize { get; set; } = DefaultOrthographicSize;
+    public float AspectRatio { get; set; } = 16f / 9f;
+    public Triangle2DRenderer()
+    {
+        Camera = new CustomCameraObject()
+        {
+            Position = new Vector3(0, 0, 0),
+            Rotation = Quaternion.Identity,
+            FOV = 80f,
+            NearClipPlane = 0.05f,
+        };
+    }
+
+
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = MediaTrackerUtils.DeepCopyBlockTriangles2D(templates.Triangles2D);
@@ -127,75 +217,236 @@ public class Triangle2DRenderer : TriangleRenderer
         return block;
     }
 
-    static Matrix4x4 MediaTrackerTransformationMatrix =
-    Matrix4x4.CreateScale(1, (16f / 9f), 1) *
-    Matrix4x4.CreateTranslation(0, 0, 0);
+    //public static Matrix4x4 MediaTrackerTransformationMatrix =
+    //Matrix4x4.CreateScale(1, (16f / 9f), 1) *
+    //Matrix4x4.CreateTranslation(0, 0, 0);
 
-    private Matrix4x4 GetNDCTransformation(RenderData renderData)
-    {
-        var view = Matrix4x4.CreateLookAt(renderData.CameraPosition, renderData.CameraLookAt == default ? Vector3.UnitZ : renderData.CameraLookAt, Vector3.UnitY);
-        if (renderData.Mode == CameraMode.Orthographic)
-            return view * Matrix4x4.CreateOrthographic(renderData.ViewBox.X, renderData.ViewBox.Y, 0.01f, renderData.ViewBox.Z);
-        else
-            return view * Matrix4x4.CreatePerspectiveFieldOfView(renderData.FOV, renderData.ViewBox.X / renderData.ViewBox.Y, 0.001f, renderData.ViewBox.Z);
-    }
-    private Vector3 ApplyLocalNDCPostProcessingEffects(TriangleObject obj, Vector3 v)
-    {
-        foreach (var effect in obj.LocalNDCPostProcessingEffects)
-        {
-            v = effect.Transform(v);
-        }
-        return v;
-    }
-    private Vector3 ApplyGlobalNDCPostProcessingEffects(Vector3 ndcV, PostProcessingEffectData postProcessingEffectData)
-    {
+    //private Matrix4x4 GetNDCTransformation(RenderData renderData)
+    //{
+    //    var view = Matrix4x4.CreateLookAt(renderData.CameraPosition, renderData.CameraLookAt == default ? Vector3.UnitZ : renderData.CameraLookAt, Vector3.UnitY);
+    //    if (renderData.Mode == CameraMode.Orthographic)
+    //        return view * Matrix4x4.CreateOrthographic(renderData.ViewBox.X, renderData.ViewBox.Y, 0.01f, renderData.ViewBox.Z);
+    //    else
+    //        return view * Matrix4x4.CreatePerspectiveFieldOfView(renderData.FOV, renderData.ViewBox.X / renderData.ViewBox.Y, 0.001f, renderData.ViewBox.Z);
+    //}
+    //private Vector3 ApplyLocalNDCPostProcessingEffects(TriangleObject obj, Vector3 v)
+    //{
+    //    foreach (var effect in obj.LocalNDCPostProcessingEffects)
+    //    {
+    //        v = effect.Transform(v);
+    //    }
+    //    return v;
+    //}
+    //private Vector3 ApplyGlobalNDCPostProcessingEffects(Vector3 ndcV, PostProcessingEffectData postProcessingEffectData)
+    //{
 
-        if (postProcessingEffectData.NdcSpaceEffects.Length == 0)
-            return ndcV;
+    //    if (postProcessingEffectData.NdcSpaceEffects.Length == 0)
+    //        return ndcV;
 
-        foreach (var effect in postProcessingEffectData.NdcSpaceEffects.ToArray())
-        {
-            ndcV = effect.Transform(ndcV);
-        }
-        return ndcV;
-    }
+    //    foreach (var effect in postProcessingEffectData.NdcSpaceEffects.ToArray())
+    //    {
+    //        ndcV = effect.Transform(ndcV);
+    //    }
+    //    return ndcV;
+    //}
    
-    public override void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    public override void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
         var triangleKey = key as CGameCtnMediaBlockTriangles.Key;
         for (int i = 0; i < obj.Vertices.Length; ++i)
         {
-            var v = ToMediaTrackerCoordinates(obj, obj.Vertices[i], renderData, postProcessingEffectData);
+            var v = ToMediaTrackerCoordinates(obj, obj.Vertices[i], postProcessingEffectData);
             triangleKey.Positions[idx + i] = new Vec3(v.X, v.Y, v.Z);
         }
     }
 
-    protected virtual Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    //protected virtual Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    //{
+    //    // Local → World
+    //    var worldSpace = Vector3.Transform(vec3, obj.LocalToWorldTRS);
+    //    worldSpace = ApplyGlobalWorldSpacePostProcessingEffects(worldSpace, postProcessingEffectData);
+    //    worldSpace = ApplyLocalWorldSpacePostProcessingEffects(obj, worldSpace);
+
+    //    // World → Clip space
+    //    var ndcMatrix = GetNDCTransformation(renderData);
+    //    Vector4 clipSpace = Vector4.Transform(new Vector4(worldSpace, 1f), ndcMatrix);
+
+    //    // Perspective divide
+    //    Vector3 ndcSpace = new Vector3(clipSpace.X / clipSpace.W, clipSpace.Y / clipSpace.W, clipSpace.Z / clipSpace.W);
+
+    //    // Post-processing in NDC
+    //    ndcSpace = ApplyGlobalNDCPostProcessingEffects(ndcSpace, postProcessingEffectData);
+    //    ndcSpace = ApplyLocalNDCPostProcessingEffects(obj, ndcSpace);
+
+    //    // NDC → MediaTracker
+    //    var mediaTrackerSpace = Vector3.Transform(ndcSpace, MediaTrackerTransformationMatrix);
+
+    //    return mediaTrackerSpace;
+    //}
+
+    protected virtual Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, PostProcessingEffectData postProcessingEffectData)
     {
-        // Local → World
-        var worldSpace = Vector3.Transform(vec3, obj.LocalToWorldTRS);
-        worldSpace = ApplyGlobalWorldSpacePostProcessingEffects(worldSpace, postProcessingEffectData);
-        worldSpace = ApplyLocalWorldSpacePostProcessingEffects(obj, worldSpace);
+        Vector3 camPosition = Camera.GetPosition();
+        Quaternion camRotation = Camera.GetRotation();
 
-        // World → Clip space
-        var ndcMatrix = GetNDCTransformation(renderData);
-        Vector4 clipSpace = Vector4.Transform(new Vector4(worldSpace, 1f), ndcMatrix);
+        // GBX right-handed Y-up, identity = looking down +Z
+        Vector3 forward = Vector3.Transform(-Vector3.UnitZ, camRotation);  // was +UnitZ
+        Vector3 up = Vector3.Transform(Vector3.UnitY, camRotation);
+        Vector3 right = Vector3.Transform(Vector3.UnitX, camRotation);
 
-        // Perspective divide
-        Vector3 ndcSpace = new Vector3(clipSpace.X / clipSpace.W, clipSpace.Y / clipSpace.W, clipSpace.Z / clipSpace.W);
+        // --- View matrix (column-major for System.Numerics) ---
+        Matrix4x4 view = new Matrix4x4(
+             right.X, up.X, forward.X, 0,
+             right.Y, up.Y, forward.Y, 0,
+             right.Z, up.Z, forward.Z, 0,
+            -Vector3.Dot(right, camPosition),
+            -Vector3.Dot(up, camPosition),
+            -Vector3.Dot(forward, camPosition),
+            1
+        );
 
-        // Post-processing in NDC
-        ndcSpace = ApplyGlobalNDCPostProcessingEffects(ndcSpace, postProcessingEffectData);
-        ndcSpace = ApplyLocalNDCPostProcessingEffects(obj, ndcSpace);
+        /*  // --- Projection matrix Diagonal FOV (Editor Preview)---
+      float fovRad = cam.FOV * MathF.PI / 180f;
+      float aspect = 18.66f / 9f;
+      float near = cam.NearClipPlane;
+      float far = 10000f;
+      float tanHalfFov = MathF.Tan(fovRad / 2f);
 
-        // NDC → MediaTracker
-        var mediaTrackerSpace = Vector3.Transform(ndcSpace, MediaTrackerTransformationMatrix);
+      Matrix4x4 proj = new Matrix4x4(
+          1f / (aspect * tanHalfFov), 0, 0, 0,
+          0, 1f / tanHalfFov, 0, 0,
+          0, 0, (far + near) / (far - near), 1,  // RH +Z forward: no negation
+          0, 0, -(2f * far * near) / (far - near), 0
+      );
+      */
+        // --- Projection matrix ---
+        Matrix4x4 proj;
 
-        return mediaTrackerSpace;
+        if (IsOrthographic)
+        {
+            float orthoH = OrthographicSize;
+            float orthoW = orthoH * AspectRatio;
+            float near = -10000f; // hard coded for ortho
+            float far = 10000f;
+
+            proj = new Matrix4x4(
+                1f / orthoW, 0, 0, 0,
+                0, 1f / orthoH, 0, 0,
+                0, 0, 2f / (far - near), 0,
+                0, 0, -(far + near) / (far - near), 1
+            );
+        }
+        else
+        {
+            float fovRad = Camera.GetFOV() * MathF.PI / 180f;
+            float aspect = AspectRatio;
+            float near = Camera.GetNearClipPlane();
+            float far = 10000f;
+            float tanHalfFov = MathF.Tan(fovRad / 2f);
+
+            proj = new Matrix4x4(
+                1f / (aspect * tanHalfFov), 0, 0, 0,
+                0, 1f / tanHalfFov, 0, 0,
+                0, 0, (far + near) / (far - near), 1,
+                0, 0, -(2f * far * near) / (far - near), 0
+            );
+        }
+
+        Matrix4x4 viewProj = view * proj;
+
+        vec3 = Vector3.Transform(vec3, obj.LocalToWorldTRS);
+
+        // --- Transform vertex ---
+        float x = vec3.X * viewProj.M11 + vec3.Y * viewProj.M21 + vec3.Z * viewProj.M31 + viewProj.M41;
+        float y = vec3.X * viewProj.M12 + vec3.Y * viewProj.M22 + vec3.Z * viewProj.M32 + viewProj.M42;
+        float z = vec3.X * viewProj.M13 + vec3.Y * viewProj.M23 + vec3.Z * viewProj.M33 + viewProj.M43;
+        float w = vec3.X * viewProj.M14 + vec3.Y * viewProj.M24 + vec3.Z * viewProj.M34 + viewProj.M44;
+
+        if (MathF.Abs(w) < 1e-6f)
+            return new Vector3(float.NaN, float.NaN, 0f);
+
+        // --- Perspective divide -> NDC, already centered [-1,1] ---
+        float ndcX = x / w;
+        float ndcY = IsOrthographic ? -(y / w) : y / w;
+        float ndcZ = z / w; // [-1, 1] range after divide
+        float depthZ = (ndcZ + 1f) / 2f;
+
+        // MT origin = center, so NDC maps directly; apply MT matrix for aspect correction
+        Vector3 ndc = new Vector3(-ndcX, -ndcY, depthZ);
+        return ndc;
+    }
+
+    public Vector3 GetPosition(ScreenPosition loc, float depth = 1) => ToWorldCoordinates(loc switch
+    {
+        ScreenPosition.TOP => new Vector3(0, 1, 0),
+        ScreenPosition.BOTTOM => new Vector3(0, -1, 0),
+        ScreenPosition.LEFT => new Vector3(-1, 0, 0),
+        ScreenPosition.RIGHT => new Vector3(1, 0, 0),
+        ScreenPosition.CENTER => Vector3.Zero,
+        ScreenPosition.TOP_LEFT => new Vector3(-1, 1, 0),
+        ScreenPosition.TOP_RIGHT => new Vector3(1, 1, 0),
+        ScreenPosition.BOTTOM_LEFT => new Vector3(-1, -1, 0),
+        ScreenPosition.BOTTOM_RIGHT => new Vector3(1, -1, 0),
+        _ => throw new NotImplementedException()
+    });
+
+    public virtual Vector3 ToWorldCoordinates(Vector3 mtCoords, float worldDepth = 1f)
+    {
+        // Undo MT flips to get back to raw NDC
+        float ndcX = -mtCoords.X;
+        float ndcY = IsOrthographic ? -mtCoords.Y : -mtCoords.Y;  // same flip both cases TODO: maybe not?
+
+        Vector3 camPosition = Camera.GetPosition();
+        Quaternion camRotation = Camera.GetRotation();
+
+        Vector3 forward = Vector3.Transform(-Vector3.UnitZ, camRotation);
+        Vector3 up = Vector3.Transform(Vector3.UnitY, camRotation);
+        Vector3 right = Vector3.Transform(Vector3.UnitX, camRotation);
+
+        if (IsOrthographic)
+        {
+            float halfH = OrthographicSize;
+            float halfW = halfH * AspectRatio;
+
+            return camPosition
+                 + right * (ndcX * halfW)
+                 + up * (ndcY * halfH)
+                 + forward * worldDepth;
+        }
+        else
+        {
+            float fovRad = Camera.GetFOV() * MathF.PI / 180f;
+            float tanHalfFov = MathF.Tan(fovRad / 2f);
+            float aspect = AspectRatio;
+
+            Vector3 rayDir = Vector3.Normalize(
+                  forward
+                + right * (ndcX * aspect * tanHalfFov)
+                + up * (ndcY * tanHalfFov)
+            );
+
+            return camPosition + rayDir * worldDepth;
+        }
     }
 
 }
-
+public class ActiveCameraTriangle2DRenderer : Triangle2DRenderer
+{
+    SceneCameraManager _sceneCameraManager;
+    public ActiveCameraTriangle2DRenderer(SceneCameraManager sceneCameraManager)
+    {
+        _sceneCameraManager = sceneCameraManager;
+        IsOrthographic = false;
+    }
+    protected override Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, PostProcessingEffectData postProcessingEffectData)
+    {
+        if(_sceneCameraManager.ActiveCamera is IRenderingCamera renderingCamera)
+            this.Camera = renderingCamera;
+        else
+            this.Camera = null;
+        return base.ToMediaTrackerCoordinates(obj, vec3, postProcessingEffectData);
+    }
+}
 
 /// <summary>
 /// Renders TriangleObjects to 3DTriangles 
@@ -224,6 +475,7 @@ public class Triangle3DRenderer : TriangleRenderer
         _4,
         _8,
     }
+    public Vector3[] AdditionalEnsuranceVertices { get; init; } = [];
     public Ensurance EnsuranceMode { get; init; } = Ensurance._4;
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
@@ -255,7 +507,8 @@ public class Triangle3DRenderer : TriangleRenderer
             };
             triangleBlock.Vertices = [
                 ..triangleBlock.Vertices.Concat(obj.Colors.Select(c => new Vec4(c.X, c.Y, c.Z, c.W))).ToArray(),
-                ..Enumerable.Repeat(new Vec4(), ensuranceVerticesCount)];
+                ..Enumerable.Repeat(new Vec4(), ensuranceVerticesCount),
+                ..Enumerable.Repeat(new Vec4(), AdditionalEnsuranceVertices.Length)];
             triangleBlock.Triangles = triangleBlock.Triangles.Concat(obj.Triangles.Select(t => t + triangleOffset)).ToArray();
             return idx;
         }
@@ -264,12 +517,12 @@ public class Triangle3DRenderer : TriangleRenderer
             return base.AddRenderDataToBlock(obj, block);
         }   
     }
-    public override void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    public override void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
         var triangleKey = key as CGameCtnMediaBlockTriangles.Key;
         for (int i = 0; i < obj.Vertices.Length; ++i)
         {
-            var v = ToWorldCoordinates(obj, obj.Vertices[i], renderData, postProcessingEffectData);
+            var v = ToWorldCoordinates(obj, obj.Vertices[i], postProcessingEffectData);
             triangleKey.Positions[idx + i] = new Vec3(v.X, v.Y, v.Z);
         }
         if (RelativeToPlayer && EnsureVisibilityWhenRelativeToPlayer && idx == 0)
@@ -299,10 +552,19 @@ public class Triangle3DRenderer : TriangleRenderer
                     break;
                 default: throw new NotImplementedException();
             }
+            for (int i = 0; i < AdditionalEnsuranceVertices.Length; ++i)
+            {
+                triangleKey.Positions[idx + obj.Vertices.Length + EnsuranceMode switch
+                {
+                    Ensurance._4 => 4,
+                    Ensurance._8 => 8,
+                    _ => throw new NotImplementedException(),
+                } + i] = AdditionalEnsuranceVertices[i];
+            }
            
         }
     }
-    protected virtual Vector3 ToWorldCoordinates(TriangleObject obj, Vector3 vec3, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    protected virtual Vector3 ToWorldCoordinates(TriangleObject obj, Vector3 vec3, PostProcessingEffectData postProcessingEffectData)
     {
         // Local → World
         var worldSpace = Vector3.Transform(vec3, obj.LocalToWorldTRS);
@@ -333,20 +595,20 @@ public class PlayerCameraRenderer : ITwoKeyRenderer<PlayerCameraObject>
         return block;
     }
 
-    public void SetDataToEnd(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData)
-        => SetDataToStart((PlayerCameraObject)obj, block, renderData);
+    public void SetDataToEnd(MediaObject obj, CGameCtnMediaBlock block)
+        => SetDataToStart((PlayerCameraObject)obj, block);
 
-    public void SetDataToEnd(PlayerCameraObject obj, CGameCtnMediaBlock block, RenderData renderData)
+    public void SetDataToEnd(PlayerCameraObject obj, CGameCtnMediaBlock block)
     {
         var cameraBlock = block as CGameCtnMediaBlockCameraGame;
         cameraBlock.GameCam = obj.CameraType;
     }
 
 
-    public void SetDataToStart(MediaObject obj, CGameCtnMediaBlock block, RenderData renderData)
-        => SetDataToStart((PlayerCameraObject)obj, block, renderData);
+    public void SetDataToStart(MediaObject obj, CGameCtnMediaBlock block)
+        => SetDataToStart((PlayerCameraObject)obj, block);
 
-    public void SetDataToStart(PlayerCameraObject obj, CGameCtnMediaBlock block, RenderData renderData)
+    public void SetDataToStart(PlayerCameraObject obj, CGameCtnMediaBlock block)
     {
         var cameraBlock = block as CGameCtnMediaBlockCameraGame;
         cameraBlock.GameCam = obj.CameraType;
@@ -362,7 +624,7 @@ public class DepthOfFieldRenderer : KeysRendererBase<DepthOfFieldObject>
         block.Keys.Clear();
         return block;
     }
-    public override void SetKeyFrameData(DepthOfFieldObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    public override void SetKeyFrameData(DepthOfFieldObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
         var dofKey = key as CGameCtnMediaBlockDOF.Key;
         dofKey.ZFocus = obj.FocusDistance;
@@ -386,6 +648,8 @@ public class DepthOfFieldRenderer : KeysRendererBase<DepthOfFieldObject>
         return 0;
     }
 }
+
+
 public class CustomCameraRenderer : KeysRendererBase<CustomCameraObject>
 {
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
@@ -394,7 +658,7 @@ public class CustomCameraRenderer : KeysRendererBase<CustomCameraObject>
         block.Keys.Clear();
         return block;
     }
-    public override void SetKeyFrameData(CustomCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
+    public override void SetKeyFrameData(CustomCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
         var camKey = key as CGameCtnMediaBlockCameraCustom.Key;
         camKey.Position = obj.Position;
@@ -435,6 +699,72 @@ public class CustomCameraRenderer : KeysRendererBase<CustomCameraObject>
         => false;
 
     public override int AddRenderDataToBlock(CustomCameraObject obj, CGameCtnMediaBlock block)
+    {
+        return 0;
+    }
+}
+public class PathCameraRenderer : KeysRendererBase<PathCameraObject>
+{
+    public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
+    {
+        var block = templates.GetEmptyCustomCameraBlock();
+        block.Keys.Clear();
+        return block;
+    }
+    public override void SetKeyFrameData(PathCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
+    {
+        var camKey = key as CGameCtnMediaBlockCameraPath.Key;
+        camKey.Position = obj.Position;
+        camKey.PitchYawRoll = obj.Rotation.ToPitchYawRoll();
+        camKey.Anchor = obj.Anchor;
+        camKey.AnchorVis = obj.AnchorVisibility;
+        camKey.AnchorRot = obj.AnchorRotation;
+        camKey.Fov = obj.FOV;
+        camKey.Weight = obj.Weight;
+        camKey.NearZ = obj.NearClipPlane;
+        camKey.Target = obj.Target;
+        camKey.TargetPosition = obj.TargetPosition;
+    }
+    public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
+    {
+        var key = new CGameCtnMediaBlockCameraPath.Key();
+        (block as CGameCtnMediaBlockCameraPath).Keys.Add(key);
+        return key;
+    }
+    public override bool CanShareBlockWith(PathCameraObject obj, MediaObject other)
+        => false;
+
+    public override int AddRenderDataToBlock(PathCameraObject obj, CGameCtnMediaBlock block)
+    {
+        return 0;
+    }
+}
+public class OrbitalCameraRenderer : KeysRendererBase<OrbitalCameraObject>
+{
+    public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
+    {
+        var block = templates.GetEmptyCustomCameraBlock();
+        block.Keys.Clear();
+        return block;
+    }
+    public override void SetKeyFrameData(OrbitalCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
+    {
+        var camKey = key as CGameCtnMediaBlockCameraOrbital.Key;
+        camKey.TargetPosition = obj.TargetPosition;
+        camKey.Radius = obj.Radius;
+        camKey.Fov = obj.FOV;
+        camKey.Longitude = obj.Longitude;
+        camKey.Latitude = obj.Latitude;
+    }
+    public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
+    {
+        var key = new CGameCtnMediaBlockCameraOrbital.Key();
+        (block as CGameCtnMediaBlockCameraOrbital).Keys.Add(key);
+        return key;
+    }
+    public override bool CanShareBlockWith(OrbitalCameraObject obj, MediaObject other)
+        => false;
+    public override int AddRenderDataToBlock(OrbitalCameraObject obj, CGameCtnMediaBlock block)
     {
         return 0;
     }

@@ -8,6 +8,7 @@ public static class Conversion
     public static Vector3 V3(float v) => new Vector3(v);
     public static Vector3 V3(Vector2 v) => v.ToVector3();
     public static Vector3 V3(Vector2 v, float z) => V3(v.X, v.Y, z);
+    public static Vector3 V3(float x, float y) => new Vector3(x, y, 0);
 
     /// <summary>
     /// Parses copied positions from Editor++

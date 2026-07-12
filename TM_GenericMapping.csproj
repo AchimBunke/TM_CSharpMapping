@@ -9,7 +9,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
     <PackageId>TM_CSharpMapping</PackageId>
-    <Version>0.2.5</Version>
+    <Version>0.2.9</Version>
     <Authors>Achim Bunke</Authors>
     <Description>CSharp library for Trackmania map and MediaTracker editing.</Description>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -22,25 +22,35 @@
 
   <ItemGroup>
     <PackageReference Include="DirectXTexNet" Version="1.0.7" />
-    <PackageReference Include="GBX.NET" Version="2.4.2" />
+    <PackageReference Include="GBX.NET" Version="2.4.3" />
     <PackageReference Include="GBX.NET.LZO" Version="2.1.5" />
     <PackageReference Include="GBX.NET.ZLib" Version="1.1.2" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.2" />
     <PackageReference Include="Unofficial.LibTessDotNet" Version="2.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Blocks\" />
-    <Folder Include="licenses\" />
   </ItemGroup>
   
   <ItemGroup>
     <EmbeddedResource Include="Templates\*.Gbx" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <EmbeddedResource Include="Templates\icons-24.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="LICENSE" Pack="true" PackagePath="\" />
     <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Templates\TriggerItemTemplate.Item.Gbx">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

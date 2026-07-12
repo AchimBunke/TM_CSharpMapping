@@ -9,6 +9,11 @@ public enum MediaTrackType
     Triangles3D,
     Triangles2D,
     Image,
+    CustomCamera,
+    PathCamera,
+    OrbitalCamera,
+    PlayerCamera,
+    DepthOfField,
     NotSupported
 }
 public class MediaTrack
@@ -31,6 +36,11 @@ public class MediaTrack
                 CGameCtnMediaBlockTriangles3D => MediaTrackType.Triangles3D,
                 CGameCtnMediaBlockImage => MediaTrackType.Image,
                 CGameCtnMediaBlockText => MediaTrackType.Text,
+                CGameCtnMediaBlockCameraCustom => MediaTrackType.CustomCamera,
+                CGameCtnMediaBlockCameraPath => MediaTrackType.PathCamera,
+                CGameCtnMediaBlockCameraOrbital => MediaTrackType.OrbitalCamera,
+                CGameCtnMediaBlockCameraGame => MediaTrackType.PlayerCamera,
+                CGameCtnMediaBlockDOF => MediaTrackType.DepthOfField,
                 _ => MediaTrackType.NotSupported,
             };
         }

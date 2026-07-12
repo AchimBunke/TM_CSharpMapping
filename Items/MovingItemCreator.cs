@@ -124,8 +124,8 @@ public class MovingItemCreator
         kinematicTarget.ShaderTcType = kinematicSource.ShaderTcType;
         kinematicTarget.ShaderTcVersion = kinematicSource.ShaderTcVersion;
 
-        kinematicTarget.RotAnimFunc = ItemExtensions.DeepCloneObject(kinematicSource.RotAnimFunc);
-        kinematicTarget.TransAnimFunc = ItemExtensions.DeepCloneObject(kinematicSource.TransAnimFunc);
+        kinematicTarget.RotAnimFunc = ObjectCloner.DeepCloneObject(kinematicSource.RotAnimFunc);
+        kinematicTarget.TransAnimFunc = ObjectCloner.DeepCloneObject(kinematicSource.TransAnimFunc);
 
     }
     void ChangeAnimations(CGameItemModel movingItem)

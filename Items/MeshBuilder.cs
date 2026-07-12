@@ -21,27 +21,37 @@ public class MeshBuilder
     const string MovingItemTemplatePath = @"MovingItemTemplate.Item.Gbx";
     const string EntityModelEditionTemplatePath = @"EntityModelEditionTemplate.Item.Gbx";
     const string EntityModelTemplatePath = @"EntityModelTemplate.Item.Gbx";
+    const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
 
     CGameItemModel movingItemTemplate;
     CGameItemModel entityModelEditionTemplate;
     CGameItemModel entityModelTemplate;
+    CGameItemModel triggerItemTemplate;
 
-    CGameCommonItemEntityModel CommonItemEntityModelTemplate => (entityModelTemplate.EntityModel as CGameCommonItemEntityModel);
+    CGameItemModel MovingItemTemplate => (movingItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(MovingItemTemplatePath)));
+    CGameItemModel EntityModelEditionTemplate => (entityModelEditionTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelEditionTemplatePath)));
+    CGameItemModel EntityModelTemplate => (entityModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelTemplatePath)));
+    CGameItemModel TriggerItemTemplate => (triggerItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerItemTemplatePath)));
+
+    CGameCommonItemEntityModel CommonItemEntityModelTemplate => (EntityModelTemplate.EntityModel as CGameCommonItemEntityModel);
     CPlugSolid2Model Solid2ModelTemplate => (CommonItemEntityModelTemplate.StaticObject.Mesh);
     CPlugVisualIndexedTriangles IndexedTrianglesTemplate => (Solid2ModelTemplate.Visuals[0] as CPlugVisualIndexedTriangles);
     CPlugVertexStream VertexStreamTemplate => IndexedTrianglesTemplate.VertexStreams[0];
     CPlugIndexBuffer IndexBufferTemplate => IndexedTrianglesTemplate.IndexBuffer;
-    CGameItemPlacementParam PlacementParamTemplate => entityModelEditionTemplate.DefaultPlacement;
+    CGameItemPlacementParam PlacementParamTemplate => EntityModelEditionTemplate.DefaultPlacement;
 
-    CGameCommonItemEntityModelEdition CommonItemEntityModelEditionTemplate => (entityModelEditionTemplate.EntityModelEdition as CGameCommonItemEntityModelEdition);
+    CGameCommonItemEntityModelEdition CommonItemEntityModelEditionTemplate => (EntityModelEditionTemplate.EntityModelEdition as CGameCommonItemEntityModelEdition);
     CPlugCrystal MeshCrystalTemplate => CommonItemEntityModelEditionTemplate.MeshCrystal;
     CPlugCrystal.GeometryLayer LayerTemplate => MeshCrystalTemplate.Layers[0] as CPlugCrystal.GeometryLayer;
     CPlugCrystal.Crystal CrystalTemplate => LayerTemplate.Crystal;
 
-    CPlugPrefab CPlugPrefabTemplate => (movingItemTemplate.EntityModel as CPlugPrefab);
-    CPlugDynaObjectModel DynaObjectModelTemplate => ItemExtensions.TryGetDynaObjectModel(movingItemTemplate, out var dyna) ? dyna : null;
+    CPlugPrefab CPlugPrefabTemplate => (MovingItemTemplate.EntityModel as CPlugPrefab);
+    CPlugDynaObjectModel DynaObjectModelTemplate => ItemExtensions.TryGetDynaObjectModel(MovingItemTemplate, out var dyna) ? dyna : null;
     CPlugSurface SurfaceTemplate => DynaObjectModelTemplate.DynaShape;
     CPlugSurface.Mesh SurfaceMeshTemplate => SurfaceTemplate.Surf as CPlugSurface.Mesh;
+
+    CPlugStaticObjectModel StaticObjectModelTemplate => ItemExtensions.TryGetStaticObjectModel(TriggerItemTemplate, out var staticObj) ? staticObj : null;
+    NPlugTrigger_SSpecial TriggerSpecialTemplate => ItemExtensions.TryGetTriggerSpecial(TriggerItemTemplate, out var triggerSpecial) ? triggerSpecial : null;
 
 
     Ident ident;
@@ -50,9 +60,6 @@ public class MeshBuilder
     public MeshBuilder() : this(new()) { }
     public MeshBuilder(MeshBuilderSettings settings)
     {
-        movingItemTemplate = Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(MovingItemTemplatePath));
-        entityModelEditionTemplate = Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelEditionTemplatePath));
-        entityModelTemplate = Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelTemplatePath));
         _settings = settings;
         ident = new Ident("", 26, _settings.Author ?? "");
     }
@@ -65,10 +72,10 @@ public class MeshBuilder
     // If dynamic needs a convex hull later, that's a separate concern
     public CPlugSurface BuildSurface(NormalizedMesh mesh)
     {
-        var surface = ItemExtensions.DeepCloneObject(SurfaceTemplate);
+        var surface = ObjectCloner.DeepCloneObject(SurfaceTemplate);
 
 
-        var surfMesh = ItemExtensions.DeepCloneObject(SurfaceMeshTemplate);
+        var surfMesh = ObjectCloner.DeepCloneObject(SurfaceMeshTemplate);
 
         // merge all submesh positions and indices into one surface
         var allPositions = new List<Vec3>();
@@ -106,8 +113,28 @@ public class MeshBuilder
     // Same mesh for both — simplest valid approach for dynamic too
     // Replace with convex hull later if physics behavior needs it
     public CPlugSurface BuildDynaSurface(NormalizedMesh mesh)
-        => BuildSurface(mesh);
- 
+    {
+        return mesh.SourceData switch
+        {
+            CPlugDynaObjectModel dynaModel when dynaModel.DynaShape != null => ObjectCloner.DeepCloneObject(dynaModel.DynaShape),
+            CPlugDynaObjectModel dynaModel when dynaModel.StaticShape != null => ObjectCloner.DeepCloneObject(dynaModel.StaticShape),
+            CPlugStaticObjectModel staticModel when staticModel.Shape != null => ObjectCloner.DeepCloneObject(staticModel.Shape),
+            _ => BuildSurface(mesh)
+        };
+
+    }
+    public CPlugSurface BuildStaticSurface(NormalizedMesh mesh)
+    {
+        return mesh.SourceData switch
+        {
+            CPlugDynaObjectModel dynaModel when dynaModel.StaticShape != null => ObjectCloner.DeepCloneObject(dynaModel.StaticShape),
+            CPlugStaticObjectModel staticModel when staticModel.Shape != null => ObjectCloner.DeepCloneObject(staticModel.Shape),
+            CPlugDynaObjectModel dynaModel when dynaModel.DynaShape != null => ObjectCloner.DeepCloneObject(dynaModel.DynaShape),
+            _ => BuildSurface(mesh)
+        };
+
+    }
+
 
     // ─────────────────────────────────────────────
     // Solid2Model — Option A: mutate existing
@@ -129,7 +156,8 @@ public class MeshBuilder
             visuals.Add(indexedTriangles);
             materials.Add(new CPlugSolid2Model.Material
             {
-                MaterialUserInst = submesh.Material
+                MaterialUserInst = submesh.Material,
+                MaterialName = submesh.Material.MaterialName
             });
             shadedGeom.Add(new CPlugSolid2Model.ShadedGeom
             {
@@ -156,9 +184,9 @@ public class MeshBuilder
         // otherwise construct empty (may be missing required chunks)
         CPlugSolid2Model solid;
         if (mesh.SourceData is CPlugSolid2Model source)
-            return ItemExtensions.DeepCloneObject(source);// immediate return
+            return ObjectCloner.DeepCloneObject(source);// immediate return
         else
-            solid = ItemExtensions.DeepCloneObject(Solid2ModelTemplate);
+            solid = ObjectCloner.DeepCloneObject(Solid2ModelTemplate);
 
         PopulateSolid2Model(solid, mesh);
 
@@ -174,7 +202,7 @@ public class MeshBuilder
     {
         target.Mesh = BuildSolid2Model(mesh);
         target.DynaShape = BuildDynaSurface(mesh);
-        target.StaticShape = BuildSurface(mesh);
+        target.StaticShape = BuildStaticSurface(mesh);
     }
 
     // Option B: build new DynaObjectModel using target as chunk donor
@@ -182,11 +210,32 @@ public class MeshBuilder
     {
         CPlugDynaObjectModel dyna;
         if (mesh.SourceData is CPlugDynaObjectModel source)
-            dyna = ItemExtensions.DeepCloneObject(source);
+            dyna = ObjectCloner.DeepCloneObject(source);
         else
-            dyna = ItemExtensions.DeepCloneObject(DynaObjectModelTemplate);
+            dyna = ObjectCloner.DeepCloneObject(DynaObjectModelTemplate);
         PopulateDynaObjectModel(dyna, mesh);
         return dyna;
+    }
+
+
+    // StaticObjectModel
+    // ─────────────────────────────────────────────
+
+    public void PopulateStaticObjectModel(CPlugStaticObjectModel target, NormalizedMesh mesh)
+    {
+        target.Mesh = BuildSolid2Model(mesh);
+        target.Shape = BuildStaticSurface(mesh);
+    }
+
+    public CPlugStaticObjectModel BuildStaticObjectModel(NormalizedMesh mesh)
+    {
+        CPlugStaticObjectModel staticObj;
+        if (mesh.SourceData is CPlugStaticObjectModel source)
+            staticObj = ObjectCloner.DeepCloneObject(source);
+        else
+            staticObj = ObjectCloner.DeepCloneObject(StaticObjectModelTemplate);
+        PopulateStaticObjectModel(staticObj, mesh);
+        return staticObj;
     }
 
     // ─────────────────────────────────────────────
@@ -196,9 +245,9 @@ public class MeshBuilder
     {
         CPlugCrystal crystal;
         if (mesh.SourceData is CPlugCrystal source)
-            crystal = ItemExtensions.DeepCloneObject(source);
+            crystal = ObjectCloner.DeepCloneObject(source);
         else
-            crystal = ItemExtensions.DeepCloneObject(MeshCrystalTemplate);
+            crystal = ObjectCloner.DeepCloneObject(MeshCrystalTemplate);
 
         PopulateMeshCrystal(crystal, mesh);
         return crystal;
@@ -245,7 +294,7 @@ public class MeshBuilder
         if (subMesh.Colors is not null)
             colors[0] = subMesh.Colors;
 
-        var vertexStream = ItemExtensions.DeepCloneObject(VertexStreamTemplate);
+        var vertexStream = ObjectCloner.DeepCloneObject(VertexStreamTemplate);
         vertexStream.Positions = subMesh.Positions.ToArray();
         vertexStream.Normals = subMesh.Normals.ToArray();
         vertexStream.UVs = uvs;
@@ -305,20 +354,26 @@ public class MeshBuilder
         {
             var tangentUs = typeof(CPlugVertexStream).GetField("tangentUs",
                BindingFlags.NonPublic | BindingFlags.Instance);
-            tangentUs?.SetValue(vertexStream, subMesh.TangentUs);
+            if(subMesh.TangentUs != null)
+                tangentUs?.SetValue(vertexStream, subMesh.TangentUs);
+            else
+                tangentUs?.SetValue(vertexStream, new Vec3[uv0.Length]);
         }
         if (uvs.TryGetValue(1, out var uv1))
         {
             var tangentVs = typeof(CPlugVertexStream).GetField("tangentVs",
                BindingFlags.NonPublic | BindingFlags.Instance);
-            tangentVs?.SetValue(vertexStream, subMesh.TangentVs);
+            if(subMesh.TangentVs != null)
+                tangentVs?.SetValue(vertexStream, subMesh.TangentVs);
+            else
+                tangentVs?.SetValue(vertexStream, new Vec3[uv1.Length]);
         }
 
-        var indexBuffer = ItemExtensions.DeepCloneObject(IndexBufferTemplate);
+        var indexBuffer = ObjectCloner.DeepCloneObject(IndexBufferTemplate);
         indexBuffer.Indices = subMesh.Indices.ToArray();
         indexBuffer.Flags = 2;
 
-        var indexedTriangles = ItemExtensions.DeepCloneObject(IndexedTrianglesTemplate);
+        var indexedTriangles = ObjectCloner.DeepCloneObject(IndexedTrianglesTemplate);
         indexedTriangles.VertexStreams = [vertexStream];
         indexedTriangles.IndexBuffer = indexBuffer;
         if (TryGetBoundingBox(mesh, out var bb))
@@ -339,10 +394,10 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     CPlugCrystal.GeometryLayer BuildLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material)
     {
-        var layer = ItemExtensions.DeepCloneObject(LayerTemplate);
+        var layer = ObjectCloner.DeepCloneObject(LayerTemplate);
         layer.LayerName = "Geometry";
 
-        var crystal = ItemExtensions.DeepCloneObject(CrystalTemplate);
+        var crystal = ObjectCloner.DeepCloneObject(CrystalTemplate);
         crystal.Positions = submesh.Positions;
 
         var group = crystal.Groups[0];
@@ -360,6 +415,10 @@ public class MeshBuilder
                 var idx = submesh.Indices[i + v];
                 var texCoord = submesh.TexCoords?[idx] ?? Vec2.Zero;
                 var lightmap = submesh.LightmapCoords?[idx] ?? Vec2.Zero;
+
+                // always quantizing lightmap coord because gbx reader/writer also always does this
+                lightmap = QuantizeLightmapCoord(lightmap);
+
                 vertices[v] = new CPlugCrystal.Vertex(idx, texCoord, lightmap);
             }
 
@@ -371,6 +430,26 @@ public class MeshBuilder
         return layer;
     }
 
+    public void PopulateTriggerSpecial(NPlugTrigger_SSpecial target, NormalizedMesh mesh, int surfaceMeshIndex = 0)
+    {
+        var surfaceMesh = mesh.Submeshes[Math.Clamp(surfaceMeshIndex, 0, mesh.Submeshes.Length - 1)].AsMesh();
+        var surface = BuildSurface(surfaceMesh);
+        surface.Surf!.GameplayMainDir = new Vec3(0, 0, 1);
+        target.TriggerShape = surface;
+    }
+    public NPlugTrigger_SSpecial BuildTriggerSpecial(NormalizedMesh mesh, LegacyGameplayId gameplayId, int surfaceMeshIndex = 0)
+    {
+        NPlugTrigger_SSpecial triggerSpecial = ObjectCloner.DeepCloneObject(TriggerSpecialTemplate);
+        if (mesh.SurfaceData != null && mesh.SurfaceData is CPlugSurface sourceSurface)
+            triggerSpecial.TriggerShape = ObjectCloner.DeepCloneObject(mesh.SurfaceData);
+        else
+            PopulateTriggerSpecial(triggerSpecial, mesh, surfaceMeshIndex);
+
+        ItemTriggerEffectConverter.ConvertEffect(gameplayId, triggerSpecial);
+
+        return triggerSpecial;
+    }
+
     // ─────────────────────────────────────────────
     // other helpers
     // ─────────────────────────────────────────────
@@ -378,7 +457,7 @@ public class MeshBuilder
     {
         if(mesh.PlacementParam != null)
             return mesh.PlacementParam;
-        var placementParam = ItemExtensions.DeepCloneObject(PlacementParamTemplate);
+        var placementParam = ObjectCloner.DeepCloneObject(PlacementParamTemplate);
         placementParam.AutoRotation = false;
         placementParam.CubeCenter = (0, 0, 0);
         placementParam.CubeSize = 0;
@@ -424,19 +503,6 @@ public class MeshBuilder
         return false;
     }
 
-    void CopyAllPublicProperties(object source, object target)
-    {
-        var properties = source.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public);
-        foreach (var property in properties)
-        {
-            if (property.CanRead && property.CanWrite)
-            {
-                var value = property.GetValue(source);
-                property.SetValue(target, value);
-            }
-        }
-    }
-
 
     void FillItemDataFromMesh(CGameItemModel item, NormalizedMesh mesh)
     {
@@ -445,13 +511,20 @@ public class MeshBuilder
         item.Description = "No Description";
         item.Ident = ident;
         item.DefaultPlacement = BuildPlacementParam(mesh);
+        if(item.EntityModel is CPlugPrefab prefab)
+            prefab.FileWriteTime = DateTime.Now;
+        
     }
 
-
+    Vec2 QuantizeLightmapCoord(Vec2 coord)
+    {
+        return new Vec2((ushort)MathF.Round(coord.X * ushort.MaxValue) / (float)ushort.MaxValue, 
+            (ushort)MathF.Round(coord.Y * ushort.MaxValue) / (float)ushort.MaxValue);
+    }
 
     public CGameItemModel BuildSolid2ModelItem(NormalizedMesh mesh)
     {
-        var item = ItemExtensions.DeepCloneObject(entityModelTemplate);
+        var item = ObjectCloner.DeepCloneObject(EntityModelTemplate);
         (item.EntityModel as CGameCommonItemEntityModel).StaticObject.Mesh = BuildSolid2Model(mesh);
         FillItemDataFromMesh(item, mesh);
         return item;
@@ -459,7 +532,7 @@ public class MeshBuilder
 
     public CGameItemModel BuildCrystalItem(NormalizedMesh mesh)
     {
-        var item = ItemExtensions.DeepCloneObject(entityModelEditionTemplate);
+        var item = ObjectCloner.DeepCloneObject(EntityModelEditionTemplate);
         (item.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal = BuildCrystal(mesh);
         FillItemDataFromMesh(item, mesh);
         return item;
@@ -467,14 +540,24 @@ public class MeshBuilder
 
     public CGameItemModel BuildMovingItem(NormalizedMesh mesh)
     {
-        var item = ItemExtensions.DeepCloneObject(movingItemTemplate);
+        var item = ObjectCloner.DeepCloneObject(MovingItemTemplate);
         ItemExtensions.TryGetDynaModelEntRef(item, out var entRef);
         entRef.Model = BuildDynaObjectModel(mesh);
         FillItemDataFromMesh(item, mesh);
         return item;
     }
- 
 
+    public CGameItemModel BuildTriggerSpecialItem(NormalizedMesh mesh, LegacyGameplayId gameplayId, int surfaceMeshIndex = 0)
+    {
+        var item = ObjectCloner.DeepCloneObject(TriggerItemTemplate);
+        ItemExtensions.TryGetStaticModelEntRef(item, out var entRef);
+        entRef.Model = BuildStaticObjectModel(mesh);
+        ItemExtensions.TryGetTriggerSpecialEntRef(item, out var triggerSpecialEntRef);
+        triggerSpecialEntRef.Model = BuildTriggerSpecial(mesh, gameplayId, surfaceMeshIndex);
+        item.Chunks.Get<CGameItemModel.Chunk2E00201F>().U08 = 0;
+        FillItemDataFromMesh(item, mesh);
+        return item;
+    }
 
 
 }

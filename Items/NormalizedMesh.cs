@@ -25,8 +25,12 @@ public class NormalizedSubmesh
             Submeshes = [this],
         };
     }
-
-
+}
+public enum SurfaceType
+{
+    None,
+    Special,
+    Waypoint,
 }
 public class NormalizedMesh
 {
@@ -34,6 +38,8 @@ public class NormalizedMesh
     public NormalizedSubmesh[] Submeshes { get; set; } = [];
 
     public object? SourceData { get; set; } // Data where this data comes from
+    public CPlugSurface? SurfaceData { get; set; }
+    public SurfaceType SurfaceType { get; set; }
     public CGameItemPlacementParam? PlacementParam { get; set; }
     public byte[]? IconWebP { get; set; }
     public Color[,]? Icon { get; set; }

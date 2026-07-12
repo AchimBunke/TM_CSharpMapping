@@ -32,6 +32,8 @@ public interface IAABB
     Bounds GetAABB();
 }
 
+
+
 /// <summary>
 /// Only modify Triangles/Vertices/Colors directly if you know what your doing.
 /// </summary>
@@ -107,6 +109,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
     {
         Name = "TriangleObject";
     }
+
 
     public TriangleObject(TriangleObject other) : base(other)
     {
@@ -348,7 +351,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
     protected virtual void CreateOutlineShape(ReadOnlySpan<Vector3> points, Color outlineColor, OutlineExtendsDirection extendsOutwards, bool uniqueVertices,  out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
     {
         ShapeUtils.GenerateClosedPolygonOutline(points, OutlineWidth, extendsOutwards, out var outlineVertices, out var outlineTriangles);
-        var vertArray = outlineVertices.ToArray();
+        var vertArray = outlineVertices.Select(v => v + new Vector3(0, 0, TrianglesUtils.SafeClippingOffset)).ToArray();
         var trisArray = outlineTriangles.ToArray();
         ShapeUtils.EnsureConsistentWinding(vertArray, trisArray);
         if (uniqueVertices)
@@ -465,37 +468,8 @@ public class TriangleGroup : TriangleObject
         return ShapeUtils.CombineAABB(SubObjects.Where(o => o is IAABB).Cast<IAABB>().Select(o => o.GetAABB()).ToArray());
     }
 }
-[Obsolete]
-public abstract class CompositeTriangle2DObject : TriangleObject
-{
-    protected List<TriangleObject> Parts { get; init; } = [];
-    private Dictionary<TriangleObject, int> PartsToVerticesCount { get; } = [];
-    //public override int AddRenderDataToBlock(CGameCtnMediaBlock block)
-    //{
-    //    int vertexCount = (block as CGameCtnMediaBlockTriangles2D).Vertices.Length;
-    //    int idxOffset = 0;
-    //    foreach (var part in Parts)
-    //    {
-    //        part.AddRenderDataToBlock(block);
-    //        PartsToVerticesCount[part] = idxOffset;
-    //        idxOffset += part.Vertices.Length;
-    //    }
-    //    return vertexCount;
-    //}
-    //public override void SetKeyFrameData(CGameCtnMediaBlock block, IKey key, int idx, RenderData renderData, PostProcessingEffectData postProcessingEffectData)
-    //{
-    //    foreach (var part in Parts) 
-    //    {
-    //        part.SetParent(this);
-    //        part.SetKeyFrameData(block, key, idx + PartsToVerticesCount[part], renderData, postProcessingEffectData);
-    //    }
-    //}
-    public override Bounds GetAABB()
-    {
-        return ShapeUtils.CombineAABB(Parts.Select(p => p.GetAABB()).ToArray());
-    }
 
-}
+
 public class Rectangle : TriangleObject
 {
     public float Width { get; init; }
@@ -514,6 +488,7 @@ public class Rectangle : TriangleObject
         bool withFill = true,
         bool filled = true,
         float outlineWidth = 0.1f,
+        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         bool uniqueVertices = false,
         IKeysRenderer renderer = null!) : base(
             points: new Vector3[] { new Vector3(-width / 2f, -height / 2f, 0), new Vector3(width / 2f, -height / 2f, 0), new Vector3(width / 2f, height / 2f, 0), new Vector3(-width / 2f, height / 2f, 0) },
@@ -523,6 +498,7 @@ public class Rectangle : TriangleObject
             withFill: withFill,
             filled: filled,
             outlineWidth: outlineWidth,
+            outlineExtends: outlineExtends,
             uniqueVertices: uniqueVertices,
             renderer: renderer)
     {
@@ -546,6 +522,7 @@ public class Square : Rectangle
         bool withFill = true,
         bool filled = true,
         float outlineWidth = 0.1f,
+        OutlineExtendsDirection outlineExtends = OutlineExtendsDirection.Outwards,
         bool uniqueVertices = false,
         IKeysRenderer renderer = null!) : base(
             width: size,
@@ -555,6 +532,7 @@ public class Square : Rectangle
             withOutline: withOutline,
             withFill: withFill,
             filled: filled,
+            outlineExtends: outlineExtends,
             outlineWidth: outlineWidth,
             uniqueVertices: uniqueVertices,
             renderer: renderer)
@@ -683,7 +661,7 @@ public class TestObject : TriangleObject
     public TestObject() : base(testPoints, outlineColor: Color.Magenta, withOutline: true, withFill: true, filled: true, outlineWidth: 0.1f, uniqueVertices: false)
     {
     }
-    public void LogStringCoordinates(RenderData renderData)
+    public void LogStringCoordinates()
     {
         StringBuilder sb = new();
         sb.AppendLine($"------ {Name} ------");
@@ -722,6 +700,7 @@ public class Line : TriangleObject
 {
     public bool IsClosed { get; init; } = false;
     Vector3? FallbackNormal { get; init; } = null;
+    OutlineExtendsDirection ExtendsDirection { get; init; } = OutlineExtendsDirection.Bidirectional;
     public Line(ReadOnlySpan<Vector3> points,
         Color? color = null,
         Vector3? fallbackNormal = null,
@@ -732,9 +711,9 @@ public class Line : TriangleObject
         IKeysRenderer renderer = null!) 
         : base(
             points: points,
-            outlineColor: color,
-            withOutline: true,
-            withFill: false,
+            fillColor: color,
+            withOutline: false,
+            withFill: true,
             outlineExtends: extendsDirection,
             outlineWidth: width,
             uniqueVertices: uniqueVertices,
@@ -744,31 +723,33 @@ public class Line : TriangleObject
         ExceptionUtils.Ensure(!closed || (closed && points.Length >= 3), () => new ArgumentException("Closed Line must have at least 3 points"));
         Name = "Line";
         IsClosed = closed;
+        ExtendsDirection = extendsDirection;
         FallbackNormal = fallbackNormal;
 
         ShapePoints = points.ToArray();
-        CreateShape(ShapePoints, Color.Black, color ?? Color.Black);
+        CreateShape(ShapePoints, color ?? Color.Black, color ?? Color.Black);
+
     }
-    protected override void CreateOutlineShape(ReadOnlySpan<Vector3> points, Color outlineColor, OutlineExtendsDirection extendsOutwards, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
+    protected override void CreateFilledShape(ReadOnlySpan<Vector3> points, ReadOnlySpan<Vector4> fillColors, bool uniqueVertices, out List<Vector3> vertices, out List<Int3> triangles, out List<Vector4> colors)
     {
         List<Vector3> outlineVertices;
         List<Int3> outlineTriangles;
         if (IsClosed)
         {
-            ShapeUtils.GenerateClosedPolyLineOutline(points, OutlineWidth, extendsOutwards, out outlineVertices, out outlineTriangles, FallbackNormal);
+            ShapeUtils.GenerateClosedPolyLineOutline(points, OutlineWidth, ExtendsDirection, out outlineVertices, out outlineTriangles, FallbackNormal);
         }
         else
         {
             var boundaryStart = points[0] + (points[0] - points[1]);
             var boundaryEnd = points[^1] + (points[^1] - points[^2]);
-            ShapeUtils.GeneratePolyLineOutline(points, boundaryStart, boundaryEnd, OutlineWidth, extendsOutwards, out outlineVertices, out outlineTriangles, FallbackNormal);
+            ShapeUtils.GeneratePolyLineOutline(points, boundaryStart, boundaryEnd, OutlineWidth, ExtendsDirection, out outlineVertices, out outlineTriangles, FallbackNormal);
         }
 
         if (uniqueVertices)
             ShapeUtils.MakeVerticesUnique(outlineVertices.ToArray(), outlineTriangles.ToArray(), out outlineVertices, out outlineTriangles);
         vertices = outlineVertices;
         triangles = outlineTriangles;
-        colors = Enumerable.Repeat(outlineColor.ToVector4(), outlineVertices.Count).ToList();
+        colors = fillColors.ToArray().SelectMany(c => new Vector4[] { c, c }).ToList();
     }
 
 }

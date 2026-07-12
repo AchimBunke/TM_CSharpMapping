@@ -207,7 +207,7 @@ public class GenericTriangle2DObjectMorpher
         ExceptionUtils.Ensure(CanHierarchicMorph(source, target), () => new InvalidOperationException($"Triangle mismatch"));
 
         var flattenedSourceObjects = GetFlattenedHierarchyObjects(source).OfType<TriangleObject>();
-        var flattenedSource = ShapeUtils.Merge(false, flattenedSourceObjects);
+        var flattenedSource = ShapeUtils.Merge(flattenedSourceObjects);
         List<HierarchyRange> ranges = [];
         int tOffset = 0;
         int vOffset = 0;
@@ -219,7 +219,7 @@ public class GenericTriangle2DObjectMorpher
         }
 
         var flattenedTargetObjects = GetFlattenedHierarchyObjects(target).OfType<TriangleObject>();
-        var flattenedTarget = ShapeUtils.Merge(false, flattenedTargetObjects);
+        var flattenedTarget = ShapeUtils.Merge(flattenedTargetObjects);
 
         Morph(flattenedSource, flattenedTarget, easing, percent);
 
