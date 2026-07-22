@@ -10,6 +10,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Common.IO;
+using TM_GenericMapping.MediaTracker.Components;
 using static GBX.NET.Engines.Plug.CPlugSurface.Mesh;
 using Color = System.Drawing.Color;
 

@@ -22,7 +22,7 @@
 
   <ItemGroup>
     <PackageReference Include="DirectXTexNet" Version="1.0.7" />
-    <PackageReference Include="GBX.NET" Version="2.4.3" />
+    <PackageReference Include="GBX.NET" Version="2.4.4-nightly.20260722.caf3b274" />
     <PackageReference Include="GBX.NET.LZO" Version="2.1.5" />
     <PackageReference Include="GBX.NET.ZLib" Version="1.1.2" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />

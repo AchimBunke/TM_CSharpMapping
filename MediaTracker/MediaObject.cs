@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.MediaTracker.Components;
 
 namespace TM_GenericMapping.Common;
 public enum Space
@@ -329,20 +330,13 @@ public abstract class MediaObject : ICloneable<MediaObject>
     }
 }
 
-[Obsolete]
-public class MediaObjectGroup : MediaObject
+public class EmptyObject : MediaObject
 {
-    public MediaObjectGroup()
+    public EmptyObject() { }
+    protected EmptyObject(EmptyObject other) : base(other) { }
+    public override MediaObject Clone()
     {
-        Name = "MediaGroup";
-    }
-    protected MediaObjectGroup(MediaObjectGroup other) : base(other)
-    {
-    }
-
-    public override MediaObjectGroup Clone()
-    {
-        return new MediaObjectGroup(this);
+        return new EmptyObject(this);
     }
 }
 

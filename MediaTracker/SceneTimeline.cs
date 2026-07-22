@@ -6,6 +6,7 @@ using System.Numerics;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.IO;
 using TM_GenericMapping.MediaTracker;
+using TM_GenericMapping.MediaTracker.Components;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnChallenge.TMUnlimiter;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
@@ -33,6 +34,12 @@ public record struct SceneAnimationSettings(
         UpdateTrackOrder = true,
         AnimationOffsetMillis = 0,
     };
+}
+public enum InitialStatePolicy
+{
+    Zero,
+    HoldFirst,
+    Hidden
 }
 public record class KeyFrameData()
 {
@@ -86,6 +93,15 @@ public class DuplicateKeyComparer<TKey>
 
     #endregion
 }
+public record struct CycleData
+{
+    public CycleData() { CycleTrack = true; }
+    public bool RelativeStart;
+    public bool RelativeEnd;
+    public long Start;
+    public long End;
+    public bool CycleTrack;
+}
 
 public static class WorldPositionExtensions
 {
@@ -114,6 +130,7 @@ public class SceneTimeline
     Dictionary<MediaObject, (CGameCtnMediaTrack track, CGameCtnMediaBlock block, int blockIdx)> objectsInScene = [];
     Dictionary<CGameCtnMediaBlock, HashSet<RenderObject>> blockToRenderObjects = [];
     HashSet<CGameCtnMediaTrack> tracks = [];
+    Dictionary<CGameCtnMediaTrack, CycleData> trackCycleData = [];
 
     // share ids
     Dictionary<int, RenderObject> blockShareIdToRenderObject = [];
@@ -160,6 +177,8 @@ public class SceneTimeline
         }
     }
     public void AddSubObjects(MediaObject obj, params ReadOnlySpan<MediaObject> subObjects)
+        => AddSubObjects(obj, InitialStatePolicy.Zero, subObjects);
+    public void AddSubObjects(MediaObject obj, InitialStatePolicy initialStatePolicy = InitialStatePolicy.Zero, params ReadOnlySpan<MediaObject> subObjects)
     {
         foreach (var subObject in subObjects)
         {
@@ -167,13 +186,15 @@ public class SceneTimeline
             if (IsInScene(obj))
             {
                 EnsureNotAdded(subObject);
-                RegisterSubObject(subObject);
+                RegisterSubObject(subObject, initialStatePolicy);
             }
         }
     }
     public void Wait(float timeSeconds)
+        => WaitMillis((ulong)(timeSeconds * 1000f));
+    public void WaitMillis(ulong timeMillis)
     {
-        ulong targetAnimationTimeMillis = AnimationTimeMillis + (ulong)(timeSeconds * 1000f);
+        ulong targetAnimationTimeMillis = AnimationTimeMillis + timeMillis;
         while (AnimationTimeMillis < targetAnimationTimeMillis)
         {
             AnimationUpdate();
@@ -454,13 +475,19 @@ public class SceneTimeline
 
     public void SetTrackCycling(bool cycleTrack = true, params ReadOnlySpan<MediaObject> objects)
     {
+        SetTrackCycling(new CycleData { CycleTrack = cycleTrack, RelativeStart = true, RelativeEnd = true }, objects);
+    }
+
+    public void SetTrackCycling(CycleData cycleData, params ReadOnlySpan<MediaObject> objects)
+    {
         foreach (var obj in objects)
         {
             EnsureAdded(obj);
             var track = objectsInScene[obj].track;
             if (track is not null)
             {
-                track.IsCycling = cycleTrack;
+                track.IsCycling = cycleData.CycleTrack;
+                trackCycleData[track] = cycleData;
             }
         }
     }
@@ -515,7 +542,7 @@ public class SceneTimeline
         CameraManager = new SceneCameraManager(this);
     }
 
-    public float AnimationTickRateMillis => animationSettings.AnimationTickRateMillis;
+    public ulong AnimationTickRateMillis => animationSettings.AnimationTickRateMillis;
     public float AnimationTime => AnimationTimeMillis / 1000f;
     float NextKeyFrameTime => nextKeyFrameTimeMillis / 1000f;
 
@@ -529,6 +556,7 @@ public class SceneTimeline
     {
         PreAnimationUpdateTick?.Invoke(this);
         UpdateDelayedAction();
+        UpdateComponents();
         UpdateAnimators();
         UpdatePostProcessingEffects();
         if (AnimationTimeMillis >= nextKeyFrameTimeMillis)
@@ -613,6 +641,17 @@ public class SceneTimeline
                 SetHierarchyRequiresKeyFrame(newAnimator.Target);
         }
     }
+    void UpdateComponents()
+    {
+        foreach (var t in objectsInScene.Keys.SelectMany(o => o.Components.OfType<IUpdatableComponent>(), (o,c)=> new { Object = o, Component = c }).ToArray())
+        {
+            if(!t.Component.IsInitialized)
+                t.Component.Init(t.Object, this);
+            else
+                t.Component.Update(t.Object, this, animationSettings.AnimationTickRateMillis);
+        }
+    }
+   
     void UpdateDelayedAction()
     {
         while (HasDelayedActions && delayedActions.Keys[0] <= AnimationTimeMillis)
@@ -713,7 +752,7 @@ public class SceneTimeline
         return (newBlock, newTrack);
     }
 
-    void RegisterSubObject(MediaObject obj)
+    void RegisterSubObject(MediaObject obj, InitialStatePolicy initialStatePolicy = InitialStatePolicy.Zero)
     {
         if (objectsInScene.ContainsKey(obj))
             return;
@@ -732,13 +771,17 @@ public class SceneTimeline
                 var (commonTrack, commonBlock, _) = objectsInScene[sharedBlockOwner];
                 int idx = -1;
                 if (renderObj.Renderer is IKeysRenderer keysRenderer)
+                {
                     idx = keysRenderer.AddRenderDataToBlock(renderObj, commonBlock);
+                    ApplyInitialStatePolicy(renderObj, commonBlock, idx, initialStatePolicy);
+                }
                 else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
                 {
                     twoKeyRenderer.SetDataToStart(renderObj, commonBlock);
                     (sharedBlockOwner as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
                 }
                 objectsInScene[renderObj] = (commonTrack, commonBlock, idx);
+              
                 blockToRenderObjects[commonBlock].Add(renderObj);
 
                 requiresKeyFrame.Add(commonBlock);
@@ -748,11 +791,45 @@ public class SceneTimeline
                 RegisterObject(renderObj);
             }
         }
+        else
+        {
+            RegisterObject(obj);
+        }
 
         // register hierarchy
         foreach (var subObject in obj.SubObjects)
         {
             RegisterSubObject(subObject);
+        }
+
+    }
+    void ApplyInitialStatePolicy(RenderObject obj, CGameCtnMediaBlock block, int idx, InitialStatePolicy initialStatePolicy)
+    {
+        if (block is not IHasKeys keysBlock || obj.Renderer is not IKeysRenderer keysRenderer)
+            return;
+        switch (initialStatePolicy)
+        {
+            case InitialStatePolicy.Zero:
+                return;
+            case InitialStatePolicy.HoldFirst:
+                for (int i = 0; i < keysBlock.Keys.Count(); ++i)
+                {
+                    keysRenderer.SetKeyFrameData(obj, block, keysBlock.Keys.ElementAt(i), idx, GetPPEffectData(obj));
+                }
+                break;
+            case InitialStatePolicy.Hidden:
+                {
+                    var s = obj.LocalScale;
+                    obj.LocalScale = Vector3.Zero;
+                    for (int i = 0; i < keysBlock.Keys.Count(); ++i)
+                    {
+                        keysRenderer.SetKeyFrameData(obj, block, keysBlock.Keys.ElementAt(i), idx, GetPPEffectData(obj));
+                    }
+                    obj.LocalScale = s;
+                }
+                break;
+            default:
+                throw new NotImplementedException($"InitialStatePolicy {initialStatePolicy} not implemented!");
         }
 
     }
@@ -882,13 +959,16 @@ public class SceneTimeline
         {
             if (track.Blocks.FirstOrDefault() is CGameCtnMediaBlock.IHasKeys firstBlock && track.Blocks.LastOrDefault() is CGameCtnMediaBlock.IHasKeys lastBlock)
             {
+                var cycleData = trackCycleData[track];
                 var chunkBase = track.Chunks.Get(cycleChunkId) as CGameCtnMediaTrack.Chunk03078005;
                 track.Chunks.Remove(cycleChunkId);
                 var cycleChunk = track.CreateChunk<CGameCtnMediaTrack.Chunk03078005>();
                 cycleChunk.Version = chunkBase.Version;
-                track.IsCycling = true;
-                track.RepeatingSegmentStart = firstBlock.Keys.FirstOrDefault()?.Time ?? default;
-                track.RepeatingSegmentEnd = lastBlock.Keys.LastOrDefault()?.Time ?? default;
+                track.IsCycling = cycleData.CycleTrack;
+                var startTime = firstBlock.Keys.FirstOrDefault()?.Time ?? default;
+                var endTime = lastBlock.Keys.LastOrDefault()?.Time ?? default;
+                track.RepeatingSegmentStart = cycleData.RelativeStart ? startTime + TimeSingle.FromMilliseconds(cycleData.Start) : TimeSingle.FromMilliseconds(cycleData.Start);
+                track.RepeatingSegmentEnd = cycleData.RelativeEnd ? endTime + TimeSingle.FromMilliseconds(cycleData.End) : TimeSingle.FromMilliseconds(cycleData.End);
                 if (track.RepeatingSegmentStart.Value.TotalMilliseconds < 0)
                     Logger.Warn($"Cycling will not work on track {track.Name} because it starts before time=0");
             }

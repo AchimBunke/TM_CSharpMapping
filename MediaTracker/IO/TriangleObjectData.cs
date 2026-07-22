@@ -1,6 +1,7 @@
 ﻿using System.Drawing;
 using System.Numerics;
 using System.Reflection.Metadata;
+using TM_GenericMapping.MediaTracker.Components;
 
 namespace TM_GenericMapping.Common.IO
 {

@@ -27,6 +27,18 @@ public static class RandomUtils
             RandomUtils.Shared.NextSingle() * (max - min) + min
         );
     }
+    public static Vector3 RandomUnitVector(this Random rng)
+    {
+        float z = rng.NextSingle(-1, 1);
+        float a = rng.NextSingle(0, MathF.PI * 2);
+
+        float r = MathF.Sqrt(1 - z * z);
+
+        return new Vector3(
+            r * MathF.Cos(a),
+            z,
+            r * MathF.Sin(a)).Normalized();
+    }
     public static Vector3 RandomVector3(float max) => RandomVector3(0, max);
     public static Vector3 UniformRandomVector3()
         => UniformRandomVector3(-1, 1);
@@ -75,7 +87,7 @@ public static class RandomUtils
     {
         return min + random.NextSingle() * (max - min);
     }
-    public static Vector3 RandomUnitSphere(this Random random)
+    public static Vector3 RandomOnUnitSphere(this Random random)
     {
         // Returns a random point on unit sphere
         double u = random.NextDouble();
