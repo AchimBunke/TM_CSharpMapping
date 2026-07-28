@@ -2,7 +2,9 @@
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using System.Reflection;
+using TM_GenericMapping.IO;
 using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items;
 
@@ -24,20 +26,25 @@ public class MeshExtractor
 
         if (normalizedMeshResult.IsSuccess)
         {
+            ToolResult<NormalizedSubmesh>? subMeshResult = null!;
             if (ItemExtensions.TryGetTriggerSpecial(item, out var triggerSpecial))
             {
-                normalizedMeshResult.Value.SurfaceData = triggerSpecial.TriggerShape;
-                normalizedMeshResult.Value.SurfaceType = SurfaceType.Special;
+                subMeshResult = ExtractFromTriggerSpecial(triggerSpecial);
             }
             else if (ItemExtensions.TryGetTriggerWaypoint(item, out var triggerWaypoint))
             {
-                normalizedMeshResult.Value.SurfaceData = triggerWaypoint.TriggerShape;
-                normalizedMeshResult.Value.SurfaceType = SurfaceType.Waypoint;
+                subMeshResult = ExtractFromTriggerWaypoint(triggerWaypoint);
             }
-            else if (ItemExtensions.TryGetTriggerShape(item, out var triggerShape))
+            else if (item.EntityModel is not null && 
+                item.EntityModel is CGameCommonItemEntityModel commonItemEntityModel && 
+                commonItemEntityModel.TriggerShape is not null &&
+                commonItemEntityModel.TriggerShape is CPlugSurface surf)
             {
-                normalizedMeshResult.Value.SurfaceData = triggerShape;
+                subMeshResult = ExtractFromSurface(surf);
+                subMeshResult.Value.Value.Type = SubmeshType.Trigger_Special;
             }
+            if(subMeshResult.HasValue)
+                normalizedMeshResult.Value.Submeshes = [.. normalizedMeshResult.Value.Submeshes, subMeshResult.Value.Value];
 
             normalizedMeshResult.Value.PlacementParam = item.DefaultPlacement;
             normalizedMeshResult.Value.IconWebP = item.IconWebP;
@@ -50,79 +57,143 @@ public class MeshExtractor
 
     public ToolResult<NormalizedMesh> ExtractFromCrystal(CPlugCrystal crystal)
     {
-        // Two-pass: group split vertices by material first, then concatenate
-        // so each material produces a contiguous index range (NormalizedSubmesh)
-
-        // per-material buckets of indices (into the shared vertex buffer)
-        var buckets = new Dictionary<CPlugMaterialUserInst, (
-            List<Vec3> positions,
-            List<Vec3> normals,
-            List<Vec2> texCoords,
-            List<Vec2> lightmapCoords,
-            List<int> indices)>();
-
-        foreach (var layer in crystal.Layers)
-        {
-            if (layer is not CPlugCrystal.GeometryLayer geo)
-                continue;
-            var sourcePositions = geo.Crystal.Positions;
-
-            foreach (var face in geo.Crystal.Faces)
-            {
-                var mat = face.Material.MaterialUserInst;
-
-                if (!buckets.TryGetValue(mat, out var bucket))
-                {
-                    bucket = (new(), new(), new(), new(), new());
-                    buckets[mat] = bucket;
-                }
-
-                // fan triangulation — fully split vertices (per corner)
-                for (int i = 1; i < face.Vertices.Length - 1; i++)
-                {
-                    var corners = new[]
-                    {
-                        face.Vertices[0],
-                        face.Vertices[i],
-                        face.Vertices[i + 1]
-                    };
-
-                    foreach (var corner in corners)
-                    {
-                        bucket.indices.Add(bucket.positions.Count);
-                        bucket.positions.Add(sourcePositions[corner.Index]);
-                        bucket.texCoords.Add(corner.TexCoord);
-                        bucket.lightmapCoords.Add(corner.LightmapCoord);
-                        bucket.normals.Add(Vec3.Zero); // computed below
-                    }
-                }
-            }
-        }
 
         var submeshes = new List<NormalizedSubmesh>();
 
-        // concatenate buckets into final index buffer, recording submesh ranges
-        var indices = new List<int>();
-
-
-        foreach (var (mat, bucket) in buckets)
+        foreach (var layer in crystal.Layers)
         {
-            var posArr = bucket.positions.ToArray();
-            var idxArr = bucket.indices.ToArray();
-            var nrmArr = ComputeSmoothNormals(posArr, idxArr);
+            // Two-pass: group split vertices by material first, then concatenate
+            // so each material produces a contiguous index range (NormalizedSubmesh)
 
-            submeshes.Add(new NormalizedSubmesh
+            // per-material buckets of indices (into the shared vertex buffer)
+            var buckets = new Dictionary<CPlugMaterialUserInst, (
+                List<Vec3> positions,
+                List<Vec3> normals,
+                List<Vec2> texCoords,
+                List<Vec2> lightmapCoords,
+                List<int> indices,
+                SubmeshType type,
+                bool notCollidable,
+                Dictionary<(Vec3, Vec2, Vec2), int> weldMap)>();
+
+            SubmeshProperties properties = SubmeshProperties.None;
+
+            switch (layer)
             {
-                Positions = posArr,
-                Normals = nrmArr,
-                TexCoords = bucket.texCoords.Count > 0 ? bucket.texCoords.ToArray() : null,
-                LightmapCoords = bucket.lightmapCoords.Count > 0 ? bucket.lightmapCoords.ToArray() : null,
-                Colors = null, // crystal has no vertex colors
-                Indices = idxArr,
-                Material = mat,
-            });
-        }
+                case CPlugCrystal.GeometryLayer geo:
+                    {
+                        var sourcePositions = geo.Crystal.Positions;
+                        if(!geo.IsEnabled)
+                            properties |= SubmeshProperties.Disabled;
+                        if(!geo.IsVisible)
+                            properties |= SubmeshProperties.Invisible;
+                        if(!geo.Collidable)
+                            properties |= SubmeshProperties.NonCollidable;
+                        foreach (var face in geo.Crystal.Faces)
+                        {
+                            var mat = face.Material.MaterialUserInst;
+                            if (!buckets.TryGetValue(mat, out var bucket))
+                            {
+                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Mesh, mat.SurfacePhysicId == CPlugSurface.MaterialId.NotCollidable, []);
+                                buckets[mat] = bucket;
+                            }
 
+                            // fan triangulation — fully split vertices (per corner)
+                            for (int i = 1; i < face.Vertices.Length - 1; i++)
+                            {
+                                var corners = new[] { face.Vertices[0], face.Vertices[i], face.Vertices[i + 1] };
+
+                                foreach (var corner in corners)
+                                {
+                                    var key = (sourcePositions[corner.Index], corner.TexCoord, corner.LightmapCoord);
+                                    if (!bucket.weldMap.TryGetValue(key, out int dst))
+                                    {
+                                        dst = bucket.positions.Count;
+                                        bucket.weldMap[key] = dst;
+                                        bucket.positions.Add(sourcePositions[corner.Index]);
+                                        bucket.texCoords.Add(corner.TexCoord);
+                                        bucket.lightmapCoords.Add(corner.LightmapCoord);
+                                        bucket.normals.Add(Vec3.Zero);
+                                    }
+                                    bucket.indices.Add(dst);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case CPlugCrystal.TriggerLayer trigger:
+                    {
+                        var sourcePositions = trigger.Crystal.Positions;
+                        if (!trigger.IsEnabled)
+                            properties |= SubmeshProperties.Disabled;
+                        properties|= SubmeshProperties.Invisible | SubmeshProperties.NonCollidable;
+                        foreach (var face in trigger.Crystal.Faces)
+                        {
+                            var mat = face.Material.MaterialUserInst;
+
+                            if (!buckets.TryGetValue(mat, out var bucket))
+                            {
+                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Trigger_Waypoint, true, []);
+                                buckets[mat] = bucket;
+                            }
+
+                            // fan triangulation — fully split vertices (per corner)
+                            for (int i = 1; i < face.Vertices.Length - 1; i++)
+                            {
+                                var corners = new[]
+                                {
+                                    face.Vertices[0],
+                                    face.Vertices[i],
+                                    face.Vertices[i + 1]
+                                };
+
+                                foreach (var corner in corners)
+                                {
+                                    var key = (sourcePositions[corner.Index], corner.TexCoord, corner.LightmapCoord);
+                                    if (!bucket.weldMap.TryGetValue(key, out int dst))
+                                    {
+                                        dst = bucket.positions.Count;
+                                        bucket.weldMap[key] = dst;
+                                        bucket.positions.Add(sourcePositions[corner.Index]);
+                                        bucket.texCoords.Add(corner.TexCoord);
+                                        bucket.lightmapCoords.Add(corner.LightmapCoord);
+                                        bucket.normals.Add(Vec3.Zero);
+                                    }
+                                    bucket.indices.Add(dst);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                default:
+                    continue;
+            }
+
+            // concatenate buckets into final index buffer, recording submesh ranges
+            var indices = new List<int>();
+
+
+            foreach (var (mat, bucket) in buckets)
+            {
+                var posArr = bucket.positions.ToArray();
+                var idxArr = bucket.indices.ToArray();
+                var nrmArr = ComputeSmoothNormals(posArr, idxArr);
+                
+                submeshes.Add(new NormalizedSubmesh
+                {
+                    Positions = posArr,
+                    Normals = nrmArr,
+                    TexCoords = bucket.texCoords.Count > 0 ? bucket.texCoords.ToArray() : null,
+                    LightmapCoords = bucket.lightmapCoords.Count > 0 ? bucket.lightmapCoords.ToArray() : null,
+                    Colors = null, // crystal has no vertex colors
+                    Indices = idxArr,
+                    Material = mat,
+                    Type = bucket.type,
+                    Properties = properties,
+                    Name = MatToName(mat),
+                });
+            }
+        }
 
         return ToolResult.Success(new NormalizedMesh
         {
@@ -167,6 +238,9 @@ public class MeshExtractor
           BindingFlags.NonPublic | BindingFlags.Instance);
         var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
 
+        var properties = SubmeshProperties.None;
+        if(material.SurfacePhysicId == CPlugSurface.MaterialId.NotCollidable)
+            properties |= SubmeshProperties.NonCollidable;
         var mesh = new NormalizedSubmesh
         {
             Positions = stream.Positions,
@@ -178,29 +252,103 @@ public class MeshExtractor
             Material = material,
             TangentUs = tangentsUs,
             TangentVs = tangentVs,
+            Type = SubmeshType.Mesh,
+            Properties = properties,
+            Name = MatToName(material)
         };
         return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
 
     public ToolResult<NormalizedMesh> ExtractFromDynaModel(CPlugDynaObjectModel dynaObjectModel)
     {
-        // surfaces (DynaShape/StaticShape) are intentionally ignored here —
-        // they will be generated separately from NormalizedMesh when writing the item
-
+        NormalizedMesh mesh = null!;
         if (dynaObjectModel.Mesh is not null)
-            return ExtractFromSolid2Model(dynaObjectModel.Mesh);
-        return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+        {
+            var result = ExtractFromSolid2Model(dynaObjectModel.Mesh);
+            if (result.IsFailure)
+                ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+            mesh = result.Value;
+        }
+
+        if (dynaObjectModel.StaticShape is not null)
+        {
+            var result = ExtractFromSurface(dynaObjectModel.StaticShape);
+            if (result.IsFailure)
+                return ToolResult.Fail(result);
+            result.Value.Type = SubmeshType.Static_Shape;
+            mesh.Submeshes = [.. mesh.Submeshes, result.Value];
+        }
+        if (dynaObjectModel.DynaShape is not null)
+        {
+            var result = ExtractFromSurface(dynaObjectModel.DynaShape);
+            if (result.IsFailure)
+                return ToolResult.Fail(result);
+            result.Value.Type = SubmeshType.Dyna_Shape;
+            mesh.Submeshes = [.. mesh.Submeshes, result.Value];
+        }
+    
+        return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
     public ToolResult<NormalizedMesh> ExtractFromStaticModel(CPlugStaticObjectModel staticObjectModel)
     {
         // surfaces (DynaShape/StaticShape) are intentionally ignored here —
         // they will be generated separately from NormalizedMesh when writing the item
-
         if (staticObjectModel.Mesh is not null)
-            return ExtractFromSolid2Model(staticObjectModel.Mesh);
-        return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+        {
+            var result = ExtractFromSolid2Model(staticObjectModel.Mesh);
+            if(result.IsFailure)
+                return result;
+            if(!staticObjectModel.IsMeshCollidable)
+                foreach(var submesh in result.Value.Submeshes)
+                    submesh.Properties |= SubmeshProperties.NonCollidable;
+            if (staticObjectModel.Shape == null)
+                return result;
+            var shapeResult = ExtractFromSurface(staticObjectModel.Shape);
+            if (shapeResult.IsSuccess)
+            {
+                shapeResult.Value.Type = SubmeshType.Static_Shape;
+                result.Value.Submeshes = [.. result.Value.Submeshes, shapeResult.Value];
+            }
+            return result;
+        }
+        else
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
     }
 
+    public ToolResult<NormalizedSubmesh> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial)
+    {
+        var triggerShape = triggerSpecial.GetTriggerShape();
+        if(triggerShape == null)
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
+        var result = ExtractFromSurface(triggerShape);
+        if(result.IsFailure)
+            return ToolResult.Fail(result);
+        result.Value.Type = SubmeshType.Trigger_Special;
+        return result;
+    }
+    public ToolResult<NormalizedSubmesh> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint)
+    {
+        var triggerShape = triggerWaypoint.GetTriggerShape();
+        if (triggerShape == null)
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
+        var result = ExtractFromSurface(triggerShape);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        result.Value.Type = SubmeshType.Trigger_Waypoint;
+        //TODO: waypoint type
+        return result;
+    }
+    public ToolResult<NormalizedSubmesh> ExtractFromSurface(CPlugSurface surface)
+    {
+        var mesh = new NormalizedSubmesh();
+        var surf = surface.Surf as CPlugSurface.Mesh;
+        mesh.Positions = surf?.Vertices.ToArray();
+        mesh.Indices = surf?.Triangles.SelectMany(t => new[] { t.Indices.X, t.Indices.Y, t.Indices.Z }).ToArray();
+        mesh.Material = CreateErrorMat();
+        mesh.SurfaceMaterialIds = surf.Triangles.Select(t => (MaterialId)t.U02).ToArray();
+        mesh.Name = MatToName(mesh.Material);
+        return ToolResult.Success(mesh, nameof(MeshExtractor));
+    }
 
 
     static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices)
@@ -265,4 +413,90 @@ public class MeshExtractor
 
         return (tangents, bitangents);
     }
+    CPlugMaterialUserInst CreateErrorMat()
+    {
+        var mat = new CPlugMaterialUserInst()
+        {
+            MaterialName = "",
+            Model = "",
+            BaseTexture = "",
+            
+        };
+        //{
+        //    BaseTexture = "",
+        //    Color = [],
+        //    Csts = null,
+        //    HidingGroup = "",
+        //    IsNatural = false,
+        //    IsUsingGameMaterial = false,
+        //    Link = null,
+        //    MaterialName = "",
+        //    Model = "",
+        //    SurfaceGameplayId = CPlugMaterialUserInst.GameplayId.None,
+        //    SurfacePhysicId = CPlugSurface.MaterialId.Concrete,
+        //    TextureSizeInMeters = 1,
+        //    TilingU = CPlugMaterialUserInst.ETexAddress.Wrap,
+        //    TilingV = CPlugMaterialUserInst.ETexAddress.Wrap,
+        //    UserTextures = [],
+        //};
+        mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD000>(out var c1);
+        mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD001>(out var c2);
+        c2.U02 = 0;
+        mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD002>(out var c3);
+        return mat;
+    }
+
+    string MatToName(CPlugMaterialUserInst mat)
+    {
+        if(!string.IsNullOrWhiteSpace(mat.MaterialName))
+            return mat.MaterialName;
+        if (!string.IsNullOrWhiteSpace(mat.Link))
+            return string.Join("\\", mat.Link.Split('\\').TakeLast(2));
+        return "Unknown Material";
+    }
+
+    /// <summary>
+    /// Welds vertices that share the same position, texCoord and lightmapCoord.
+    /// Returns remapped positions/UVs and a new index buffer.
+    /// </summary>
+    (Vec3[] positions, Vec2[] texCoords, Vec2[] lightmapCoords, Vec3[] normals, int[] indices)
+        WeldVertices(Vec3[] positions, Vec2[]? texCoords, Vec2[]? lightmapCoords, Vec3[]? normals, int[] indices)
+    {
+        var map = new Dictionary<(Vec3 pos, Vec2 uv, Vec2 lm), int>();
+        var newPositions = new List<Vec3>();
+        var newTexCoords = new List<Vec2>();
+        var newLightmap = new List<Vec2>();
+        var newNormals = new List<Vec3>();
+        var newIndices = new int[indices.Length];
+
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int src = indices[i];
+            var key = (
+                positions[src],
+                texCoords?[src] ?? default,
+                lightmapCoords?[src] ?? default
+            );
+
+            if (!map.TryGetValue(key, out int dst))
+            {
+                dst = newPositions.Count;
+                map[key] = dst;
+                newPositions.Add(positions[src]);
+                newTexCoords.Add(texCoords?[src] ?? default);
+                newLightmap.Add(lightmapCoords?[src] ?? default);
+                newNormals.Add(normals?[src] ?? Vec3.Zero);
+            }
+            newIndices[i] = dst;
+        }
+
+        return (
+            [.. newPositions],
+            [.. newTexCoords],
+            [.. newLightmap],
+            [.. newNormals],
+            newIndices
+        );
+    }
+
 }

@@ -111,9 +111,15 @@ public class ItemEffectVariantCreator
             string idString = GameplayIdToDisplayString(id);
             if (name.Contains($"_{id}"))
             {
+                newName = name.Replace($"_{id}", $"_{GameplayIdToDisplayString(gameplayId)}");
+                return true;
+            }
+            else if (name.Contains($"_{idString}"))
+            {
                 newName = name.Replace($"_{idString}", $"_{GameplayIdToDisplayString(gameplayId)}");
                 return true;
             }
+            
         }
         newName = name;
         return false;

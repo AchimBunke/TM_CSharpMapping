@@ -20,7 +20,7 @@ public struct GbxObjectComparerOptions
 
     public static GbxObjectComparerOptions Default => new GbxObjectComparerOptions
     {
-        Flags = GbxObjectComparerFlags.None,
+        Flags = GbxObjectComparerFlags.PrivateFields,
         CustomComparers = [],
     };
 }
@@ -487,4 +487,326 @@ public static class GbxObjectComparer
 
         return name;
     }
+
+
+    public enum DifferenceType
+    {
+        Value,
+        Type,
+        MissingCollectionEntry,
+        CollectionDivergence,
+        OneIsNull,
+        CustomDifference,
+
+    }
+    public record struct Difference(string Path1, string Path2, object? Value1, object Value2, DifferenceType Type)
+    {
+        public override string ToString() => Type switch
+        {
+            DifferenceType.Value => $"Value -> {Path1} != {Path2}: {Value1} != {Value2}",
+            DifferenceType.Type => $"Type -> {Path1} != {Path2}: {Value1} != {Value2}",
+            DifferenceType.MissingCollectionEntry => $"Miss -> {Path1} != {Path2}",
+            DifferenceType.CollectionDivergence => $"Diverge -> {Path1} != {Path2}: len[{Value1}] != len[{Value2}]",
+            DifferenceType.OneIsNull => $"Null -> {Path1} != {Path2}: {Value1} != {Value2}",
+            DifferenceType.CustomDifference => $"Custom -> {Path1} != {Path2}: {Value1} != {Value2}",
+        };
+        public string ShortString(int pathLength = 50) => Type switch
+        {
+            DifferenceType.Value => $"Value -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: {Value1} != {Value2}",
+            DifferenceType.Type => $"Type -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: {Value1} != {Value2}",
+            DifferenceType.MissingCollectionEntry => $"Miss -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}",
+            DifferenceType.CollectionDivergence => $"Diverge -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: len[{Value1}] != len[{Value2}]",
+            DifferenceType.OneIsNull => $"Null -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: {Value1} != {Value2}",
+            DifferenceType.CustomDifference => $"Custom -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: {Value1} != {Value2}",
+        };
+        string Shorten(string s, int length) => s.Length <= length ? s : s[^length..];
+    }
+    public static List<Difference> Compare(object obj1, object obj2, GbxObjectComparerOptions options)
+    {
+        List<Difference> diffs = [];
+        Compare(obj1, obj2, [], "Obj1", "Obj2", options, diffs);
+        return diffs;
+    }
+    public static void PrintCompare(object obj1, object obj2, GbxObjectComparerOptions options, int pathlength = 100)
+    {
+        var diffs = Compare(obj1, obj2, options);
+        foreach (var diff in diffs)
+        {
+            Console.WriteLine(diff.ShortString(pathlength));
+        }
+    }
+
+    private static void Compare(object? obj1, object? obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        // Both null — equal
+        if (obj1 == null && obj2 == null) return;
+
+        if (obj1 == null || obj2 == null)
+        {
+            differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.OneIsNull));
+            return;
+        }
+
+        Type type = obj1.GetType();
+
+        if (obj2.GetType() != type)
+        {
+            differences.Add(new Difference(path1, path2, obj1.GetType().Name, obj2.GetType().Name, DifferenceType.Type));
+            return;
+        }
+
+        // Primitives, strings, enums, decimals — use Equals directly
+        if (type.IsPrimitive || type.IsEnum || obj1 is string || obj1 is decimal)
+        {
+            if (!obj1.Equals(obj2))
+            {
+                differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.Value));
+            }
+            return;
+        }
+
+        // Circular reference guard (reference types only)
+        if (!type.IsValueType)
+        {
+            if (ReferenceEquals(obj1, obj2)) return;
+            if (!visited.Add((obj1, obj2))) return;
+        }
+
+        // custom comparers
+        IGbxStructureComparer? customComparer = null;
+        if (!options.Flags.HasFlag(GbxObjectComparerFlags.IgnoreCustomComparers))
+        {
+            if (options.CustomComparers != null)
+            {
+                if (options.CustomComparers.TryGetValue(type, out customComparer))
+                {
+                    if (customComparer.FullReplacement)
+                    {
+                        if (!customComparer.Equals(obj1, obj2, visited, options))
+                        {
+                            differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.CustomDifference));
+                        }
+                        return;
+                    }
+                }
+            }
+            if (customComparer == null)
+            {
+                if (CustomComparerRegistry.TryGetValue(type, out customComparer))
+                    if (customComparer.FullReplacement)
+                    {
+                        if (!customComparer.Equals(obj1, obj2, visited, options))
+                        {
+                            differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.CustomDifference));
+                        }
+                        return;
+                    }
+            }
+        }
+
+
+        // Value types that override Equals (e.g. DateTime, Guid, Vector3, etc.)
+        // If the type overrides Equals, trust it rather than reflecting into fields
+        if (type.IsValueType && type.GetMethod("Equals", new[] { typeof(object) })!.DeclaringType != typeof(ValueType))
+        {
+            if(!obj1.Equals(obj2))
+            {
+                differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.Value));
+            }
+            return;
+        }
+
+        // Collections
+        if (obj1 is IEnumerable enum1 && obj2 is IEnumerable enum2)
+        {
+            EnumerablCompare(enum1, enum2, visited,path1, path2, options, differences);
+
+            // treat collection fields as equal if they are from System.Collections or System.Collections.Generic namespaces
+            if (IsFrameworkCollection(type))
+                return;
+        }
+
+        // Reflect fields only (properties are usually computed from fields;
+        // reflecting both causes double-reporting and can trigger side-effects)
+        if (options.Flags.HasFlag(GbxObjectComparerFlags.PrivateFields))
+        {
+            var currentType = type;
+            while (currentType != null && currentType != typeof(object))
+            {
+                foreach (var field in currentType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                {
+                    object? v1 = field.GetValue(obj1);
+                    object? v2 = field.GetValue(obj2);
+                    string fieldName = field.Name;
+                    if (fieldName.StartsWith("<") && fieldName.EndsWith(">k__BackingField"))
+                        fieldName = fieldName[1..fieldName.IndexOf('>')]; // strip to just PropName
+                    string fPath1 = $"{path1}.{fieldName}";
+                    string fPath2 = $"{path2}.{fieldName}";
+
+                    if (customComparer != null)
+                    {
+                        if (!customComparer.EqualsField(field, obj1, obj2, [], options))
+                            differences.Add(new Difference(fPath1, fPath2, v1, v2, DifferenceType.CustomDifference));
+                        
+                    }
+                    else
+                        Compare(v1, v2, visited, fPath1, fPath2, options, differences);
+                    
+                }
+
+                currentType = currentType.BaseType;
+            }
+        }
+        else
+        {
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                // Skip compiler-generated backing fields of auto-properties — we'll catch
+                // those via the property loop below for cleaner path names
+                if (field.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+                    continue;
+
+                object? v1 = field.GetValue(obj1);
+                object? v2 = field.GetValue(obj2);
+                string fieldName = field.Name;
+                if (fieldName.StartsWith("<") && fieldName.EndsWith(">k__BackingField"))
+                    fieldName = fieldName[1..fieldName.IndexOf('>')]; // strip to just PropName
+                string fPath1 = $"{path1}.{fieldName}";
+                string fPath2 = $"{path2}.{fieldName}";
+
+                if (customComparer != null)
+                {
+                    if (!customComparer.EqualsField(field, obj1, obj2, [], options))
+                        differences.Add(new Difference(fPath1, fPath2, v1, v2, DifferenceType.CustomDifference));
+                }
+                else
+                    Compare(v1, v2, visited, fPath1, fPath2, options, differences);
+            }
+        }
+
+        // Public readable, non-indexed properties
+        if (!options.Flags.HasFlag(GbxObjectComparerFlags.PrivateFields))
+        {
+            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
+
+                object? v1 = prop.GetValue(obj1);
+                object? v2 = prop.GetValue(obj2);
+                string propName = prop.Name;
+                string fPath1 = $"{path1}.{propName}";
+                string fPath2 = $"{path2}.{propName}";
+
+                if (customComparer != null)
+                {
+                    if (!customComparer.EqualsProperty(prop, obj1, obj2, [], options))
+                        differences.Add(new Difference(fPath1, fPath2, v1, v2, DifferenceType.CustomDifference));
+                }
+                else
+                    Compare(v1, v2, visited, fPath1, fPath2, options, differences);
+            }
+        }
+        return;
+    }
+
+    private static void EnumerablCompare(IEnumerable enum1, IEnumerable enum2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        if (options.Flags.HasFlag(GbxObjectComparerFlags.IgnoreCollectionOrder))
+        {
+            var list1 = enum1.Cast<object?>().ToList();
+            var list2 = enum2.Cast<object?>().ToList();
+
+            var matchedRight = new bool[list2.Count];
+            for (int left = 0; left < list1.Count; left++)
+            {
+                bool found = false;
+
+                for (int right = 0; right < list2.Count; right++)
+                {
+                    if (matchedRight[right])
+                        continue;
+
+                    if (Equals(list1[left], list2[right], [], options))
+                    {
+                        matchedRight[right] = true;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    int candidate = -1;
+
+                    for (int right = 0; right < list2.Count; right++)
+                    {
+                        if (matchedRight[right])
+                            continue;
+
+                        if (list1[left]?.GetType() == list2[right]?.GetType())
+                        {
+                            candidate = right;
+                            break;
+                        }
+                    }
+                    if (candidate >= 0)
+                    {
+                        matchedRight[candidate] = true;
+                        Compare(list1[left], list2[candidate], visited, $"{path1}[{left}]", $"{path2}[{candidate}]", options, differences);
+                    }
+                    else
+                    {
+                        differences.Add(new Difference($"{path1}[{left}]", $"{path2}[?]", list1[left], null, DifferenceType.MissingCollectionEntry));
+                    }
+                }
+            }
+
+            for (int right = 0; right < list2.Count; right++)
+            {
+                if (!matchedRight[right])
+                {
+                    differences.Add(new Difference($"{path1}[?]", $"{path2}[{right}]", null, list2[right], DifferenceType.MissingCollectionEntry));
+                }
+            }
+        }
+        else
+        {
+            var e1 = enum1.GetEnumerator();
+            var e2 = enum2.GetEnumerator();
+            int index = 0;
+            try
+            {
+                while (true)
+                {
+                    bool has1 = e1.MoveNext();
+                    bool has2 = e2.MoveNext();
+
+                    if (!has1 && !has2) break;
+
+                    if (!has1 || !has2)
+                    {
+                        int maxIdx = index;
+                        if(has1)
+                            while(e1.MoveNext()) { maxIdx++; }
+                        else 
+                            while(e2.MoveNext()) { maxIdx++; }
+
+                        
+                        differences.Add(new Difference($"{path1}[{(has1 ? $">={index}": "?")}]", $"{path2}[{(has2 ? $">={index}" : "?")}]", has1 ? maxIdx : index, has2 ? maxIdx : index, DifferenceType.CollectionDivergence));
+                        break;
+                    }
+
+                    Compare(e1.Current, e2.Current, visited, $"{path1}[{index}]", $"{path2}[{index}]", options, differences);
+                    index++;
+                }
+            }
+            finally
+            {
+                (e1 as IDisposable)?.Dispose();
+                (e2 as IDisposable)?.Dispose();
+            }
+        }
+    }
+
+
 }

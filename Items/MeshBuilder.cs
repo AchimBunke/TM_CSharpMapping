@@ -1,5 +1,6 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
 using GBX.NET.Serialization;
@@ -7,7 +8,13 @@ using System.ComponentModel;
 using System.Numerics;
 using System.Reflection;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Plug.CPlugCrystal;
+using static GBX.NET.Engines.Plug.CPlugMaterialUserInst;
+using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSurface;
+using static TM_GenericMapping.Items.MeshBuilder;
 
 namespace TM_GenericMapping.Items;
 
@@ -18,20 +25,80 @@ public class MeshBuilder
         public string Author;
     };
 
+ 
+    public struct BuildOptions
+    {
+        public BuildOptions()
+        {
+
+        }
+
+        public HashSet<int> Geometries = new HashSet<int>();
+        public HashSet<int> NonCollidables = new HashSet<int>();
+        public HashSet<int> Invisibles = new HashSet<int>();
+
+        public HashSet<int> Triggers = new HashSet<int>();
+
+        public HashSet<int> DynaShapes = new HashSet<int>();
+        public HashSet<int> StaticShapes = new HashSet<int>();
+
+
+        public static BuildOptions DefaultFromMesh(NormalizedMesh mesh)
+        {
+            var options = new BuildOptions();
+            for (int i = 0; i < mesh.Submeshes.Length; ++i)
+            {
+                var submesh = mesh.Submeshes[i];
+                if (submesh.Properties.HasFlag(SubmeshProperties.Disabled))
+                    continue;
+               
+                switch (submesh.Type)
+                {
+                    case SubmeshType.Mesh:
+                        options.Geometries.Add(i);
+                        break;
+                    case SubmeshType.Trigger_Waypoint:
+                    case SubmeshType.Trigger_Special:
+                        options.Triggers.Add(i);
+                        break;
+                    case SubmeshType.Dyna_Shape:
+                        options.DynaShapes.Add(i);
+                        break;
+                    case SubmeshType.Static_Shape:
+                        options.StaticShapes.Add(i);
+                        break;
+                }
+                if (submesh.Properties.HasFlag(SubmeshProperties.Invisible))
+                    options.Invisibles.Add(i);
+                if (submesh.Properties.HasFlag(SubmeshProperties.NonCollidable))
+                    options.NonCollidables.Add(i);
+              
+            }
+            
+            
+
+            return options;
+        }
+
+    }
+
     const string MovingItemTemplatePath = @"MovingItemTemplate.Item.Gbx";
     const string EntityModelEditionTemplatePath = @"EntityModelEditionTemplate.Item.Gbx";
     const string EntityModelTemplatePath = @"EntityModelTemplate.Item.Gbx";
     const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
+    const string TriggerLayerTemplatePath = @"TriggerLayerTemplate.Item.Gbx";
 
     CGameItemModel movingItemTemplate;
     CGameItemModel entityModelEditionTemplate;
     CGameItemModel entityModelTemplate;
     CGameItemModel triggerItemTemplate;
+    CGameItemModel triggerLayerTemplate;
 
     CGameItemModel MovingItemTemplate => (movingItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(MovingItemTemplatePath)));
     CGameItemModel EntityModelEditionTemplate => (entityModelEditionTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelEditionTemplatePath)));
     CGameItemModel EntityModelTemplate => (entityModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelTemplatePath)));
     CGameItemModel TriggerItemTemplate => (triggerItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerItemTemplatePath)));
+    CGameItemModel TriggerLayerTemplateItem => (triggerLayerTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerLayerTemplatePath)));
 
     CGameCommonItemEntityModel CommonItemEntityModelTemplate => (EntityModelTemplate.EntityModel as CGameCommonItemEntityModel);
     CPlugSolid2Model Solid2ModelTemplate => (CommonItemEntityModelTemplate.StaticObject.Mesh);
@@ -42,8 +109,8 @@ public class MeshBuilder
 
     CGameCommonItemEntityModelEdition CommonItemEntityModelEditionTemplate => (EntityModelEditionTemplate.EntityModelEdition as CGameCommonItemEntityModelEdition);
     CPlugCrystal MeshCrystalTemplate => CommonItemEntityModelEditionTemplate.MeshCrystal;
-    CPlugCrystal.GeometryLayer LayerTemplate => MeshCrystalTemplate.Layers[0] as CPlugCrystal.GeometryLayer;
-    CPlugCrystal.Crystal CrystalTemplate => LayerTemplate.Crystal;
+    CPlugCrystal.GeometryLayer GeometryLayerTemplate => MeshCrystalTemplate.Layers[0] as CPlugCrystal.GeometryLayer;
+    CPlugCrystal.Crystal GeometryCrystalTemplate => GeometryLayerTemplate.Crystal;
 
     CPlugPrefab CPlugPrefabTemplate => (MovingItemTemplate.EntityModel as CPlugPrefab);
     CPlugDynaObjectModel DynaObjectModelTemplate => ItemExtensions.TryGetDynaObjectModel(MovingItemTemplate, out var dyna) ? dyna : null;
@@ -53,6 +120,9 @@ public class MeshBuilder
     CPlugStaticObjectModel StaticObjectModelTemplate => ItemExtensions.TryGetStaticObjectModel(TriggerItemTemplate, out var staticObj) ? staticObj : null;
     NPlugTrigger_SSpecial TriggerSpecialTemplate => ItemExtensions.TryGetTriggerSpecial(TriggerItemTemplate, out var triggerSpecial) ? triggerSpecial : null;
 
+    CPlugCrystal.TriggerLayer TriggerLayerTemplate => (TriggerLayerTemplateItem.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal.Layers[0] as CPlugCrystal.TriggerLayer;
+    CPlugCrystal.Crystal TriggerCrystalTemplate => TriggerLayerTemplate.Crystal;
+
 
     Ident ident;
 
@@ -61,7 +131,7 @@ public class MeshBuilder
     public MeshBuilder(MeshBuilderSettings settings)
     {
         _settings = settings;
-        ident = new Ident("", 26, _settings.Author ?? "");
+        ident = new Ident("", 26, _settings.Author ?? "TM_CSharpMapping");
     }
 
     // ─────────────────────────────────────────────
@@ -70,7 +140,7 @@ public class MeshBuilder
 
     // Easiest approach: raw triangle mesh for both static and dynamic
     // If dynamic needs a convex hull later, that's a separate concern
-    public CPlugSurface BuildSurface(NormalizedMesh mesh)
+    public ToolResult<CPlugSurface> BuildSurface(NormalizedMesh mesh, BuildOptions buildOptions, ReadOnlySpan<int> geometries, ReadOnlySpan<int> surfaces)
     {
         var surface = ObjectCloner.DeepCloneObject(SurfaceTemplate);
 
@@ -81,13 +151,20 @@ public class MeshBuilder
         var allPositions = new List<Vec3>();
         var allTriangles = new List<CPlugSurface.Mesh.Triangle>();
 
-        foreach (var subMesh in mesh.Submeshes)
+        foreach (var subMeshIndex in surfaces)
         {
+            var subMesh = mesh.Submeshes[subMeshIndex];
+
             int vertOffset = allPositions.Count;
             allPositions.AddRange(subMesh.Positions);
 
             for (int i = 0; i < subMesh.Indices.Length; i += 3)
             {
+                MaterialId materialId = MaterialId.Concrete;
+                if (subMesh.SurfaceMaterialIds != null)
+                    materialId = subMesh.SurfaceMaterialIds[i / 3];
+                else
+                    materialId = subMesh.Material.SurfacePhysicId;
                 allTriangles.Add(new CPlugSurface.Mesh.Triangle
                 {
                     Indices = new Int3(
@@ -95,7 +172,7 @@ public class MeshBuilder
                         vertOffset + subMesh.Indices[i + 1],
                         vertOffset + subMesh.Indices[i + 2]),
                     SurfaceIndex = 0,
-                    U02 = 0/*(byte)subMesh.Material.SurfacePhysicId*/,
+                    U02 = (byte)materialId,
                     U03 = 0
                 });
             }
@@ -106,33 +183,32 @@ public class MeshBuilder
 
         surface.Surf = surfMesh; 
         var chunk = surface.GetChunk<Chunk0900C003>();
-        chunk.U02 = mesh.Submeshes.Select(submesh => (ushort)submesh.Material.SurfacePhysicId).ToArray();
-        return surface;
+        chunk.U02 = geometries.ToArray()
+            .Where(g => !buildOptions.Invisibles.Contains(g))// only visibles
+            .Select(idx => (idx, mesh.Submeshes[idx]))
+            .Select(d => buildOptions.NonCollidables.Contains(d.idx) ? (ushort)MaterialId.NotCollidable : (ushort)d.Item2.Material.SurfacePhysicId) // non-collidables get different material
+            .ToArray();
+        return ToolResult.Success(surface, nameof(MeshBuilder));
+    }
+
+    public ToolResult<CPlugSurface> ReconstructSurface(NormalizedSubmesh surfaceSubmesh, NormalizedMesh mesh, BuildOptions buildOptions, int[] geometries)
+    {
+        return BuildSurface(mesh, buildOptions, geometries, [mesh.Submeshes.IndexOf(surfaceSubmesh)]);
     }
 
     // Same mesh for both — simplest valid approach for dynamic too
     // Replace with convex hull later if physics behavior needs it
-    public CPlugSurface BuildDynaSurface(NormalizedMesh mesh)
+    public ToolResult<CPlugSurface> BuildDynaSurface(NormalizedMesh mesh, BuildOptions buildOptions)
     {
-        return mesh.SourceData switch
-        {
-            CPlugDynaObjectModel dynaModel when dynaModel.DynaShape != null => ObjectCloner.DeepCloneObject(dynaModel.DynaShape),
-            CPlugDynaObjectModel dynaModel when dynaModel.StaticShape != null => ObjectCloner.DeepCloneObject(dynaModel.StaticShape),
-            CPlugStaticObjectModel staticModel when staticModel.Shape != null => ObjectCloner.DeepCloneObject(staticModel.Shape),
-            _ => BuildSurface(mesh)
-        };
-
+        if(buildOptions.DynaShapes.Count == 0)
+            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingDynaShape);
+        return BuildSurface(mesh, buildOptions, buildOptions.Geometries.ToArray(), buildOptions.DynaShapes.ToArray());
     }
-    public CPlugSurface BuildStaticSurface(NormalizedMesh mesh)
+    public ToolResult<CPlugSurface> BuildStaticSurface(NormalizedMesh mesh, BuildOptions buildOptions)
     {
-        return mesh.SourceData switch
-        {
-            CPlugDynaObjectModel dynaModel when dynaModel.StaticShape != null => ObjectCloner.DeepCloneObject(dynaModel.StaticShape),
-            CPlugStaticObjectModel staticModel when staticModel.Shape != null => ObjectCloner.DeepCloneObject(staticModel.Shape),
-            CPlugDynaObjectModel dynaModel when dynaModel.DynaShape != null => ObjectCloner.DeepCloneObject(dynaModel.DynaShape),
-            _ => BuildSurface(mesh)
-        };
-
+        if (buildOptions.StaticShapes.Count == 0)
+            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingStaticShape);
+        return BuildSurface(mesh, buildOptions, buildOptions.Geometries.ToArray(), buildOptions.StaticShapes.ToArray());
     }
 
 
@@ -140,24 +216,33 @@ public class MeshBuilder
     // Solid2Model — Option A: mutate existing
     // ─────────────────────────────────────────────
 
-    public void PopulateSolid2Model(CPlugSolid2Model target, NormalizedMesh mesh)
+    public ToolResult<None> PopulateSolid2Model(CPlugSolid2Model target, NormalizedMesh mesh, BuildOptions buildOptions)
     {
         List<CPlugVisual> visuals = [];
         List<CPlugSolid2Model.Material> materials = [];
-        List<CPlugSolid2Model.ShadedGeom> shadedGeom = []; 
+        List<CPlugSolid2Model.ShadedGeom> shadedGeom = [];
 
-        foreach (var submesh in mesh.Submeshes)
+        foreach (var subMeshIdx in buildOptions.Geometries)
         {
+            var submesh = mesh.Submeshes[subMeshIdx];
+
+            if(buildOptions.Invisibles.Contains(subMeshIdx))
+                continue;
+
             var indexedTriangles = BuildIndexedTrianglesVisual(mesh, submesh);
 
             int visualIndex = visuals.Count;
             int materialIndex = materials.Count;
 
             visuals.Add(indexedTriangles);
+
+            var materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
+            if (buildOptions.NonCollidables.Contains(subMeshIdx))
+                materialInstance.SurfacePhysicId = MaterialId.NotCollidable;
             materials.Add(new CPlugSolid2Model.Material
             {
-                MaterialUserInst = submesh.Material,
-                MaterialName = submesh.Material.MaterialName
+                MaterialUserInst = materialInstance,
+                MaterialName = ""//submesh.Material.MaterialName
             });
             shadedGeom.Add(new CPlugSolid2Model.ShadedGeom
             {
@@ -172,25 +257,29 @@ public class MeshBuilder
         target.CustomMaterials = materials.ToArray();
         target.ShadedGeoms = shadedGeom.ToArray();
         target.FileWriteTime = DateTime.Now;
+        return ToolResult.Success(nameof(MeshBuilder));
     }
 
     // ─────────────────────────────────────────────
     // Solid2Model — Option B: build from scratch
     // ─────────────────────────────────────────────
 
-    public CPlugSolid2Model BuildSolid2Model(NormalizedMesh mesh)
+    public ToolResult<CPlugSolid2Model> BuildSolid2Model(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         // grab source solid from SourceData if available as chunk donor
         // otherwise construct empty (may be missing required chunks)
         CPlugSolid2Model solid;
         if (mesh.SourceData is CPlugSolid2Model source)
-            return ObjectCloner.DeepCloneObject(source);// immediate return
+            solid = ObjectCloner.DeepCloneObject(source);
         else
             solid = ObjectCloner.DeepCloneObject(Solid2ModelTemplate);
 
-        PopulateSolid2Model(solid, mesh);
+        var result = PopulateSolid2Model(solid, mesh, buildOptions);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
 
-        return solid;
+
+        return ToolResult.Success(solid, nameof(MeshBuilder));
     }
 
     // ─────────────────────────────────────────────
@@ -198,50 +287,74 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
 
     // Option A: mutate existing DynaObjectModel (preferred — avoids chunk issues)
-    public void PopulateDynaObjectModel(CPlugDynaObjectModel target, NormalizedMesh mesh)
+    public ToolResult<None> PopulateDynaObjectModel(CPlugDynaObjectModel target, NormalizedMesh mesh, BuildOptions buildOptions)
     {
-        target.Mesh = BuildSolid2Model(mesh);
-        target.DynaShape = BuildDynaSurface(mesh);
-        target.StaticShape = BuildStaticSurface(mesh);
+        var meshResult = BuildSolid2Model(mesh, buildOptions);
+        if(meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+        target.Mesh = meshResult.Value;
+
+        var dynaShapeResult = BuildDynaSurface(mesh, buildOptions);
+        if (dynaShapeResult.IsFailure)
+            return ToolResult.Fail(dynaShapeResult);
+        target.DynaShape = dynaShapeResult.Value;
+
+        var staticShapeResult = BuildStaticSurface(mesh, buildOptions);
+        if (staticShapeResult.IsFailure)
+            return ToolResult.Fail(staticShapeResult);
+        target.StaticShape = staticShapeResult.Value;
+        return ToolResult.Success(nameof(MeshBuilder));
     }
 
     // Option B: build new DynaObjectModel using target as chunk donor
-    public CPlugDynaObjectModel BuildDynaObjectModel(NormalizedMesh mesh)
+    public ToolResult<CPlugDynaObjectModel> BuildDynaObjectModel(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         CPlugDynaObjectModel dyna;
         if (mesh.SourceData is CPlugDynaObjectModel source)
             dyna = ObjectCloner.DeepCloneObject(source);
         else
             dyna = ObjectCloner.DeepCloneObject(DynaObjectModelTemplate);
-        PopulateDynaObjectModel(dyna, mesh);
-        return dyna;
+        var result = PopulateDynaObjectModel(dyna, mesh, buildOptions);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        return ToolResult.Success(dyna, nameof(MeshBuilder));
     }
 
 
     // StaticObjectModel
     // ─────────────────────────────────────────────
 
-    public void PopulateStaticObjectModel(CPlugStaticObjectModel target, NormalizedMesh mesh)
+    public ToolResult<None> PopulateStaticObjectModel(CPlugStaticObjectModel target, NormalizedMesh mesh, BuildOptions buildOptions)
     {
-        target.Mesh = BuildSolid2Model(mesh);
-        target.Shape = BuildStaticSurface(mesh);
+        var meshResult = BuildSolid2Model(mesh, buildOptions);
+        if (meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+        target.Mesh = meshResult.Value;
+
+        var staticShapeResult = BuildStaticSurface(mesh, buildOptions);
+        if (staticShapeResult.IsFailure)
+            return ToolResult.Fail(staticShapeResult);
+        target.Shape = staticShapeResult.Value;
+        return ToolResult.Success(nameof(MeshBuilder));
     }
 
-    public CPlugStaticObjectModel BuildStaticObjectModel(NormalizedMesh mesh)
+    public ToolResult<CPlugStaticObjectModel> BuildStaticObjectModel(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         CPlugStaticObjectModel staticObj;
         if (mesh.SourceData is CPlugStaticObjectModel source)
             staticObj = ObjectCloner.DeepCloneObject(source);
         else
             staticObj = ObjectCloner.DeepCloneObject(StaticObjectModelTemplate);
-        PopulateStaticObjectModel(staticObj, mesh);
-        return staticObj;
+        var result = PopulateStaticObjectModel(staticObj, mesh, buildOptions);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        return ToolResult.Success(staticObj, nameof(MeshBuilder));
     }
 
     // ─────────────────────────────────────────────
     // CommonItemEntityModelEdition (Crystal)
     // ─────────────────────────────────────────────
-    public CPlugCrystal BuildCrystal(NormalizedMesh mesh)
+    public ToolResult<CPlugCrystal> BuildCrystal(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         CPlugCrystal crystal;
         if (mesh.SourceData is CPlugCrystal source)
@@ -249,33 +362,62 @@ public class MeshBuilder
         else
             crystal = ObjectCloner.DeepCloneObject(MeshCrystalTemplate);
 
-        PopulateMeshCrystal(crystal, mesh);
-        return crystal;
+        var result = PopulateMeshCrystal(crystal, mesh, buildOptions);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        return ToolResult.Success(crystal, nameof(MeshBuilder));
     }
 
-    public void PopulateMeshCrystal(CPlugCrystal target, NormalizedMesh mesh)
+    public ToolResult<None> PopulateMeshCrystal(CPlugCrystal target, NormalizedMesh mesh, BuildOptions buildOptions)
     {
         List<CPlugCrystal.Layer> layers = [];
         List<CPlugCrystal.Material> materials = [];
-        List<CPlugSolid2Model.ShadedGeom> shadedGeom = [];
+        Dictionary<CPlugMaterialUserInst, CPlugMaterialUserInst> materialMap = [];
 
-        foreach (var submesh in mesh.Submeshes)
+        int layerIdx = 0;
+        foreach (var submeshIdx in buildOptions.Geometries)
         {
+            var submesh = mesh.Submeshes[submeshIdx];
+            if(!materialMap.TryGetValue(submesh.Material, out var materialInstance))
+                materialMap[submesh.Material] = materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
             var material = new CPlugCrystal.Material
             {
-                MaterialUserInst = submesh.Material,
+                MaterialUserInst = materialInstance,
                 MaterialName = string.Empty,
             };
             materials.Add(material);
-            var layer = BuildLayer(submesh, material);
-            layer.LayerId = $"Layer{layers.Count}";
+            var layer = BuildGeometryLayer(submesh, material);
+            layer.Crystal.U02 = layerIdx;
+            layer.LayerId = $"Layer{layerIdx}";
+            layer.IsVisible = !buildOptions.Invisibles.Contains(submeshIdx);
+            layer.Collidable = !buildOptions.NonCollidables.Contains(submeshIdx);
             layers.Add(layer);
-        
+            layerIdx++;
+        }
+        foreach (var submeshIdx in buildOptions.Triggers)
+        {
+            var submesh = mesh.Submeshes[submeshIdx];
+            if (!materialMap.TryGetValue(submesh.Material, out var materialInstance))
+                materialMap[submesh.Material] = materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
+            var material = new CPlugCrystal.Material
+            {
+                MaterialUserInst = materialInstance,
+                MaterialName = string.Empty,
+            };
+            materials.Add(material);
+            var layer = BuildTriggerLayer(submesh, material);
+            layer.Crystal.U02 = layerIdx;
+            layer.LayerId = $"Layer{layerIdx}";
+            layer.LayerName = $"Trigger {submesh.Name}";
+            
+            layers.Add(layer);
+            layerIdx++;
         }
         target.Layers = layers;
         target.Materials = materials;
         var chunk = target.Chunks.Get<CPlugCrystal.Chunk09003007>();
-        chunk.U01 = Enumerable.Repeat(2, layers.Sum(l => (l as CPlugCrystal.GeometryLayer).Crystal.Faces.Length)).ToArray();
+        chunk.U01 = Enumerable.Repeat(2, layers.OfType<CPlugCrystal.GeometryLayer>().Sum(l => l.Crystal.Faces.Length)).ToArray();
+        return ToolResult.Success(nameof(MeshBuilder));
     }
 
     // ─────────────────────────────────────────────
@@ -312,26 +454,39 @@ public class MeshBuilder
             dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.Color0);
         else
             dataDecls.Insert(2 ,new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16});
+        //if(subMesh.TangentUs == null)
+        //    dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TangentU);
+        //if (subMesh.TangentVs == null)
+        //    dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TangentV);
 
-        if(colors.Count > 0)
+        if (colors.Count > 0)
         {
-            dataDecls.ElementAt(0).Flags1 = 9438208;
+            dataDecls.FirstOrDefault(d=>d.WeightCount == CPlugVertexStream.EPlugVDcl.Position).Flags1 = 9438208;
 
-            dataDecls.ElementAt(1).Flags1 = 277879813;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Normal).Flags1 = 277879813;
 
-            dataDecls.ElementAt(2).Flags1 = 546310152;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Color0).Flags1 = 546310152;
 
-            dataDecls.ElementAt(3).Flags1 = 546308618;
-            dataDecls.ElementAt(3).Flags2 = 80;
-            dataDecls.ElementAt(3).Offset = 20;
+            var tex0Decl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
+            tex0Decl.Flags1 = 546308618;
+            tex0Decl.Flags2 = 80;
+            tex0Decl.Offset = 20;
 
-            dataDecls.ElementAt(4).Flags1 = 277879826;
-            dataDecls.ElementAt(4).Flags2 = 112;
-            dataDecls.ElementAt(4).Offset = 28;
+            var tangentUDecl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TangentU);
+            if(tangentUDecl != null)
+            {
+                tangentUDecl.Flags1 = 277879826;
+                tangentUDecl.Flags2 = 112;
+                tangentUDecl.Offset = 28;
+            }
 
-            dataDecls.ElementAt(5).Flags1 = 277879828;
-            dataDecls.ElementAt(5).Flags2 = 128;
-            dataDecls.ElementAt(5).Offset = 32;
+            var tangentVDecl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TangentV);
+            if(tangentVDecl != null)
+            {
+                tangentVDecl.Flags1 = 277879828;
+                tangentVDecl.Flags2 = 128;
+                tangentVDecl.Offset = 32;
+            }
         }
         dataDeclField.SetValue(vertexStream, dataDecls.ToArray());
 
@@ -350,23 +505,25 @@ public class MeshBuilder
             BindingFlags.NonPublic | BindingFlags.Instance);
         countField?.SetValue(vertexStream, vertexStream.Positions.Length);
 
-        if(uvs.TryGetValue(0, out var uv0))
+        var tangentUs = typeof(CPlugVertexStream).GetField("tangentUs",
+         BindingFlags.NonPublic | BindingFlags.Instance)!;
+        if (subMesh.TangentUs != null)
         {
-            var tangentUs = typeof(CPlugVertexStream).GetField("tangentUs",
-               BindingFlags.NonPublic | BindingFlags.Instance);
-            if(subMesh.TangentUs != null)
-                tangentUs?.SetValue(vertexStream, subMesh.TangentUs);
-            else
-                tangentUs?.SetValue(vertexStream, new Vec3[uv0.Length]);
+            tangentUs.SetValue(vertexStream, subMesh.TangentUs);
         }
-        if (uvs.TryGetValue(1, out var uv1))
+        else
         {
-            var tangentVs = typeof(CPlugVertexStream).GetField("tangentVs",
-               BindingFlags.NonPublic | BindingFlags.Instance);
-            if(subMesh.TangentVs != null)
-                tangentVs?.SetValue(vertexStream, subMesh.TangentVs);
-            else
-                tangentVs?.SetValue(vertexStream, new Vec3[uv1.Length]);
+            tangentUs.SetValue(vertexStream, new Vec3[vertexStream.Positions.Length]);
+        }
+        var tangentVs = typeof(CPlugVertexStream).GetField("tangentVs",
+             BindingFlags.NonPublic | BindingFlags.Instance)!;
+        if (subMesh.TangentVs != null)
+        {
+            tangentVs.SetValue(vertexStream, subMesh.TangentVs);
+        }
+        else
+        {
+            tangentVs.SetValue(vertexStream, new Vec3[vertexStream.Positions.Length]);
         }
 
         var indexBuffer = ObjectCloner.DeepCloneObject(IndexBufferTemplate);
@@ -392,13 +549,13 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     // GeometryLayer builder (shared)
     // ─────────────────────────────────────────────
-    CPlugCrystal.GeometryLayer BuildLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material)
+    CPlugCrystal.GeometryLayer BuildGeometryLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material)
     {
-        var layer = ObjectCloner.DeepCloneObject(LayerTemplate);
-        layer.LayerName = "Geometry";
+        var layer = ObjectCloner.DeepCloneObject(GeometryLayerTemplate);
+        layer.LayerName = $"Geometry {submesh.Name}";
 
-        var crystal = ObjectCloner.DeepCloneObject(CrystalTemplate);
-        crystal.Positions = submesh.Positions;
+        var crystal = ObjectCloner.DeepCloneObject(GeometryCrystalTemplate);
+        crystal.Positions = WeldPositions(submesh.Positions, out var remap);
 
         var group = crystal.Groups[0];
         group.Name = "part";
@@ -419,7 +576,44 @@ public class MeshBuilder
                 // always quantizing lightmap coord because gbx reader/writer also always does this
                 lightmap = QuantizeLightmapCoord(lightmap);
 
-                vertices[v] = new CPlugCrystal.Vertex(idx, texCoord, lightmap);
+                vertices[v] = new CPlugCrystal.Vertex(remap[idx], texCoord, lightmap);
+            }
+
+            faces.Add(new CPlugCrystal.Face(vertices, group, material, null));
+        }
+
+        crystal.Faces = faces.ToArray();
+        layer.Crystal = crystal;
+        return layer;
+    }
+    CPlugCrystal.TriggerLayer BuildTriggerLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material)
+    {
+        var layer = ObjectCloner.DeepCloneObject(TriggerLayerTemplate);
+        layer.LayerName = $"Trigger {submesh.Name}";
+
+        var crystal = ObjectCloner.DeepCloneObject(TriggerCrystalTemplate);
+        crystal.Positions = WeldPositions(submesh.Positions, out var remap);
+
+        var group = crystal.Groups[0];
+        group.Name = "part";
+        crystal.Groups = [group];
+
+        var faces = new List<CPlugCrystal.Face>();
+
+        for (int i = 0; i < submesh.Indices.Length; i += 3)
+        {
+            var vertices = new CPlugCrystal.Vertex[3];
+
+            for (int v = 0; v < 3; v++)
+            {
+                var idx = submesh.Indices[i + v];
+                var texCoord = submesh.TexCoords?[idx] ?? Vec2.Zero;
+                var lightmap = Vec2.Zero;
+
+                // always quantizing lightmap coord because gbx reader/writer also always does this
+                lightmap = QuantizeLightmapCoord(lightmap);
+
+                vertices[v] = new CPlugCrystal.Vertex(remap[idx], texCoord, lightmap);
             }
 
             faces.Add(new CPlugCrystal.Face(vertices, group, material, null));
@@ -430,24 +624,30 @@ public class MeshBuilder
         return layer;
     }
 
-    public void PopulateTriggerSpecial(NPlugTrigger_SSpecial target, NormalizedMesh mesh, int surfaceMeshIndex = 0)
+    public ToolResult<None> PopulateTriggerSpecial(NPlugTrigger_SSpecial target, NormalizedMesh mesh, BuildOptions buildOptions)
     {
-        var surfaceMesh = mesh.Submeshes[Math.Clamp(surfaceMeshIndex, 0, mesh.Submeshes.Length - 1)].AsMesh();
-        var surface = BuildSurface(surfaceMesh);
+        if (buildOptions.Triggers.Count == 0)
+            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingTrigger);
+
+        var surfaceResult = BuildSurface(mesh, buildOptions, buildOptions.Geometries.ToArray(), buildOptions.Triggers.ToArray());
+        if (surfaceResult.IsFailure)
+            return ToolResult.Fail(surfaceResult);
+        CPlugSurface surface = surfaceResult.Value;
         surface.Surf!.GameplayMainDir = new Vec3(0, 0, 1);
         target.TriggerShape = surface;
+        return ToolResult.Success(nameof(MeshBuilder));
     }
-    public NPlugTrigger_SSpecial BuildTriggerSpecial(NormalizedMesh mesh, LegacyGameplayId gameplayId, int surfaceMeshIndex = 0)
+    public ToolResult<NPlugTrigger_SSpecial> BuildTriggerSpecial(NormalizedMesh mesh, LegacyGameplayId gameplayId, BuildOptions buildOption)
     {
         NPlugTrigger_SSpecial triggerSpecial = ObjectCloner.DeepCloneObject(TriggerSpecialTemplate);
-        if (mesh.SurfaceData != null && mesh.SurfaceData is CPlugSurface sourceSurface)
-            triggerSpecial.TriggerShape = ObjectCloner.DeepCloneObject(mesh.SurfaceData);
-        else
-            PopulateTriggerSpecial(triggerSpecial, mesh, surfaceMeshIndex);
+        
+        var result = PopulateTriggerSpecial(triggerSpecial, mesh, buildOption);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
 
         ItemTriggerEffectConverter.ConvertEffect(gameplayId, triggerSpecial);
 
-        return triggerSpecial;
+        return ToolResult.Success(triggerSpecial, nameof(MeshBuilder));
     }
 
     // ─────────────────────────────────────────────
@@ -504,6 +704,48 @@ public class MeshBuilder
     }
 
 
+    // Deduplicates a fully-split position array and returns a remapping table:
+    // remap[oldIndex] = newIndex into the returned unique positions list.
+    static Vec3[] WeldPositions(Vec3[] positions, out int[] remap)
+    {
+        var unique = new List<Vec3>(positions.Length);
+        var indexMap = new Dictionary<Vec3, int>(positions.Length);
+        remap = new int[positions.Length];
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            var p = positions[i];
+            if (!indexMap.TryGetValue(p, out int newIdx))
+            {
+                newIdx = unique.Count;
+                unique.Add(p);
+                indexMap[p] = newIdx;
+            }
+            remap[i] = newIdx;
+        }
+
+        return [.. unique];
+    }
+
+    int[] FindSolidCollidableGeometries(NormalizedMesh mesh)
+    {
+        List<int> geometries = [];
+        for (int i = 0; i < mesh.Submeshes.Length; ++i)
+            if (mesh.Submeshes[i].Type == SubmeshType.Mesh)
+                geometries.Add(i);
+
+        return geometries.ToArray();
+    }
+    int[] FindSubmeshes(NormalizedMesh mesh, params ReadOnlySpan<SubmeshType> types)
+    {
+        List<int> geometries = [];
+        for (int i = 0; i < mesh.Submeshes.Length; ++i)
+            if (types.Contains(mesh.Submeshes[i].Type))
+                geometries.Add(i);
+
+        return geometries.ToArray();
+    }
+
     void FillItemDataFromMesh(CGameItemModel item, NormalizedMesh mesh)
     {
         item.Name = "New Item";
@@ -522,42 +764,79 @@ public class MeshBuilder
             (ushort)MathF.Round(coord.Y * ushort.MaxValue) / (float)ushort.MaxValue);
     }
 
-    public CGameItemModel BuildSolid2ModelItem(NormalizedMesh mesh)
+    public ToolResult<CGameItemModel> BuildSolid2ModelItem(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         var item = ObjectCloner.DeepCloneObject(EntityModelTemplate);
-        (item.EntityModel as CGameCommonItemEntityModel).StaticObject.Mesh = BuildSolid2Model(mesh);
+        var meshResult = BuildSolid2Model(mesh, buildOptions);
+        if (meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+        (item.EntityModel as CGameCommonItemEntityModel).StaticObject.Mesh = meshResult.Value;
         FillItemDataFromMesh(item, mesh);
-        return item;
+        return ToolResult.Success(item, nameof(MeshBuilder));
     }
 
-    public CGameItemModel BuildCrystalItem(NormalizedMesh mesh)
+    public ToolResult<CGameItemModel> BuildCrystalItem(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         var item = ObjectCloner.DeepCloneObject(EntityModelEditionTemplate);
-        (item.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal = BuildCrystal(mesh);
+        var crystalResult = BuildCrystal(mesh, buildOptions);
+        if (crystalResult.IsFailure)
+            return ToolResult.Fail(crystalResult);
+        (item.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal = crystalResult.Value;
         FillItemDataFromMesh(item, mesh);
+        return ToolResult.Success(item, nameof(MeshBuilder));
+    }
+    public ToolResult<CGameItemModel> BuildCrystalWaypointItem(NormalizedMesh mesh, EWaypointType waypointType, BuildOptions buildOptions)
+    {
+        var item = BuildCrystalItem(mesh, buildOptions);
+        if (item.IsFailure)
+            return ToolResult.Fail(item);
+        item.Value.WaypointType = waypointType;
         return item;
     }
 
-    public CGameItemModel BuildMovingItem(NormalizedMesh mesh)
+    public ToolResult<CGameItemModel> BuildMovingItem(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         var item = ObjectCloner.DeepCloneObject(MovingItemTemplate);
         ItemExtensions.TryGetDynaModelEntRef(item, out var entRef);
-        entRef.Model = BuildDynaObjectModel(mesh);
+        var dynaResult = BuildDynaObjectModel(mesh, buildOptions);
+        if (dynaResult.IsFailure)
+            return ToolResult.Fail(dynaResult);
+        entRef.Model = dynaResult.Value;
         FillItemDataFromMesh(item, mesh);
-        return item;
+        return ToolResult.Success(item, nameof(MeshBuilder));
     }
 
-    public CGameItemModel BuildTriggerSpecialItem(NormalizedMesh mesh, LegacyGameplayId gameplayId, int surfaceMeshIndex = 0)
+    public ToolResult<CGameItemModel> BuildTriggerSpecialItem(NormalizedMesh mesh, LegacyGameplayId gameplayId, BuildOptions buildOptions)
     {
         var item = ObjectCloner.DeepCloneObject(TriggerItemTemplate);
         ItemExtensions.TryGetStaticModelEntRef(item, out var entRef);
-        entRef.Model = BuildStaticObjectModel(mesh);
+        var staticResult = BuildStaticObjectModel(mesh, buildOptions);
+        if (staticResult.IsFailure)
+            return ToolResult.Fail(staticResult);
+        entRef.Model = staticResult.Value;
         ItemExtensions.TryGetTriggerSpecialEntRef(item, out var triggerSpecialEntRef);
-        triggerSpecialEntRef.Model = BuildTriggerSpecial(mesh, gameplayId, surfaceMeshIndex);
+        var triggerResult = BuildTriggerSpecial(mesh, gameplayId, buildOptions);
+        if (triggerResult.IsFailure)
+            return ToolResult.Fail(triggerResult);
+
+        triggerSpecialEntRef.Model = triggerResult.Value;
         item.Chunks.Get<CGameItemModel.Chunk2E00201F>().U08 = 0;
         FillItemDataFromMesh(item, mesh);
-        return item;
+        return ToolResult.Success(item, nameof(MeshBuilder));
     }
 
+    public ToolResult<CGameItemModel> Test(NormalizedMesh mesh)
+    {
+        var source = ObjectCloner.DeepCloneObject(MovingItemTemplate);
+        ItemExtensions.TryGetDynaModelEntRef(source, out var dynaEnt);
+        var dynaModel = dynaEnt.Model as CPlugDynaObjectModel;
+        dynaModel.Mesh = BuildSolid2Model(mesh, new BuildOptions { Geometries = [0,1] }).Value;
+        dynaModel.DynaShape = BuildDynaSurface(mesh, new BuildOptions { DynaShapes = [1], Geometries = [0,1] }).Value;
+        dynaModel.StaticShape = BuildStaticSurface(mesh, new BuildOptions { StaticShapes = [2], Geometries = [0,1] }).Value;
+
+
+
+        return ToolResult.Success(source, nameof(MeshBuilder));
+    }
 
 }

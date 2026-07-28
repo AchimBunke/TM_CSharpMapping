@@ -52,13 +52,17 @@ public class MovingItemCreator
     }
     
 
-    public ToolResult<CGameItemModel> CreateMovingItem(CGameItemModel sourceItem)
+    public ToolResult<CGameItemModel> CreateMovingItem(CGameItemModel sourceItem, MeshBuilder.BuildOptions? buildOptions = null)
     {
         var extractResult = _meshExtractor.ExtractMesh(sourceItem);
         if(!extractResult.IsSuccess)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, extractResult);
 
-        var movingItem = _meshBuilder.BuildMovingItem(extractResult.Value);
+        var movingItemResult = _meshBuilder.BuildMovingItem(extractResult.Value, buildOptions ?? MeshBuilder.BuildOptions.DefaultFromMesh(extractResult.Value));
+        if(movingItemResult.IsFailure)
+            return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshBuildingFailed, movingItemResult);
+
+        var movingItem = movingItemResult.Value;
 
         ReplaceMaterialLinks(movingItem);
         if (_settings.MovingItemAnimationTemplate != null && _settings.MergeOptions.HasFlag(MergeOptions.UseTemplateAnimations))
