@@ -3,6 +3,7 @@ using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
+using GBX.NET.Exceptions;
 using GBX.NET.Serialization;
 using System.ComponentModel;
 using System.Numerics;
@@ -41,7 +42,7 @@ public class MeshBuilder
 
         public HashSet<int> DynaShapes = new HashSet<int>();
         public HashSet<int> StaticShapes = new HashSet<int>();
-
+        public bool IsMeshCollidable;
 
         public static BuildOptions DefaultFromMesh(NormalizedMesh mesh)
         {
@@ -49,7 +50,7 @@ public class MeshBuilder
             for (int i = 0; i < mesh.Submeshes.Length; ++i)
             {
                 var submesh = mesh.Submeshes[i];
-                if (submesh.Properties.HasFlag(SubmeshProperties.Disabled))
+                if (!submesh.Properties.HasFlag(SubmeshProperties.Enabled))
                     continue;
                
                 switch (submesh.Type)
@@ -68,15 +69,13 @@ public class MeshBuilder
                         options.StaticShapes.Add(i);
                         break;
                 }
-                if (submesh.Properties.HasFlag(SubmeshProperties.Invisible))
+                if (!submesh.Properties.HasFlag(SubmeshProperties.Visible))
                     options.Invisibles.Add(i);
-                if (submesh.Properties.HasFlag(SubmeshProperties.NonCollidable))
+                if (!submesh.Properties.HasFlag(SubmeshProperties.Collidable))
                     options.NonCollidables.Add(i);
-              
             }
-            
-            
-
+            options.IsMeshCollidable = options.StaticShapes.Count == 0 && options.Geometries.Any(g => !options.NonCollidables.Contains(g));
+  
             return options;
         }
 
@@ -330,7 +329,11 @@ public class MeshBuilder
         if (meshResult.IsFailure)
             return ToolResult.Fail(meshResult);
         target.Mesh = meshResult.Value;
-
+        if (buildOptions.IsMeshCollidable)
+        {
+            target.Shape = null;
+            return ToolResult.Success(nameof(MeshBuilder));
+        }
         var staticShapeResult = BuildStaticSurface(mesh, buildOptions);
         if (staticShapeResult.IsFailure)
             return ToolResult.Fail(staticShapeResult);
@@ -348,6 +351,7 @@ public class MeshBuilder
         var result = PopulateStaticObjectModel(staticObj, mesh, buildOptions);
         if (result.IsFailure)
             return ToolResult.Fail(result);
+        staticObj.IsMeshCollidable = buildOptions.IsMeshCollidable;
         return ToolResult.Success(staticObj, nameof(MeshBuilder));
     }
 
@@ -764,13 +768,13 @@ public class MeshBuilder
             (ushort)MathF.Round(coord.Y * ushort.MaxValue) / (float)ushort.MaxValue);
     }
 
-    public ToolResult<CGameItemModel> BuildSolid2ModelItem(NormalizedMesh mesh, BuildOptions buildOptions)
+    public ToolResult<CGameItemModel> BuildStaticObjectModelItem(NormalizedMesh mesh, BuildOptions buildOptions)
     {
         var item = ObjectCloner.DeepCloneObject(EntityModelTemplate);
-        var meshResult = BuildSolid2Model(mesh, buildOptions);
-        if (meshResult.IsFailure)
-            return ToolResult.Fail(meshResult);
-        (item.EntityModel as CGameCommonItemEntityModel).StaticObject.Mesh = meshResult.Value;
+        var staticObjectResult = BuildStaticObjectModel(mesh, buildOptions);
+        if (staticObjectResult.IsFailure)
+            return ToolResult.Fail(staticObjectResult);
+        (item.EntityModel as CGameCommonItemEntityModel).StaticObject = staticObjectResult.Value;
         FillItemDataFromMesh(item, mesh);
         return ToolResult.Success(item, nameof(MeshBuilder));
     }
@@ -810,6 +814,9 @@ public class MeshBuilder
     {
         var item = ObjectCloner.DeepCloneObject(TriggerItemTemplate);
         ItemExtensions.TryGetStaticModelEntRef(item, out var entRef);
+        if (buildOptions.IsMeshCollidable)
+            buildOptions = buildOptions with { StaticShapes = buildOptions.Geometries, IsMeshCollidable = false }; // need to create static shape for plug-prefab
+        
         var staticResult = BuildStaticObjectModel(mesh, buildOptions);
         if (staticResult.IsFailure)
             return ToolResult.Fail(staticResult);

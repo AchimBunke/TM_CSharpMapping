@@ -1,5 +1,7 @@
-﻿using GBX.NET.Engines.GameData;
+﻿using GBX.NET;
+using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
+using TM_GenericMapping.Common;
 
 namespace TM_GenericMapping.Items;
 
@@ -34,6 +36,10 @@ public class ItemTriggerEffectConverter
         [LegacyGameplayId.VehicleTransform_CarDesert] = 0x1700,
     };
 
+    const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
+    private static CPlugPrefab prefabTemplateInstance = null!;
+    public static CPlugPrefab PrefabTemplate => prefabTemplateInstance ??= (CPlugPrefab)Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerItemTemplatePath)).Node.EntityModel!;
+
     public static bool TryConvertEffect(LegacyGameplayId gameplayId, CGameItemModel item)
         => TryConvertEffect(GameplayIdToShort[gameplayId], item);
     public static void ConvertEffect(LegacyGameplayId gameplayId, NPlugTrigger_SSpecial triggerSpecial)
@@ -41,9 +47,10 @@ public class ItemTriggerEffectConverter
 
     static bool TryConvertEffect(ushort gameplay, CGameItemModel item)
     {
-        if (item.EntityModel is not CPlugPrefab prefab)
+        if (item.EntityModel is CGameCommonItemEntityModel commonEntityModel && commonEntityModel.TriggerShape != null)
+            ConvertCommonItemEntityModelToCPlugPrefab(item);
+        if(item.EntityModel is not CPlugPrefab prefab)
             return false;
-
         foreach (var entRef in prefab.Ents)
         {
             if (entRef.Model is not NPlugTrigger_SSpecial triggerSpecial)
@@ -58,5 +65,16 @@ public class ItemTriggerEffectConverter
         var surface = triggerSpecial.TriggerShape;
         var chunk = surface.Chunks.Get<CPlugSurface.Chunk0900C003>();
         chunk.U02 = [gameplay];
+    }
+
+    static void ConvertCommonItemEntityModelToCPlugPrefab(CGameItemModel item)
+    {   
+        var entityModel = item.EntityModel as CGameCommonItemEntityModel;
+        var prefab = ObjectCloner.DeepCloneObject(PrefabTemplate);
+        prefab.Ents[0].Model = entityModel.StaticObject;
+        var triggerSpecial = prefab.Ents[1].Model as NPlugTrigger_SSpecial;
+        triggerSpecial.TriggerShape = entityModel.TriggerShape as CPlugSurface;
+        item.EntityModel = prefab;
+        item.Chunks.Get<CGameItemModel.Chunk2E00201F>().U08 = 0; // necessary otherwise error
     }
 }

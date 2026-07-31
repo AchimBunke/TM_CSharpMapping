@@ -21,8 +21,8 @@ public class MeshExtractor
         else if (ItemExtensions.TryGetStaticObjectModel(item, out var staticModel))
             normalizedMeshResult = ExtractFromStaticModel(staticModel);
         // needs to be last because could cover static object model
-        else if (ItemExtensions.TryGetSolid2Model(item, out var solid2Model))
-            normalizedMeshResult = ExtractFromSolid2Model(solid2Model);
+        //else if (ItemExtensions.TryGetSolid2Model(item, out var solid2Model))
+        //    normalizedMeshResult = ExtractFromSolid2Model(solid2Model);
 
         if (normalizedMeshResult.IsSuccess)
         {
@@ -73,7 +73,7 @@ public class MeshExtractor
                 List<Vec2> lightmapCoords,
                 List<int> indices,
                 SubmeshType type,
-                bool notCollidable,
+                bool collidable,
                 Dictionary<(Vec3, Vec2, Vec2), int> weldMap)>();
 
             SubmeshProperties properties = SubmeshProperties.None;
@@ -83,18 +83,18 @@ public class MeshExtractor
                 case CPlugCrystal.GeometryLayer geo:
                     {
                         var sourcePositions = geo.Crystal.Positions;
-                        if(!geo.IsEnabled)
-                            properties |= SubmeshProperties.Disabled;
-                        if(!geo.IsVisible)
-                            properties |= SubmeshProperties.Invisible;
-                        if(!geo.Collidable)
-                            properties |= SubmeshProperties.NonCollidable;
+                        if(geo.IsEnabled)
+                            properties |= SubmeshProperties.Enabled;
+                        if(geo.IsVisible)
+                            properties |= SubmeshProperties.Visible;
+                        if(geo.Collidable)
+                            properties |= SubmeshProperties.Collidable;
                         foreach (var face in geo.Crystal.Faces)
                         {
                             var mat = face.Material.MaterialUserInst;
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Mesh, mat.SurfacePhysicId == CPlugSurface.MaterialId.NotCollidable, []);
+                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, []);
                                 buckets[mat] = bucket;
                             }
 
@@ -124,16 +124,15 @@ public class MeshExtractor
                 case CPlugCrystal.TriggerLayer trigger:
                     {
                         var sourcePositions = trigger.Crystal.Positions;
-                        if (!trigger.IsEnabled)
-                            properties |= SubmeshProperties.Disabled;
-                        properties|= SubmeshProperties.Invisible | SubmeshProperties.NonCollidable;
+                        if (trigger.IsEnabled)
+                            properties |= SubmeshProperties.Enabled;
                         foreach (var face in trigger.Crystal.Faces)
                         {
                             var mat = face.Material.MaterialUserInst;
 
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Trigger_Waypoint, true, []);
+                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Trigger_Waypoint, false, []);
                                 buckets[mat] = bucket;
                             }
 
@@ -202,7 +201,7 @@ public class MeshExtractor
         }, nameof(MeshExtractor));
     }
 
-    public ToolResult<NormalizedMesh> ExtractFromSolid2Model(CPlugSolid2Model solid2Model)
+    public ToolResult<NormalizedMesh> ExtractFromSolid2Model(CPlugSolid2Model solid2Model, bool meshIsCollisionSource = false)
     {
         var submeshes = new List<NormalizedSubmesh>();
 
@@ -215,6 +214,8 @@ public class MeshExtractor
             var subMeshResult = ExtractFromVisual(vit, solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst);
             if (subMeshResult.IsFailure)
                 return ToolResult.Fail(subMeshResult);
+            if(!meshIsCollisionSource)
+                subMeshResult.Value.Properties &= ~SubmeshProperties.Collidable;
 
             submeshes.Add(subMeshResult.Value);
         }
@@ -238,9 +239,9 @@ public class MeshExtractor
           BindingFlags.NonPublic | BindingFlags.Instance);
         var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
 
-        var properties = SubmeshProperties.None;
-        if(material.SurfacePhysicId == CPlugSurface.MaterialId.NotCollidable)
-            properties |= SubmeshProperties.NonCollidable;
+        var properties = SubmeshProperties.Enabled | SubmeshProperties.Visible;
+        if(material.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable)
+            properties |= SubmeshProperties.Collidable;
         var mesh = new NormalizedSubmesh
         {
             Positions = stream.Positions,
@@ -264,7 +265,7 @@ public class MeshExtractor
         NormalizedMesh mesh = null!;
         if (dynaObjectModel.Mesh is not null)
         {
-            var result = ExtractFromSolid2Model(dynaObjectModel.Mesh);
+            var result = ExtractFromSolid2Model(dynaObjectModel.Mesh, meshIsCollisionSource: false);
             if (result.IsFailure)
                 ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
             mesh = result.Value;
@@ -276,6 +277,7 @@ public class MeshExtractor
             if (result.IsFailure)
                 return ToolResult.Fail(result);
             result.Value.Type = SubmeshType.Static_Shape;
+            result.Value.Properties |= SubmeshProperties.Collidable;
             mesh.Submeshes = [.. mesh.Submeshes, result.Value];
         }
         if (dynaObjectModel.DynaShape is not null)
@@ -284,6 +286,7 @@ public class MeshExtractor
             if (result.IsFailure)
                 return ToolResult.Fail(result);
             result.Value.Type = SubmeshType.Dyna_Shape;
+            result.Value.Properties |= SubmeshProperties.Collidable;
             mesh.Submeshes = [.. mesh.Submeshes, result.Value];
         }
     
@@ -295,18 +298,17 @@ public class MeshExtractor
         // they will be generated separately from NormalizedMesh when writing the item
         if (staticObjectModel.Mesh is not null)
         {
-            var result = ExtractFromSolid2Model(staticObjectModel.Mesh);
+            var result = ExtractFromSolid2Model(staticObjectModel.Mesh, meshIsCollisionSource: staticObjectModel.IsMeshCollidable);
             if(result.IsFailure)
                 return result;
-            if(!staticObjectModel.IsMeshCollidable)
-                foreach(var submesh in result.Value.Submeshes)
-                    submesh.Properties |= SubmeshProperties.NonCollidable;
+         
             if (staticObjectModel.Shape == null)
                 return result;
             var shapeResult = ExtractFromSurface(staticObjectModel.Shape);
             if (shapeResult.IsSuccess)
             {
                 shapeResult.Value.Type = SubmeshType.Static_Shape;
+                shapeResult.Value.Properties |= SubmeshProperties.Collidable;
                 result.Value.Submeshes = [.. result.Value.Submeshes, shapeResult.Value];
             }
             return result;
@@ -347,6 +349,7 @@ public class MeshExtractor
         mesh.Material = CreateErrorMat();
         mesh.SurfaceMaterialIds = surf.Triangles.Select(t => (MaterialId)t.U02).ToArray();
         mesh.Name = MatToName(mesh.Material);
+        mesh.Properties = SubmeshProperties.Enabled;
         return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
 

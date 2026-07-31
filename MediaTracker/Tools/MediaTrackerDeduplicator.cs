@@ -54,6 +54,7 @@ public class MediaTrackerDeduplicator
     public ToolResult<DeduplicationInfo> Deduplicate(CGameCtnChallenge challenge)
     {
         _nodes.Clear();
+        _nodeRefs.Clear();
         CreateOptions();
         var info = new DeduplicationInfo();
 
@@ -80,6 +81,7 @@ public class MediaTrackerDeduplicator
     public ToolResult<DeduplicationInfo> Deduplicate(CGameCtnMediaClip clip, ReadOnlySpan<CGameCtnMediaTrack> consideredTracks)
     {
         _nodes.Clear();
+        _nodeRefs.Clear();
         CreateOptions();
         var info = new DeduplicationInfo();
 

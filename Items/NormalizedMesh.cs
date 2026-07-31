@@ -18,9 +18,9 @@ public enum SubmeshType
 public enum SubmeshProperties
 {
     None = 0,
-    Disabled = 1 << 0,
-    Invisible = 1 << 1,
-    NonCollidable = 1 << 2
+    Enabled = 1 << 0,
+    Visible = 1 << 1,
+    Collidable = 1 << 2
 }
 
 public class NormalizedSubmesh
