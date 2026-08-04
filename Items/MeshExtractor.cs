@@ -205,6 +205,7 @@ public class MeshExtractor
     {
         var submeshes = new List<NormalizedSubmesh>();
 
+        bool hasLods = solid2Model.LodMaxDistAtFov90?.Length > 0;
         foreach (var shaded in solid2Model.ShadedGeoms)
         {
             var visual = solid2Model.Visuals[shaded.VisualIndex];
@@ -216,14 +217,22 @@ public class MeshExtractor
                 return ToolResult.Fail(subMeshResult);
             if(!meshIsCollisionSource)
                 subMeshResult.Value.Properties &= ~SubmeshProperties.Collidable;
-
+            if(hasLods)
+            {
+                if(!NormalizedMesh.IsVisibleInAllLods(shaded.LodMask, solid2Model.LodMaxDistAtFov90!.Length)) // check if has any lod or always visible
+                {
+                    subMeshResult.Value.Properties |= SubmeshProperties.LOD;
+                }
+                subMeshResult.Value.LODMask = shaded.LodMask;
+            }
             submeshes.Add(subMeshResult.Value);
         }
 
         return ToolResult.Success(new NormalizedMesh
         {
             Submeshes = submeshes.ToArray(),
-            SourceData = solid2Model
+            SourceData = solid2Model,
+            LODDistances = solid2Model.LodMaxDistAtFov90 ?? []
         }, nameof(MeshExtractor));
     }
 

@@ -44,9 +44,13 @@ public class MeshBuilder
         public HashSet<int> StaticShapes = new HashSet<int>();
         public bool IsMeshCollidable;
 
+        public Dictionary<int, int> LODMasks = [];
+        public float[] LODDistances = [];
+
         public static BuildOptions DefaultFromMesh(NormalizedMesh mesh)
         {
             var options = new BuildOptions();
+            options.LODDistances = mesh.LODDistances;
             for (int i = 0; i < mesh.Submeshes.Length; ++i)
             {
                 var submesh = mesh.Submeshes[i];
@@ -73,9 +77,12 @@ public class MeshBuilder
                     options.Invisibles.Add(i);
                 if (!submesh.Properties.HasFlag(SubmeshProperties.Collidable))
                     options.NonCollidables.Add(i);
+                if (submesh.Properties.HasFlag(SubmeshProperties.LOD))
+                    options.LODMasks[i] = submesh.LODMask;
+                
             }
             options.IsMeshCollidable = options.StaticShapes.Count == 0 && options.Geometries.Any(g => !options.NonCollidables.Contains(g));
-  
+            
             return options;
         }
 
@@ -221,6 +228,7 @@ public class MeshBuilder
         List<CPlugSolid2Model.Material> materials = [];
         List<CPlugSolid2Model.ShadedGeom> shadedGeom = [];
 
+        target.LodMaxDistAtFov90 = buildOptions.LODDistances;
         foreach (var subMeshIdx in buildOptions.Geometries)
         {
             var submesh = mesh.Submeshes[subMeshIdx];
@@ -247,7 +255,7 @@ public class MeshBuilder
             {
                 VisualIndex = visualIndex,
                 MaterialIndex = materialIndex,
-                LodMask = 1,
+                LodMask = buildOptions.LODMasks.TryGetValue(subMeshIdx, out var mask) ? mask : NormalizedMesh.GetAllLodsMask(buildOptions.LODDistances.Length + 1),
                 U01 = -1,
             });
         }
@@ -390,7 +398,7 @@ public class MeshBuilder
                 MaterialName = string.Empty,
             };
             materials.Add(material);
-            var layer = BuildGeometryLayer(submesh, material);
+            var layer = BuildGeometryLayer(submesh, material, submeshIdx, buildOptions);
             layer.Crystal.U02 = layerIdx;
             layer.LayerId = $"Layer{layerIdx}";
             layer.IsVisible = !buildOptions.Invisibles.Contains(submeshIdx);
@@ -553,10 +561,11 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     // GeometryLayer builder (shared)
     // ─────────────────────────────────────────────
-    CPlugCrystal.GeometryLayer BuildGeometryLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material)
+    CPlugCrystal.GeometryLayer BuildGeometryLayer(NormalizedSubmesh submesh, CPlugCrystal.Material material, int submeshIdx, BuildOptions buildOptions)
     {
         var layer = ObjectCloner.DeepCloneObject(GeometryLayerTemplate);
-        layer.LayerName = $"Geometry {submesh.Name}";
+        bool isLod = buildOptions.LODMasks.TryGetValue(submeshIdx, out var mask) && !NormalizedMesh.IsVisibleInAllLods(mask, buildOptions.LODDistances.Length + 1);
+        layer.LayerName = $"Geometry {submesh.Name}{(isLod ? " LOD-" + LodMaskToString(mask, buildOptions.LODDistances.Length + 1) : "")}";
 
         var crystal = ObjectCloner.DeepCloneObject(GeometryCrystalTemplate);
         crystal.Positions = WeldPositions(submesh.Positions, out var remap);
@@ -749,7 +758,10 @@ public class MeshBuilder
 
         return geometries.ToArray();
     }
-
+    string LodMaskToString(int lodMask, int lodCount)
+    {
+        return Convert.ToString(lodMask, 2).PadLeft(lodCount, '0');
+    }
     void FillItemDataFromMesh(CGameItemModel item, NormalizedMesh mesh)
     {
         item.Name = "New Item";

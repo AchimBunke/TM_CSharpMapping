@@ -20,7 +20,8 @@ public enum SubmeshProperties
     None = 0,
     Enabled = 1 << 0,
     Visible = 1 << 1,
-    Collidable = 1 << 2
+    Collidable = 1 << 2,
+    LOD = 1 << 3
 }
 
 public class NormalizedSubmesh
@@ -34,6 +35,8 @@ public class NormalizedSubmesh
     public CPlugMaterialUserInst Material { get; set; }
     public MaterialId[]? SurfaceMaterialIds { get; set; }
 
+    public int LODMask { get; set; } = 1;
+
     public Vec3[]? TangentUs { get; set; }  // per vertex, same length as Positions
     public Vec3[]? TangentVs { get; set; }  // per vertex, same length as Positions
 
@@ -41,13 +44,13 @@ public class NormalizedSubmesh
     public SubmeshProperties Properties { get; set; } = SubmeshProperties.None;
 
     public string Name { get; set; } = string.Empty;
-    public NormalizedMesh AsMesh()
-    {
-        return new NormalizedMesh()
-        {
-            Submeshes = [this],
-        };
-    }
+    //public NormalizedMesh AsMesh()
+    //{
+    //    return new NormalizedMesh()
+    //    {
+    //        Submeshes = [this],
+    //    };
+    //}
 }
 
 public class NormalizedMesh
@@ -60,4 +63,38 @@ public class NormalizedMesh
     public byte[]? IconWebP { get; set; }
     public Color[,]? Icon { get; set; }
 
+    public float[] LODDistances { get; set; } = [];
+
+
+    public static bool IsVisibleInLod(int lodMask, int lod)
+    {
+        return (lodMask & (1 << lod)) != 0;
+    }
+    public static int LodMaskFromLods(params int[] lods)
+    {
+        int mask = 0;
+
+        foreach (int lod in lods)
+            mask |= 1 << lod;
+
+        return mask;
+    }
+
+    public static bool IsVisibleInAllLods(int lodMask, int lodCount)
+    {
+        return lodMask == GetAllLodsMask(lodCount);
+    }
+
+    public static int GetAllLodsMask(int lodCount)
+    {
+        return (1 << lodCount) - 1;
+    }
+    public static int SetLod(int lodMask, int lod, bool enabled)
+    {
+        int bit = 1 << lod;
+
+        return enabled
+            ? lodMask | bit      // set bit to 1
+            : lodMask & ~bit;    // set bit to 0
+    }
 }
