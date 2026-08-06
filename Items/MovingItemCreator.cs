@@ -58,7 +58,8 @@ public class MovingItemCreator
         if(!extractResult.IsSuccess)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, extractResult);
 
-        var movingItemResult = _meshBuilder.BuildMovingItem(extractResult.Value, buildOptions ?? MeshBuilder.BuildOptions.DefaultFromMesh(extractResult.Value));
+        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(MeshBuilder.BuildOptions.DefaultFromMesh(extractResult.Value));
+        var movingItemResult = _meshBuilder.BuildMovingItem(extractResult.Value, buildSettings);
         if(movingItemResult.IsFailure)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshBuildingFailed, movingItemResult);
 
@@ -73,6 +74,23 @@ public class MovingItemCreator
 
         return ToolResult.Success(movingItem, nameof(MovingItemCreator));
 
+    }
+    MeshBuilder.BuildOptions CreateDefaultBuildOptions(MeshBuilder.BuildOptions defaultOptions)
+    {
+        if(defaultOptions.StaticShapes.Count == 0)
+        {
+            var collidableGeometry = defaultOptions.Geometries.Where(g => !defaultOptions.NonCollidables.Contains(g));
+            if (collidableGeometry.Count() != 0)
+                defaultOptions.StaticShapes = collidableGeometry.ToHashSet();
+            else
+                defaultOptions.StaticShapes = defaultOptions.Geometries.ToHashSet();
+        }
+        if(defaultOptions.DynaShapes.Count == 0)
+        {
+            defaultOptions.DynaShapes = defaultOptions.StaticShapes.ToHashSet();
+        }
+            
+        return defaultOptions;
     }
     void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel template)
     {
