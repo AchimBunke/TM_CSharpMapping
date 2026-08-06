@@ -1,11 +1,14 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
+using System.Numerics;
 using static GBX.NET.Engines.Plug.CPlugSurface;
+using static GBX.NET.Engines.Plug.NPlugTrigger_SWaypoint;
 
 namespace TM_GenericMapping.Items;
 
-public enum SubmeshType
+public enum MeshType
 {
     Mesh,
     Dyna_Shape,
@@ -15,7 +18,7 @@ public enum SubmeshType
 }
 
 [Flags]
-public enum SubmeshProperties
+public enum MeshProperties
 {
     None = 0,
     Enabled = 1 << 0,
@@ -23,8 +26,15 @@ public enum SubmeshProperties
     Collidable = 1 << 2,
     LOD = 1 << 3
 }
+public enum GroupType
+{
+    StaticObject,
+    DynaObject,
+    Trigger_Special,
+    Trigger_Waypoint
+}
 
-public class NormalizedSubmesh
+public class NormalizedMesh
 {
     public Vec3[] Positions { get; set; } = [];
     public Vec3[] Normals { get; set; } = [];
@@ -40,32 +50,45 @@ public class NormalizedSubmesh
     public Vec3[]? TangentUs { get; set; }  // per vertex, same length as Positions
     public Vec3[]? TangentVs { get; set; }  // per vertex, same length as Positions
 
-    public SubmeshType Type { get; set; } = SubmeshType.Mesh;
-    public SubmeshProperties Properties { get; set; } = SubmeshProperties.None;
+    public MeshType Type { get; set; } = MeshType.Mesh;
+    public MeshProperties Properties { get; set; } = MeshProperties.None;
 
     public string Name { get; set; } = string.Empty;
-    //public NormalizedMesh AsMesh()
-    //{
-    //    return new NormalizedMesh()
-    //    {
-    //        Submeshes = [this],
-    //    };
-    //}
+    public int GroupIndex { get; set; } = -1;
+
 }
 
-public class NormalizedMesh
+public class MeshGroup
+{
+    public GroupType GroupType { get; set; } = GroupType.StaticObject;
+    public float[] LODDistances { get; set; } = [];
+    public Vector3 Position { get; set; } = Vector3.Zero;
+    public Quaternion Rotation { get; set; } = Quaternion.Identity;
+
+    public NPlugDyna_SKinematicConstraint? KinematicConstraint { get; set; }
+    public NPlugDynaObjectModel_SInstanceParams? DynaObjectModelParams { get; set; }
+    public LegacyGameplayId? TriggerGameplayId { get; set; }
+    public EGameItemWaypointType? WaypointType { get; set; }
+    public bool? WaypointNoRespawn { get; set; }
+}
+
+public class NormalizedItem
 {
 
-    public NormalizedSubmesh[] Submeshes { get; set; } = [];
+    public NormalizedMesh[] Meshes { get; set; } = [];
+    public MeshGroup[] Groups { get; set; } = [];
 
     public object? SourceData { get; set; } // Data where this data comes from
     public CGameItemPlacementParam? PlacementParam { get; set; }
     public byte[]? IconWebP { get; set; }
     public Color[,]? Icon { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+   
+}
 
-    public float[] LODDistances { get; set; } = [];
-
-
+public static class LODUtils
+{
     public static bool IsVisibleInLod(int lodMask, int lod)
     {
         return (lodMask & (1 << lod)) != 0;
@@ -96,5 +119,22 @@ public class NormalizedMesh
         return enabled
             ? lodMask | bit      // set bit to 1
             : lodMask & ~bit;    // set bit to 0
+    }
+
+
+    public static List<Vector2> ToLodRanges(int lodMask, float[] lodDistances)
+    {
+        List<Vector2> lodRanges = new List<Vector2>();
+        for (int i = 0; i < lodDistances.Length; i++)
+        {
+            if (IsVisibleInLod(lodMask, i))
+            {
+                float minDistance = i == 0 ? 0 : lodDistances[i - 1];
+                float maxDistance = lodDistances[i];
+                lodRanges.Add(new Vector2(minDistance, maxDistance));
+            }
+        }
+        lodRanges.Add(new Vector2(lodDistances.LastOrDefault(), float.PositiveInfinity)); // Add the last range to infinity
+        return lodRanges;
     }
 }

@@ -7,6 +7,8 @@ public static class ErrorCodes
         public const string UnsupportedMesh = "MeshExtractor.UnsupportedMesh";
         public const string MissingMesh = "MeshExtractor.MissingMesh";
         public const string MissingTriggerShape = "MeshExtractor.MissingTriggerShape";
+        public const string MissingDynaModel = "MeshExtractor.MissingDynaModel";
+        public const string UnsupportedPrefabEntity = "MeshExtractor.UnsupportedPrefabEntity";
     }
     public static class MeshBuilder
     {
@@ -41,5 +43,11 @@ public static class ErrorCodes
     public static class ItemEffectVariantCreator
     {
         public const string MissingTriggerSpecial = "ItemEffectVariantCreator.MissingTriggerSpecial";
+    }
+
+    public static class GbxConverter
+    {
+        public const string InvalidItemXml = "GbxConverter.InvalidItemXml";
+        public const string InvalidMeshParamsXml = "GbxConverter.InvalidMeshParamsXml";
     }
 }

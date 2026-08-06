@@ -52,13 +52,13 @@ public class MovingItemCreator
     }
     
 
-    public ToolResult<CGameItemModel> CreateMovingItem(CGameItemModel sourceItem, MeshBuilder.BuildOptions? buildOptions = null)
+    public ToolResult<CGameItemModel> CreateMovingItem(CGameItemModel sourceItem, MeshBuilder.BuildSettings? buildOptions = null)
     {
         var extractResult = _meshExtractor.ExtractMesh(sourceItem);
         if(!extractResult.IsSuccess)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, extractResult);
 
-        var movingItemResult = _meshBuilder.BuildMovingItem(extractResult.Value, buildOptions ?? MeshBuilder.BuildOptions.DefaultFromMesh(extractResult.Value));
+        var movingItemResult = _meshBuilder.BuildMixedItem(extractResult.Value, buildOptions ?? MeshBuilder.BuildSettings.DefaultFromMesh(extractResult.Value));
         if(movingItemResult.IsFailure)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshBuildingFailed, movingItemResult);
 

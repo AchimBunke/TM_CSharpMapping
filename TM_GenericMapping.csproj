@@ -21,6 +21,7 @@
 
 
   <ItemGroup>
+    <PackageReference Include="AssimpNet" Version="4.1.0" />
     <PackageReference Include="DirectXTexNet" Version="1.0.7" />
     <PackageReference Include="GBX.NET" Version="2.4.4" />
     <PackageReference Include="GBX.NET.LZO" Version="2.1.6" />

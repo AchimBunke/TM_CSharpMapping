@@ -94,6 +94,30 @@ public static class ColorUtils
             return new Vector4(h, s, v, a);
         }
 
+        public static Color FromRGBHex(string value)
+        {
+            value = value.TrimStart('#');
+
+            if (value.Length == 3)
+            {
+                value = string.Concat(
+                    value[0], value[0],
+                    value[1], value[1],
+                    value[2], value[2]);
+            }
+
+            if (value.Length != 6)
+                throw new FormatException("Expected RGB hex color.");
+
+            return Color.FromArgb(
+                Convert.ToInt32(value.Substring(0, 2), 16),
+                Convert.ToInt32(value.Substring(2, 2), 16),
+                Convert.ToInt32(value.Substring(4, 2), 16));
+        }
+        public string ToRGBHex()
+        {
+            return $"{c.R:X2}{c.G:X2}{c.B:X2}";
+        }
     }
     // -----------------------------
     // Basic lerp

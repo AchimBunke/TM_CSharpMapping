@@ -35,6 +35,7 @@ public class ItemTriggerEffectConverter
         [LegacyGameplayId.VehicleTransform_CarRally] = 0x1600,
         [LegacyGameplayId.VehicleTransform_CarDesert] = 0x1700,
     };
+    public static LegacyGameplayId ShortToGameplayId(ushort gameplay) => GameplayIdToShort.FirstOrDefault(x => x.Value == gameplay).Key;
 
     const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
     private static CPlugPrefab prefabTemplateInstance = null!;
