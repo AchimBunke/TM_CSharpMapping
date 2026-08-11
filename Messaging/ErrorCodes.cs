@@ -45,9 +45,14 @@ public static class ErrorCodes
         public const string MissingTriggerSpecial = "ItemEffectVariantCreator.MissingTriggerSpecial";
     }
 
-    public static class GbxConverter
+    public static class FbxGbxConverter
     {
-        public const string InvalidItemXml = "GbxConverter.InvalidItemXml";
-        public const string InvalidMeshParamsXml = "GbxConverter.InvalidMeshParamsXml";
+        public const string FbxParsingError = "FbxGbxConverter.FbxParsingError";
+        public const string InvalidItemOutputPath = "FbxGbxConverter.InvalidItemOutputPath";
+        public const string MissingMaterialConfig = "FbxGbxConverter.MissingMaterialConfig";
+        public const string MissingMeshConfig = "FbxGbxConverter.MissingMeshConfig";
+        public const string MissingLightConfig = "FbxGbxConverter.MissingLightConfig";
+        public const string MultipleSocketsNotSupported = "FbxGbxConverter.MultipleSocketsNotSupported";
     }
 }
+

@@ -6,12 +6,14 @@ using System.Numerics;
 using System.Reflection;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Messaging;
+using TmEssentials;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
+using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
+using static GBX.NET.Engines.Plug.CPlugVertexStream;
 using static GBX.NET.Engines.Plug.NPlugTrigger_SWaypoint;
-using static TM_GenericMapping.Items.MeshBuilder;
 
 namespace TM_GenericMapping.Items;
 
@@ -36,6 +38,13 @@ public class MeshBuilder
         public int? LODMask { get; set; }
     }
 
+    public struct LightInstanceSetting
+    {
+        public int LightIndex { get; set; }
+        public int GroupId { get; set; }
+
+        public LightType Type { get; set; }
+    }
 
     public struct GroupSetting
     {
@@ -50,6 +59,7 @@ public class MeshBuilder
         public LegacyGameplayId? TriggerGameplayId { get; set; }
         public EGameItemWaypointType? WaypointType { get; set; }
         public bool? WaypointNoRespawn { get; set; }
+        public CPlugSpawnModel? WaypointSpawnModel { get; set; }
     }
 
 
@@ -60,13 +70,15 @@ public class MeshBuilder
 
         }
 
+        public IReadOnlyList<LightInstanceSetting> LightSettings = [];
         public IReadOnlyList<MeshInstanceSetting> MeshSettings = [];
         public IReadOnlyList<GroupSetting> GroupSettings = [];
 
         public static BuildSettings DefaultFromMesh(NormalizedItem item)
         {
             var options = new BuildSettings();
-
+            
+            List<LightInstanceSetting> lightSettings = [];
             List<MeshInstanceSetting> meshSettings = [];
             Dictionary<int, GroupSetting> groupSettings = [];
 
@@ -143,12 +155,27 @@ public class MeshBuilder
                     {
                         Type = groupType,
                         WaypointNoRespawn = submeshGroup.WaypointNoRespawn,
-                        WaypointType = submeshGroup.WaypointType
+                        WaypointType = (EGameItemWaypointType?)submeshGroup.WaypointType,
+                        WaypointSpawnModel = submeshGroup.WaypointSpawnModel,
                     };
 
             }
+
+            for (int i = 0; i < item.Lights.Length; ++i)
+            {
+                var light = item.Lights[i];
+                var lightGroup = item.Groups[light.GroupIndex];
+                lightSettings.Add(new LightInstanceSetting
+                {
+                    LightIndex = i,
+                    GroupId = light.GroupIndex,
+                    Type = light.Type,
+                });
+            }
+
             options.MeshSettings = meshSettings;
             options.GroupSettings = groupSettings.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToList();
+            options.LightSettings = lightSettings;
 
 
             // create groups
@@ -262,10 +289,12 @@ public class MeshBuilder
         surface.Surf = surfMesh; 
         var chunk = surface.GetChunk<Chunk0900C003>();
         var nonCollidableLookup = nonCollidables.ToArray();
-        chunk.U02 = visibles.ToArray()
-            .Select(idx => (idx, item.Meshes[idx]))
-            .Select(d => nonCollidableLookup.Contains(d.idx) ? (ushort)MaterialId.NotCollidable : (ushort)d.Item2.Material.SurfacePhysicId) // non-collidables get different material
-            .ToArray();
+        //chunk.U02 = visibles.ToArray()
+        //    .Select(idx => (idx, item.Meshes[idx]))
+        //    .Select(d => nonCollidableLookup.Contains(d.idx) ? (ushort)MaterialId.NotCollidable : (ushort)d.Item2.Material.SurfacePhysicId) // non-collidables get different material
+        //    .ToArray();
+        if (chunk.U02.Length == 0)
+            chunk.U02 = [0];
         return ToolResult.Success(surface, nameof(MeshBuilder));
     }
 
@@ -301,8 +330,13 @@ public class MeshBuilder
         List<CPlugVisual> visuals = [];
         List<CPlugSolid2Model.Material> materials = [];
         List<CPlugSolid2Model.ShadedGeom> shadedGeom = [];
+        List<LightInst> lightInstances = [];
+        List<CPlugLightUserModel> lightUserModels = [];
+        List<Socket> sockets = [];
+
 
         target.LodMaxDistAtFov90 = groupSetting.LODDistances;
+        PreLightGen? preLightGen = null;
         foreach (var meshSetting in buildSetting.MeshSettings
             .Where(ms=>ms.GroupId == groupSetting.GroupId)
             .Where(ms => ms.Visible))
@@ -314,9 +348,13 @@ public class MeshBuilder
             int visualIndex = visuals.Count;
             int materialIndex = materials.Count;
 
+
+            preLightGen = MergePreLightGenerator(submesh, preLightGen);
+
             visuals.Add(indexedTriangles);
 
             var materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
+            materialInstance.GetChunk<CPlugMaterialUserInst.Chunk090FD001>().U02 = 0;
             if (!meshSetting.Collidable)
                 materialInstance.SurfacePhysicId = MaterialId.NotCollidable;
             materials.Add(new CPlugSolid2Model.Material
@@ -333,14 +371,155 @@ public class MeshBuilder
             });
         }
 
+        
+        foreach(var lightSetting in buildSetting.LightSettings
+            .Where(ls => ls.GroupId == groupSetting.GroupId))
+        {
+            var light = item.Lights[lightSetting.LightIndex];
+            var lightInst = new LightInst() { ModelIndex = lightUserModels.Count, SocketIndex = sockets.Count };
+            lightInstances.Add(lightInst);
+            
+            lightUserModels.Add(CreateLightUserModel(light, lightSetting));
+            sockets.Add(new Socket()
+            {
+                U01 = -1,
+                U02 = IsoFromTransform(light.Position, light.Rotation),
+                Name = light.Name
+            });
+        }
+
+
+        target.PreLightGenerator = preLightGen;
         target.Visuals = visuals.ToArray();
         target.CustomMaterials = materials.ToArray();
         target.ShadedGeoms = shadedGeom.ToArray();
+        target.LightInsts = lightInstances.ToArray();
+        target.LightUserModels = lightUserModels.ToArray();
+        if(lightInstances.Count > 0)
+        {
+            var skel = CreateSkel(sockets);
+            target.Skel = skel;
+        }
+
         target.FileWriteTime = DateTime.Now;
+
+
         var c = target.GetChunk<CPlugSolid2Model.Chunk090BB000>();
         c.U06 = $"CSharpMapping MeshBuilder Solid2Model: {item.Name}";
         c.U18 = 0;
         return ToolResult.Success(nameof(MeshBuilder));
+    }
+    CPlugSkel CreateSkel(List<Socket> sockets)
+    {
+        var skel = new CPlugSkel()
+        {
+            Name = "",
+            U04 = [],
+            U05 = 1,
+            U06 = 0,
+            U07 = [],
+            U08 = [],
+        };
+        var c = skel.CreateChunk<CPlugSkel.Chunk090BA000>();
+        c.Version = 20;
+
+        var socketField = typeof(CPlugSkel).GetField("sockets",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        socketField?.SetValue(skel, sockets.ToArray());
+
+        var jointExprsField = typeof(CPlugSkel).GetField("jointExprs",
+           BindingFlags.NonPublic | BindingFlags.Instance);
+        jointExprsField?.SetValue(skel, new JointExpr[0]);
+
+        var jointsField = typeof(CPlugSkel).GetField("joints",
+           BindingFlags.NonPublic | BindingFlags.Instance);
+        jointsField?.SetValue(skel, new Joint[0]);
+
+        return skel;
+    }
+    CPlugLightUserModel CreateLightUserModel(NormalizedLight light, LightInstanceSetting lightSetting)
+    {
+        var lightModel = ObjectCloner.DeepCloneObject(light.LightModel);
+        var c = lightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>();
+        c.U01 = (int)lightSetting.Type;
+        return lightModel;
+    }
+
+    public static PreLightGen CreateEmtpyPreLightGen()
+    {
+        return new PreLightGen()
+        {
+            Version = 1,
+            U01 = 1,
+            U03 = true,
+            U12 = [],
+            UvGroups = [],
+        };
+    }
+    PreLightGen? MergePreLightGenerator(NormalizedMesh mesh, PreLightGen? preLightGen)
+    {
+        var meshLightGen = mesh.PreLightGenerator ?? CreatePreLightGeneratorFromMeshData(mesh);
+        
+        if (meshLightGen == null)
+            return preLightGen;
+
+        if(preLightGen is null)
+            return meshLightGen;
+
+
+        preLightGen.U02 = Math.Max(preLightGen.U02, meshLightGen.U02); // LMSizeLengthMeters
+        preLightGen.U04 = Math.Min(preLightGen.U04, meshLightGen.U04); // Min UV-X
+        preLightGen.U05 = Math.Min(preLightGen.U05, meshLightGen.U05); // Min UV-Y
+        preLightGen.U06 = Math.Max(preLightGen.U06, meshLightGen.U06); // Max UV-X
+        preLightGen.U07 = Math.Max(preLightGen.U07, meshLightGen.U07); // Max UV-Y
+
+        preLightGen.U08 = Math.Max(preLightGen.U08, meshLightGen.U08); // Max (float.Max i think almost always)
+        preLightGen.U09 = Math.Max(preLightGen.U09, meshLightGen.U09); // Max (float.Max i think almost always)
+        preLightGen.U10 = Math.Min(preLightGen.U10, meshLightGen.U10); // Min (float.Max i think almost always)
+        preLightGen.U11 = Math.Min(preLightGen.U11, meshLightGen.U11); // Min (float.Max i think almost always)
+
+        return preLightGen;
+    }
+    public static PreLightGen? CreatePreLightGeneratorFromMeshData(NormalizedMesh mesh)
+    {
+        if (mesh.LightmapCoords == null)
+            return null;
+        var preLightGen = CreateEmtpyPreLightGen();
+        preLightGen.U08 = float.MaxValue;
+        preLightGen.U09 = float.MaxValue;
+        preLightGen.U10 = float.MinValue;
+        preLightGen.U11 = float.MinValue;
+        preLightGen.U02 = ComputeLightMapSizeLengthMeters(mesh.Positions, mesh.LightmapCoords, mesh.Indices);
+        preLightGen.U04 = mesh.LightmapCoords.Min(uv => uv.X);
+        preLightGen.U05 = mesh.LightmapCoords.Min(uv => uv.Y);
+        preLightGen.U06 = mesh.LightmapCoords.Max(uv => uv.X);
+        preLightGen.U07 = mesh.LightmapCoords.Max(uv => uv.Y);
+        return preLightGen;
+    }
+    public static float ComputeLightMapSizeLengthMeters(
+        IReadOnlyList<Vec3> positions,
+        IReadOnlyList<Vec2> lightmapUVs,
+        IReadOnlyList<int> triangleIndices)
+    {
+        double sumWorldLen = 0.0;
+        double sumUvLen = 0.0;
+
+        for (int i = 0; i < triangleIndices.Count; i += 3)
+        {
+            int i0 = triangleIndices[i], i1 = triangleIndices[i + 1], i2 = triangleIndices[i + 2];
+            int[] tri = { i0, i1, i2 };
+
+            for (int e = 0; e < 3; e++)
+            {
+                int a = tri[e];
+                int b = tri[(e + 1) % 3];
+
+                sumWorldLen += Vector3.Distance(positions[a], positions[b]);
+                sumUvLen += Vector2.Distance(lightmapUVs[a], lightmapUVs[b]);
+            }
+        }
+
+        return sumUvLen < 1e-9 ? 0f : (float)(sumWorldLen / sumUvLen);
     }
 
     // ─────────────────────────────────────────────
@@ -355,7 +534,7 @@ public class MeshBuilder
         if (subMesh.TexCoords is not null)
             uvs[0] = subMesh.TexCoords;
         if (subMesh.LightmapCoords is not null)
-            uvs[1] = subMesh.LightmapCoords;
+            uvs[uvs.Count] = subMesh.LightmapCoords;
         if (subMesh.Colors is not null)
             colors[0] = subMesh.Colors;
 
@@ -368,15 +547,27 @@ public class MeshBuilder
         // fix data decl
         var dataDeclField = typeof(CPlugVertexStream).GetField("dataDecls",
             BindingFlags.NonPublic | BindingFlags.Instance);
+
         var dataDecls = (dataDeclField.GetValue(vertexStream) as CPlugVertexStream.DataDecl[]).ToList();
+
+        // clear tex coords if rex or light is not available
         if (uvs.Count <= 0)
             dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
         if (uvs.Count <= 1)
             dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord1);
+
         if (colors.Count <= 0)
             dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.Color0);
         else
             dataDecls.Insert(2, new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16 });
+
+        if(subMesh.TexCoords is null)
+        {
+            dataDecls.RemoveAll(decl => decl.WeightCount == EPlugVDcl.TangentU);
+            dataDecls.RemoveAll(decl => decl.WeightCount == EPlugVDcl.TangentV);
+        }
+
+
         //if(subMesh.TangentUs == null)
         //    dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TangentU);
         //if (subMesh.TangentVs == null)
@@ -384,16 +575,19 @@ public class MeshBuilder
 
         if (colors.Count > 0)
         {
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Position).Flags1 = 9438208;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Position)?.Flags1 = 9438208;
 
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Normal).Flags1 = 277879813;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Normal)?.Flags1 = 277879813;
 
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Color0).Flags1 = 546310152;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Color0)?.Flags1 = 546310152;
 
             var tex0Decl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
-            tex0Decl.Flags1 = 546308618;
-            tex0Decl.Flags2 = 80;
-            tex0Decl.Offset = 20;
+            if (tex0Decl != null)
+            {
+                tex0Decl.Flags1 = 546308618;
+                tex0Decl.Flags2 = 80;
+                tex0Decl.Offset = 20;
+            }
 
             var tangentUDecl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TangentU);
             if (tangentUDecl != null)
@@ -430,23 +624,24 @@ public class MeshBuilder
 
         var tangentUs = typeof(CPlugVertexStream).GetField("tangentUs",
          BindingFlags.NonPublic | BindingFlags.Instance)!;
-        if (subMesh.TangentUs != null)
+        if(subMesh.TexCoords is null)
         {
-            tangentUs.SetValue(vertexStream, subMesh.TangentUs);
+            tangentUs.SetValue(vertexStream, null);
         }
         else
         {
-            tangentUs.SetValue(vertexStream, new Vec3[vertexStream.Positions.Length]);
+            tangentUs.SetValue(vertexStream, subMesh.TangentUs ?? new Vec3[subMesh.Positions.Length]);
         }
+
         var tangentVs = typeof(CPlugVertexStream).GetField("tangentVs",
              BindingFlags.NonPublic | BindingFlags.Instance)!;
-        if (subMesh.TangentVs != null)
+        if (subMesh.TexCoords is null)
         {
-            tangentVs.SetValue(vertexStream, subMesh.TangentVs);
+            tangentVs.SetValue(vertexStream, null);
         }
         else
         {
-            tangentVs.SetValue(vertexStream, new Vec3[vertexStream.Positions.Length]);
+            tangentVs.SetValue(vertexStream, subMesh.TangentVs ?? new Vec3[subMesh.Positions.Length]);
         }
 
         var indexBuffer = ObjectCloner.DeepCloneObject(IndexBufferTemplate);
@@ -562,6 +757,12 @@ public class MeshBuilder
             return ToolResult.Success(nameof(MeshBuilder));
         }
         target.IsMeshCollidable = false;
+        if (!HasCollidables(groupSetting, buildSettings))
+        {
+            target.Shape = null;
+            return ToolResult.Success(nameof(MeshBuilder));
+        }
+
         var staticShapeResult = BuildStaticSurface(item, groupSetting, buildSettings);
         if (staticShapeResult.IsFailure)
             return ToolResult.Fail(staticShapeResult);
@@ -581,6 +782,10 @@ public class MeshBuilder
     {
         return buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).All(ms => ms.Collidable && ms.Visible);
     } 
+    bool HasCollidables(GroupSetting groupSetting, BuildSettings buildSettings)
+    {
+        return buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Any(ms => ms.Collidable);
+    }
 
     // ─────────────────────────────────────────────
     // CommonItemEntityModelEdition (Crystal)
@@ -640,6 +845,25 @@ public class MeshBuilder
             layer.LayerId = $"Layer{layerIdx}";
             layer.LayerName = $"Trigger {submesh.Name}";
             
+            layers.Add(layer);
+            layerIdx++;
+        }
+        var normalLayerCount = layers.Count;
+        foreach(var group in buildSettings.GroupSettings
+            .Where(g=>g.WaypointSpawnModel != null))
+        {
+            var layer = BuildSpawnLayer(group.WaypointSpawnModel);
+
+            List<CPlugCrystal.PartInLayer> parts = [];
+            for (int i = 0; i < normalLayerCount; ++i)
+            {
+                parts.Add(new CPlugCrystal.PartInLayer() { GroupIndex = 0, LayerId = layers[i].LayerId });
+            }
+            layer.Mask = parts.ToArray();
+
+            layer.LayerId = $"Layer{layerIdx}";
+            layer.LayerName = $"Spawn Position";
+
             layers.Add(layer);
             layerIdx++;
         }
@@ -730,6 +954,22 @@ public class MeshBuilder
         layer.Crystal = crystal;
         return layer;
     }
+    CPlugCrystal.SpawnPositionLayer BuildSpawnLayer(CPlugSpawnModel? model)
+    {
+        var layer = new CPlugCrystal.SpawnPositionLayer();
+        layer.Ver = 2;
+        layer.CrystalEnabled = false;
+        layer.ModifierVersion = 0;
+        layer.SpawnPositionVersion = 1;
+
+        var pitchYawRoll = model.Loc.GetPitchYawRoll(inDegrees: true);
+        layer.HorizontalAngle = pitchYawRoll.Y;
+        layer.VerticalAngle = pitchYawRoll.X;
+        layer.RollAngle = pitchYawRoll.Z;
+        layer.SpawnPosition = model.Loc.GetPosition();
+
+        return layer;
+    }
 
     void NullifySurfaceMaterial(CPlugSurface surface)
     {
@@ -790,6 +1030,7 @@ public class MeshBuilder
         {
             Type = groupSetting.WaypointType.HasValue ? groupSetting.WaypointType.Value : EGameItemWaypointType.Checkpoint,
             NoRespawn = groupSetting.WaypointNoRespawn.HasValue ? groupSetting.WaypointNoRespawn.Value : false,
+            Version = 1,
         };
 
         var result = PopulateTriggerWaypoint(triggerWaypoint, item, groupSetting, buildSettings);
@@ -797,6 +1038,72 @@ public class MeshBuilder
             return ToolResult.Fail(result);
 
         return ToolResult.Success(triggerWaypoint, nameof(MeshBuilder));
+    }
+
+    public ToolResult<CPlugSpawnModel> BuildSpawnModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    {
+        CPlugSpawnModel spawnModel;
+        if (groupSetting.WaypointSpawnModel is not null)
+            spawnModel = ObjectCloner.DeepCloneObject(groupSetting.WaypointSpawnModel);
+        else
+        {
+            spawnModel = CreateSpawnModel();
+        }
+        return ToolResult.Success(spawnModel, nameof(MeshBuilder));
+    }
+    public static CPlugSpawnModel CreateSpawnModel()
+    {
+        var spawnModel = new CPlugSpawnModel()
+        {
+            DefaultGravitySpawn = new Vec3(0, -1, 0),
+            TorqueX = 0,
+            TorqueDuration = TimeInt32.Zero,
+            Loc = IsoFromTransform(Vec3.Zero, Quaternion.Identity),
+        };
+        var c = spawnModel.CreateChunk<CPlugSpawnModel.Chunk0917A000>();
+        c.Version = 3;
+        return spawnModel;
+    }
+    public static Iso4 IsoFromTransform(Vec3 location, Quaternion rotation)
+    {
+        var m = Matrix4x4.CreateFromQuaternion(rotation);
+
+        return new Iso4(
+            m.M11, m.M12, m.M13,
+            m.M21, m.M22, m.M23,
+            m.M31, m.M32, m.M33,
+            location.X, location.Y, location.Z
+        );
+    }
+    public static Iso4 IsoFromPitchYawRoll(Vec3 location, float pitchDeg, float yawDeg, float rollDeg)
+    {
+        float p = pitchDeg * MathUtils.Deg2Rad;
+        float y = yawDeg * MathUtils.Deg2Rad;
+        float r = rollDeg * MathUtils.Deg2Rad;
+
+        float cp = MathF.Cos(p), sp = MathF.Sin(p);
+        float cy = MathF.Cos(y), sy = MathF.Sin(y);
+        float cr = MathF.Cos(r), sr = MathF.Sin(r);
+
+        // M = Rz(roll) * Ry(yaw) * Rx(pitch)
+        float XX = cr * cy;
+        float XY = sp * sy * cr + sr * cp;
+        float XZ = sp * sr - sy * cp * cr;
+
+        float YX = -sr * cy;
+        float YY = -sp * sr * sy + cp * cr;
+        float YZ = sp * cr + sr * sy * cp;
+
+        float ZX = sy;
+        float ZY = -sp * cy;
+        float ZZ = cp * cy;
+
+        return new Iso4(
+            XX, XY, XZ,
+            YX, YY, YZ,
+            ZX, ZY, ZZ,
+            location.X, location.Y, location.Z
+        );
     }
 
 
@@ -815,7 +1122,7 @@ public class MeshBuilder
         {
             var groupSetting = staticGroups[i];
 
-            var staticObjectResult = BuildStaticObjectModel(normalizedItem, groupSetting, buildSettings, forceStaticShape: false);
+            var staticObjectResult = BuildStaticObjectModel(normalizedItem, groupSetting, buildSettings, forceStaticShape: true);
             if(staticObjectResult.IsFailure)
                 return ToolResult.Fail(staticObjectResult);
 
@@ -895,6 +1202,24 @@ public class MeshBuilder
             ent.Position = groupSetting.Position;
             ent.Rotation = groupSetting.Rotation;
             ents.Add(ent);
+
+            if (groupSetting.WaypointType != EGameItemWaypointType.Finish)
+            {
+                var spawnModelResult = BuildSpawnModel(normalizedItem, groupSetting, buildSettings);
+                if (spawnModelResult.IsFailure)
+                    return ToolResult.Fail(spawnModelResult);
+                spawnModelResult.Value.DefaultGravitySpawn = new Vec3(0, 0, 50);
+                spawnModelResult.Value.TorqueDuration = TimeInt32.FromMilliseconds(500);
+                spawnModelResult.Value.TorqueX = 0.5f;
+                var spawnEnt = CreateEntRef();
+                spawnEnt.Model = spawnModelResult.Value;
+                var pos = spawnModelResult.Value.Loc.GetPosition();
+                var rot = spawnModelResult.Value.Loc.GetPitchYawRoll(inDegrees: false);
+                spawnEnt.Position = pos.ToVector3();
+                spawnEnt.Rotation = Quaternion.CreateFromYawPitchRoll(rot.Y, rot.X, rot.Z );
+                ents.Add(spawnEnt);
+            }
+
 
         }
 
@@ -1054,11 +1379,24 @@ public class MeshBuilder
             prefab.FileWriteTime = DateTime.Now;
         
     }
+    void FixItemChunks(CGameItemModel item, NormalizedItem normalizedItem)
+    {
+        var c1 = item.GetChunk<CGameItemModel.Chunk2E00201F>();
+        //c1.U08 = 1;
+        //item.GetChunk<CGameItemModel.Chunk2E002020>().U03 = !string.IsNullOrEmpty(item.IconFid);
+    }
 
     Vec2 QuantizeLightmapCoord(Vec2 coord)
     {
         return new Vec2((ushort)MathF.Round(coord.X * ushort.MaxValue) / (float)ushort.MaxValue, 
             (ushort)MathF.Round(coord.Y * ushort.MaxValue) / (float)ushort.MaxValue);
+    }
+
+    void SetItemWaypointIfWaypointSetting(CGameItemModel item, BuildSettings buildSettings)
+    {
+        EWaypointType? waypointType = (EWaypointType?)buildSettings.GroupSettings.FirstOrDefault(gs => gs.WaypointType.HasValue).WaypointType;
+        if (waypointType.HasValue)
+            item.WaypointType = waypointType.Value;
     }
 
     //public ToolResult<CGameItemModel> BuildStaticObjectModelItem(NormalizedItem mesh, BuildSettings buildOptions)
@@ -1074,19 +1412,21 @@ public class MeshBuilder
     //    //return ToolResult.Success(item, nameof(MeshBuilder));
     //}
 
-    public ToolResult<CGameItemModel> BuildCrystalItem(NormalizedItem mesh, BuildSettings buildOptions)
+    public ToolResult<CGameItemModel> BuildCrystalItem(NormalizedItem normalizedItem, BuildSettings buildOptions)
     {
         var item = ObjectCloner.DeepCloneObject(EntityModelEditionTemplate);
-        var crystalResult = BuildCrystal(mesh, buildOptions);
+        var crystalResult = BuildCrystal(normalizedItem, buildOptions);
         if (crystalResult.IsFailure)
             return ToolResult.Fail(crystalResult);
         (item.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal = crystalResult.Value;
-        FillItemDataFromMesh(item, mesh);
+        SetItemWaypointIfWaypointSetting(item, buildOptions);
+        FillItemDataFromMesh(item, normalizedItem);
+        FixItemChunks(item, normalizedItem);
         return ToolResult.Success(item, nameof(MeshBuilder));
     }
-    public ToolResult<CGameItemModel> BuildCrystalWaypointItem(NormalizedItem mesh, EWaypointType waypointType, BuildSettings buildOptions)
+    public ToolResult<CGameItemModel> BuildCrystalWaypointItem(NormalizedItem normalizedItem, EWaypointType waypointType, BuildSettings buildOptions)
     {
-        var item = BuildCrystalItem(mesh, buildOptions);
+        var item = BuildCrystalItem(normalizedItem, buildOptions);
         if (item.IsFailure)
             return ToolResult.Fail(item);
         item.Value.WaypointType = waypointType;
@@ -1133,7 +1473,14 @@ public class MeshBuilder
 
 
 
-
+    public ToolResult<CGameItemModel> BuildMixedItem(NormalizedItem normalizedItem, EWaypointType waypointType, BuildSettings buildSettings)
+    {
+        var result = BuildMixedItem(normalizedItem, buildSettings);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        result.Value.WaypointType = waypointType;
+        return result;
+    }
     public ToolResult<CGameItemModel> BuildMixedItem(NormalizedItem normalizedItem, LegacyGameplayId gameplayid, BuildSettings buildSettings)
     {
         var result = BuildMixedItem(normalizedItem, buildSettings);
@@ -1145,7 +1492,7 @@ public class MeshBuilder
     }
     public ToolResult<CGameItemModel> BuildMixedItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
-        var item = ObjectCloner.DeepCloneObject(MovingItemTemplate);
+        var item = ObjectCloner.DeepCloneObject(TriggerItemTemplate);
 
         var mixedPrefabResult = BuildMixedPrefab(normalizedItem, buildSettings);
         if (mixedPrefabResult.IsFailure)
@@ -1153,12 +1500,10 @@ public class MeshBuilder
 
         item.EntityModel = mixedPrefabResult.Value;
 
-        //maybe necessary
-        //triggerSpecialEntRef.Model = triggerResult.Value;
-        //item.Chunks.Get<CGameItemModel.Chunk2E00201F>().U08 = 0;
-
+        SetItemWaypointIfWaypointSetting(item, buildSettings);
 
         FillItemDataFromMesh(item, normalizedItem);
+        FixItemChunks(item, normalizedItem);
         return ToolResult.Success(item, nameof(MeshBuilder));
     }
 

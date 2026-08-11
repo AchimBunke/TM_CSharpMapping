@@ -3,6 +3,8 @@ using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
+using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 using static GBX.NET.Engines.Plug.NPlugTrigger_SWaypoint;
 
@@ -40,7 +42,7 @@ public class NormalizedMesh
     public Vec3[] Normals { get; set; } = [];
     public Vec2[]? TexCoords { get; set; }
     public Vec2[]? LightmapCoords { get; set; }
-    public int[]? Colors { get; set; }
+    public int[]? Colors { get; set; } // packed argb color
     public int[] Indices { get; set; } = [];     // local 0-based
     public CPlugMaterialUserInst Material { get; set; }
     public MaterialId[]? SurfaceMaterialIds { get; set; }
@@ -56,6 +58,25 @@ public class NormalizedMesh
     public string Name { get; set; } = string.Empty;
     public int GroupIndex { get; set; } = -1;
 
+    public PreLightGen? PreLightGenerator { get; set; }
+
+}
+public enum LightType
+{
+    Point,
+    Spot,
+    Area,
+}
+public class NormalizedLight
+{
+    public Vector3 Position { get; set; }
+    public Quaternion Rotation { get; set; }
+    public LightType Type { get; set; }
+
+    public CPlugLightUserModel LightModel { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+    public int GroupIndex { get; set; } = -1;
 }
 
 public class MeshGroup
@@ -68,14 +89,16 @@ public class MeshGroup
     public NPlugDyna_SKinematicConstraint? KinematicConstraint { get; set; }
     public NPlugDynaObjectModel_SInstanceParams? DynaObjectModelParams { get; set; }
     public LegacyGameplayId? TriggerGameplayId { get; set; }
-    public EGameItemWaypointType? WaypointType { get; set; }
+    public EWaypointType? WaypointType { get; set; }
     public bool? WaypointNoRespawn { get; set; }
+    public CPlugSpawnModel? WaypointSpawnModel { get; set; }
 }
 
 public class NormalizedItem
 {
 
     public NormalizedMesh[] Meshes { get; set; } = [];
+    public NormalizedLight[] Lights { get; set; } = [];
     public MeshGroup[] Groups { get; set; } = [];
 
     public object? SourceData { get; set; } // Data where this data comes from
