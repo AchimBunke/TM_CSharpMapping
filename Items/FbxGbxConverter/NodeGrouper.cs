@@ -1,8 +1,8 @@
 ﻿using GBX.NET.Engines.Meta;
-using TM_GenericMapping.Items.FbxConverter.Serialization;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 
 internal class MovingParameter
@@ -16,15 +16,15 @@ internal class MovingParameter
 /// group's LOD slots it fills. A mesh may appear in several MeshAssignments
 /// across different groups if its Lods span more than 4 entries.
 /// </summary>
-internal class MeshLodAssignment
+internal class NodeLodAssignment
 {
-    public MeshDef MeshItem { get; set; }
+    public NodeDef NodeDef { get; set; }
 
     /// <summary>Subset of Mesh.Lods used by this particular group, ascending.</summary>
     public List<int> LodIndices { get; set; } = new();
 }
 
-internal class MeshDefGroup
+internal class NodeDefGroup
 {
     public string GroupKey { get; set; }
 
@@ -37,7 +37,7 @@ internal class MeshDefGroup
     /// </summary>
     public List<float> LodDistances { get; set; } = new();
 
-    public List<MeshLodAssignment> Meshes { get; set; } = new();
+    public List<NodeLodAssignment> Nodes { get; set; } = new();
 }
 
 internal class BucketInfo
@@ -49,7 +49,7 @@ internal class BucketInfo
     public EWaypointType? WaypointType;
 }
 
-internal class MeshGrouper
+internal class NodeGrouper
 {
     private const int MaxSlotsPerGroup = 4; // 3 finite thresholds + implicit infinity
 
@@ -60,67 +60,41 @@ internal class MeshGrouper
     private readonly IReadOnlyDictionary<string, MovingParameter> _movingConfig;
     private ItemConfig _itemConfig;
 
-    public MeshGrouper(IReadOnlyList<float> globalLodDistances, ItemConfig itemConfig, IReadOnlyDictionary<string, MovingParameter> movingConfig = null)
+    public NodeGrouper(IReadOnlyList<float> globalLodDistances, ItemConfig itemConfig, IReadOnlyDictionary<string, MovingParameter> movingConfig = null)
     {
         _globalLodDistances = globalLodDistances;
         _itemConfig = itemConfig;
         _movingConfig = movingConfig ?? new Dictionary<string, MovingParameter>();
     }
 
-    public List<MeshDefGroup> Group(IEnumerable<MeshDef> meshes)
+    public List<NodeDefGroup> Group(IEnumerable<NodeDef> nodeDefs)
     {
-        var buckets = new Dictionary<string, (BucketInfo info, List<MeshDef> meshes)>();
+        var buckets = new Dictionary<string, (BucketInfo info, List<NodeDef> nodes)>();
         int isolatedCounter = 0;
 
-        foreach (var mesh in meshes)
+        foreach (var nodeDef in nodeDefs)
         {
-            var info = Classify(mesh, ref isolatedCounter);
+            var info = Classify(nodeDef, ref isolatedCounter);
             if (!buckets.TryGetValue(info.Key, out var entry))
-                buckets[info.Key] = entry = (info, new List<MeshDef>());
-            entry.meshes.Add(mesh);
+                buckets[info.Key] = entry = (info, new List<NodeDef>());
+            entry.nodes.Add(nodeDef);
         }
 
-        var result = new List<MeshDefGroup>();
+        var result = new List<NodeDefGroup>();
         foreach (var entry in buckets.Values)
-            result.AddRange(SplitByLod(entry.info, entry.meshes));
+            result.AddRange(SplitByLod(entry.info, entry.nodes));
 
         return result;
     }
 
-    private string ComputeBucketKey(MeshDef mesh, ref int isolatedCounter)
-    {
-        var f = mesh.MeshConfig.MeshFlags;
-
-        // Rule: SingleMesh -> always isolated, never merges with anything.
-        if (f.HasFlag(MeshFlags.SingleMesh))
-            return $"single_{isolatedCounter++}";
-
-        // Rule: TriggerWaypoint -> one shared bucket for ALL waypoint triggers.
-        if (f.HasFlag(MeshFlags.TriggerWaypoint))
-            return "waypoint";
-
-        // Rule: TriggerSpecial -> grouped only with same effect.
-        if (f.HasFlag(MeshFlags.TriggerEffect))
-            return $"trigger_{mesh.MeshConfig.TriggerEffect?.ToString() ?? string.Empty}";
-
-        // Rule: Moving -> own group, unless a MovingGroup id is given.
-        if (f.HasFlag(MeshFlags.Moving))
-        {
-            return !string.IsNullOrEmpty(mesh.MeshConfig.MovingGroup)
-                ? $"movegroup_{mesh.MeshConfig.MovingGroup}"
-                : $"moving_{isolatedCounter++}";
-        }
-
-        return "static"; // meshes with none of the above flags set
-    }
     /// <summary>
     /// Determines a mesh's GroupType and bucket key. SingleMesh forces isolation
     /// but does NOT change the underlying classification - a single mesh that is
     /// also Moving still reports GroupType.Moving, it just sits alone in its group.
     /// </summary>
-    private BucketInfo Classify(MeshDef mesh, ref int isolatedCounter)
+    private BucketInfo Classify(NodeDef node, ref int isolatedCounter)
     {
-        var f = mesh.MeshConfig.MeshFlags;
+        var f = node.NodeConfig.MeshFlags;
         bool isSingle = f.HasFlag(MeshFlags.SingleMesh);
 
         if (f.HasFlag(MeshFlags.TriggerWaypoint))
@@ -129,23 +103,23 @@ internal class MeshGrouper
             // as TriggerSpecial/effect) rather than one universal bucket for all
             // waypoint types. Change the key below to a constant if you actually
             // want every waypoint mesh in a single shared bucket regardless of type.
-            string key = isSingle ? $"single_{isolatedCounter++}" : $"waypoint_{mesh.MeshConfig.WaypointType?.ToString() ?? string.Empty}";
-            return new BucketInfo { Key = key, Type = GroupType.Trigger_Waypoint, WaypointType = mesh.MeshConfig.WaypointType };
+            string key = isSingle ? $"single_{isolatedCounter++}" : $"waypoint_{node.NodeConfig.WaypointType?.ToString() ?? string.Empty}";
+            return new BucketInfo { Key = key, Type = GroupType.Trigger_Waypoint, WaypointType = node.NodeConfig.WaypointType };
         }
 
         if (f.HasFlag(MeshFlags.TriggerEffect))
         {
-            string key = isSingle ? $"single_{isolatedCounter++}" : $"trigger_{mesh.MeshConfig.TriggerEffect.ToString() ?? string.Empty}";
-            return new BucketInfo { Key = key, Type = GroupType.Trigger_Special, TriggerEffectId = mesh.MeshConfig.TriggerEffect };
+            string key = isSingle ? $"single_{isolatedCounter++}" : $"trigger_{node.NodeConfig.TriggerEffect.ToString() ?? string.Empty}";
+            return new BucketInfo { Key = key, Type = GroupType.Trigger_Special, TriggerEffectId = node.NodeConfig.TriggerEffect };
         }
 
         if (f.HasFlag(MeshFlags.Moving))
         {
-            bool hasGroup = !string.IsNullOrEmpty(mesh.MeshConfig.MovingGroup);
+            bool hasGroup = !string.IsNullOrEmpty(node.NodeConfig.MovingGroup);
             string key = isSingle || !hasGroup
                 ? $"{(isSingle ? "single" : "moving")}_{isolatedCounter++}"
-                : $"movegroup_{mesh.MeshConfig.MovingGroup}";
-            return new BucketInfo { Key = key, Type = GroupType.DynaObject, MovingGroup = mesh.MeshConfig.MovingGroup };
+                : $"movegroup_{node.NodeConfig.MovingGroup}";
+            return new BucketInfo { Key = key, Type = GroupType.DynaObject, MovingGroup = node.NodeConfig.MovingGroup };
         }
 
         // Static: Visible/Collidable, or the "misc" fallback for meshes with
@@ -157,13 +131,13 @@ internal class MeshGrouper
         }
     }
 
-    private List<MeshDefGroup> SplitByLod(BucketInfo bucket, List<MeshDef> meshes)
+    private List<NodeDefGroup> SplitByLod(BucketInfo bucket, List<NodeDef> nodes)
     {
         MovingParameter movingParams = null;
         if (bucket.Type == GroupType.DynaObject && !string.IsNullOrEmpty(bucket.MovingGroup))
             _movingConfig.TryGetValue(bucket.MovingGroup, out movingParams);
 
-        MeshDefGroup NewGroup(string key) => new MeshDefGroup
+        NodeDefGroup NewGroup(string key) => new NodeDefGroup
         {
             GroupKey = key,
             MeshGroup = new MeshGroup
@@ -180,11 +154,11 @@ internal class MeshGrouper
         // A mesh with no Lods specified is implicitly visible at every LOD
         // level (an "all 1s" bitmask) - it must ride along in EVERY group
         // spawned from this bucket, not just one of them.
-        var meshesWithLods = meshes.Where(m => m.MeshConfig.Lods is { Count: > 0 }).ToList();
-        var meshesWithoutLod = meshes.Where(m => m.MeshConfig.Lods == null || m.MeshConfig.Lods.Count == 0).ToList();
+        var nodesWithLods = nodes.Where(m => m.NodeConfig.Lods is { Count: > 0 }).ToList();
+        var nodesWithoutLod = nodes.Where(m => m.NodeConfig.Lods == null || m.NodeConfig.Lods.Count == 0).ToList();
 
-        var distinctLods = meshesWithLods
-            .SelectMany(m => m.MeshConfig.Lods)
+        var distinctLods = nodesWithLods
+            .SelectMany(m => m.NodeConfig.Lods)
             .Distinct()
             .OrderBy(x => x)
             .ToList();
@@ -192,13 +166,13 @@ internal class MeshGrouper
         if (distinctLods.Count == 0)
         {
             var single = NewGroup(bucket.Key);
-            single.Meshes.AddRange(meshesWithoutLod.Select(m => new MeshLodAssignment { MeshItem = m }));
-            return new List<MeshDefGroup> { single };
+            single.Nodes.AddRange(nodesWithoutLod.Select(m => new NodeLodAssignment { NodeDef = m }));
+            return new List<NodeDefGroup> { single };
         }
 
-        var chunks = ChooseChunksMinimizingDuplication(meshesWithLods, distinctLods);
+        var chunks = ChooseChunksMinimizingDuplication(nodesWithLods, distinctLods);
 
-        var groups = new List<MeshDefGroup>();
+        var groups = new List<NodeDefGroup>();
         for (int c = 0; c < chunks.Count; c++)
         {
             var chunk = chunks[c];
@@ -209,20 +183,20 @@ internal class MeshGrouper
             for (int i = 0; i < chunk.Count - 1; i++)
                 group.LodDistances.Add(_globalLodDistances[chunk[i]]);
 
-            foreach (var mesh in meshesWithLods)
+            foreach (var node in nodesWithLods)
             {
-                var overlap = mesh.MeshConfig.Lods
+                var overlap = node.NodeConfig.Lods
                     .Where(chunk.Contains)
                     .OrderBy(x => x)
                     .ToList();
 
                 if (overlap.Count > 0)
-                    group.Meshes.Add(new MeshLodAssignment { MeshItem = mesh, LodIndices = overlap });
+                    group.Nodes.Add(new NodeLodAssignment { NodeDef = node, LodIndices = overlap });
             }
 
             // LOD-agnostic meshes are present at every slot of every group.
-            foreach (var mesh in meshesWithoutLod)
-                group.Meshes.Add(new MeshLodAssignment { MeshItem = mesh, LodIndices = new List<int>(chunk) });
+            foreach (var node in nodesWithoutLod)
+                group.Nodes.Add(new NodeLodAssignment { NodeDef = node, LodIndices = new List<int>(chunk) });
 
             groups.Add(group);
         }
@@ -243,7 +217,7 @@ internal class MeshGrouper
     /// is equivalent to minimizing duplication. Solved with a small DP over
     /// block boundaries (N is the distinct-lod count for one bucket, tiny).
     /// </summary>
-    private List<List<int>> ChooseChunksMinimizingDuplication(List<MeshDef> meshesWithLods, List<int> distinctLods)
+    private List<List<int>> ChooseChunksMinimizingDuplication(List<NodeDef> nodesWithLods, List<int> distinctLods)
     {
         int n = distinctLods.Count;
         int requiredBlocks = (n + MaxSlotsPerGroup - 1) / MaxSlotsPerGroup;
@@ -253,18 +227,18 @@ internal class MeshGrouper
             .Select((val, idx) => (val, idx))
             .ToDictionary(t => t.val, t => t.idx, comparer: null);
 
-        var meshesAtPosition = new List<HashSet<MeshDef>>(n);
-        for (int i = 0; i < n; i++) meshesAtPosition.Add(new HashSet<MeshDef>());
-        foreach (var mesh in meshesWithLods)
-            foreach (var lod in mesh.MeshConfig.Lods)
+        var meshesAtPosition = new List<HashSet<NodeDef>>(n);
+        for (int i = 0; i < n; i++) meshesAtPosition.Add(new HashSet<NodeDef>());
+        foreach (var node in nodesWithLods)
+            foreach (var lod in node.NodeConfig.Lods)
                 if (positionIndex.TryGetValue(lod, out int pos))
-                    meshesAtPosition[pos].Add(mesh);
+                    meshesAtPosition[pos].Add(node);
 
         // touches[l, len-1] = distinct mesh count touching positions [l, l+len-1]
         var touches = new int[n, MaxSlotsPerGroup];
         for (int l = 0; l < n; l++)
         {
-            var running = new HashSet<MeshDef>();
+            var running = new HashSet<NodeDef>();
             for (int len = 1; len <= MaxSlotsPerGroup && l + len - 1 < n; len++)
             {
                 running.UnionWith(meshesAtPosition[l + len - 1]);

@@ -1,11 +1,11 @@
 ﻿using Assimp;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
-using TM_GenericMapping.Items.FbxConverter.Serialization;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
 using Quaternion = System.Numerics.Quaternion;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 internal class LightDef
 {

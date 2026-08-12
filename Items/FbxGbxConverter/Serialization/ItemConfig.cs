@@ -1,9 +1,10 @@
-﻿namespace TM_GenericMapping.Items.FbxConverter.Serialization;
+﻿namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 using GBX.NET;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TM_GenericMapping.Common;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
 public class ItemConfig
@@ -54,7 +55,11 @@ public class ItemConfig
         var options = new JsonSerializerOptions
         {
             WriteIndented = true,
-            Converters = { new Vec3Converter() }
+            Converters = { 
+                new Vec3Converter(),
+                new JsonStringEnumConverter(),
+                 new ColorJsonConverter(),
+            }
         };
         return JsonSerializer.Deserialize<ItemConfig>(itemInfoStream, options) ?? throw new InvalidOperationException("Failed to deserialize ItemInfoJson.");
     }
@@ -68,7 +73,11 @@ public class ItemConfig
         var options = new JsonSerializerOptions
         {
             WriteIndented = true,
-            Converters = { new Vec3Converter() }
+            Converters = { 
+                new Vec3Converter(),
+                new JsonStringEnumConverter(),
+                new ColorJsonConverter(),
+            }
         };
         JsonSerializer.Serialize(itemInfoStream, item, options);
     }
@@ -163,5 +172,28 @@ public class Vec3Converter : JsonConverter<Vec3>
             $"{value.Y.ToString(CultureInfo.InvariantCulture)} " +
             $"{value.Z.ToString(CultureInfo.InvariantCulture)}"
         );
+    }
+}
+
+public sealed class ColorJsonConverter : JsonConverter<System.Drawing.Color>
+{
+    public override System.Drawing.Color Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        var value = reader.GetString();
+
+        return value != null
+            ? ColorUtils.FromRGBHex(value)
+            : System.Drawing.Color.Black;
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer,
+        System.Drawing.Color value,
+        JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value.ToRGBHex());
     }
 }

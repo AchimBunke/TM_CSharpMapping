@@ -4,23 +4,33 @@ using GBX.NET;
 using GBX.NET.Engines.Plug;
 using GBX.NET.Engines.Scene;
 using System.Net.Sockets;
-using TM_GenericMapping.Items.FbxConverter.Serialization;
+using System.Xml.Linq;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
 using TmEssentials;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
-
-internal class MeshDef
+internal class NodeDef
 {
-    public Assimp.Mesh AssimpMesh { get; set; }
+    public Assimp.Node Node { get; set; }
     public Assimp.Matrix4x4 GlobalTransform { get; set; }
+    public MeshConfig NodeConfig { get; set; }
 
-    public NormalizedMesh? Mesh { get; set; }
-    public MeshConfig MeshConfig { get; set; }
+    public int GroupIndex { get; set; } = -1;
+    public int LodMask { get; set; } = 1;
 
 }
+//internal class MeshDef
+//{
+//    public Assimp.Mesh AssimpMesh { get; set; }
+//    public Assimp.Matrix4x4 GlobalTransform { get; set; }
+
+//    public NormalizedMesh? Mesh { get; set; }
+//    public MeshConfig MeshConfig { get; set; }
+
+//}
 internal class SocketDef
 {
     public Assimp.Matrix4x4 GlobalTransform { get; set; }
@@ -39,6 +49,11 @@ internal class FbxMeshConverter
     {
         var normalizedMesh = new NormalizedMesh();
 
+        bool hasNormals = mesh.HasNormals;
+        if (!hasNormals) 
+        {
+            int i = 0;
+        }
         var scaleMatrix = Assimp.Matrix4x4.FromScaling(new Vector3D(meshScale, meshScale, meshScale));
         var normalMatrix = ComputeNormalMatrix(globalTransform);
         //normalMatrix.Inverse();
@@ -53,7 +68,7 @@ internal class FbxMeshConverter
             indices = FlipWinding(indices);
         normalizedMesh.Indices = indices;
 
-        normalizedMesh.Normals = TransformVectors(mesh.Normals, globalTransform, Assimp.Matrix4x4.Identity, true).ToArray();
+        normalizedMesh.Normals = TransformVectors(mesh.Normals, normalMatrix, Assimp.Matrix4x4.Identity, true).ToArray();
 
 
         if (material.DMaterial is null || material.DMaterial.HasTexUvLayer)
@@ -63,6 +78,9 @@ internal class FbxMeshConverter
             {
                 normalizedMesh.TexCoords = mesh.TextureCoordinateChannels[texChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
             }
+
+            //normalizedMesh.TangentUs = mesh.Tangents.Select(v=>new Vec3(v.X, v.Y, v.Z)).ToArray();
+            //normalizedMesh.TangentVs = mesh.BiTangents.Select(v=>new Vec3(v.X, v.Y, v.Z)).ToArray();
 
             normalizedMesh.TangentUs = TransformVectors(mesh.Tangents, globalTransform, Assimp.Matrix4x4.Identity, true).ToArray();
             normalizedMesh.TangentVs = TransformVectors(mesh.BiTangents, globalTransform, Assimp.Matrix4x4.Identity, true).ToArray();
@@ -159,18 +177,13 @@ internal class FbxMeshConverter
                 .Select(v => normalize ? new Vec3(v.X, v.Y, v.Z).GetNormalized() : new Vec3(v.X, v.Y, v.Z));
     }
 
-
-
-    public static ToolResult<List<MeshDef>> ExtractMeshes(Scene scene, List<MaterialDef> materials, FbxGbxConversionInput config)
+    public static ToolResult<List<NodeDef>> ExtractNodes(Scene scene, FbxGbxConversionInput config)
     {
-        List<MeshDef> normalizedMeshes = [];
-
+        List<NodeDef> nodeDefs = [];
         var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
-        var meshInstances = FbxSceneReader.GetMeshInstances(scene, nodes);
-
-        foreach (var (mesh, nodeName, globalTransform) in meshInstances)
+        foreach(var node in nodes)
         {
-            var meshConfigResult = FindMeshConfigForMesh(nodeName, config);
+            var meshConfigResult = FindMeshConfigForMesh(node.NodeName, config);
 
             if (meshConfigResult.IsFailure)
                 return ToolResult.Fail(meshConfigResult);
@@ -180,17 +193,41 @@ internal class FbxMeshConverter
             if (meshConfig.MeshFlags.HasFlag(MeshFlags.Skip))
                 continue;
 
-            if (meshConfig.MeshFlags.HasMeshData())
-            {
-                var normMesh = FbxMeshConverter.ConvertMesh(mesh, materials[mesh.MaterialIndex], globalTransform, meshConfig, config.ItemConfig.Scale);
-
-                normalizedMeshes.Add(new MeshDef { Mesh = normMesh, MeshConfig = meshConfig, AssimpMesh = mesh, GlobalTransform = globalTransform });
-            }
-            else
-                normalizedMeshes.Add(new MeshDef { Mesh = null, MeshConfig = meshConfig, AssimpMesh = mesh, GlobalTransform = globalTransform });
+            nodeDefs.Add(new NodeDef { Node = node.node, NodeConfig = meshConfig, GlobalTransform = node.GlobalTransform });
         }
-        return ToolResult.Success(normalizedMeshes, nameof(FbxGbxConverter));
+        return ToolResult.Success(nodeDefs, nameof(FbxGbxConverter));
     }
+
+    //public static ToolResult<List<MeshDef>> ExtractMeshes(Scene scene, List<MaterialDef> materials, FbxGbxConversionInput config)
+    //{
+    //    List<MeshDef> normalizedMeshes = [];
+
+    //    var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
+        //var meshInstances = FbxSceneReader.GetMeshInstances(scene, nodes);
+
+    //    foreach (var (mesh, nodeName, globalTransform) in meshInstances)
+    //    {
+    //        var meshConfigResult = FindMeshConfigForMesh(nodeName, config);
+
+    //        if (meshConfigResult.IsFailure)
+    //            return ToolResult.Fail(meshConfigResult);
+
+    //        var meshConfig = meshConfigResult.Value;
+
+    //        if (meshConfig.MeshFlags.HasFlag(MeshFlags.Skip))
+    //            continue;
+
+    //        if (meshConfig.MeshFlags.HasMeshData())
+    //        {
+    //            var normMesh = FbxMeshConverter.ConvertMesh(mesh, materials[mesh.MaterialIndex], globalTransform, meshConfig, config.ItemConfig.Scale);
+
+    //            normalizedMeshes.Add(new MeshDef { Mesh = normMesh, MeshConfig = meshConfig, AssimpMesh = mesh, GlobalTransform = globalTransform });
+    //        }
+    //        else
+    //            normalizedMeshes.Add(new MeshDef { Mesh = null, MeshConfig = meshConfig, AssimpMesh = mesh, GlobalTransform = globalTransform });
+    //    }
+    //    return ToolResult.Success(normalizedMeshes, nameof(FbxGbxConverter));
+    //}
 
     public static ToolResult<List<SocketDef>> ExtractSockets(Scene scene, FbxGbxConversionInput config)
     {
@@ -237,6 +274,7 @@ internal class FbxMeshConverter
         const string notVisible = "_notvisible_";
         const string notCollidable = "_notcollidable_";
         const string skip = "_skip_";
+        const string single = "_single_";
         // pivot handled on item config level
 
         meshConfig ??= new MeshConfig() { Name = meshName, MeshFlags = MeshFlags.None };
@@ -257,7 +295,8 @@ internal class FbxMeshConverter
             meshConfig.MeshFlags |= MeshFlags.Invisible;
             meshConfig.WaypointType = config.ItemConfig.Waypoint?.Type;
         }
-        
+        if(meshName.Contains(single))
+            meshConfig.MeshFlags |= MeshFlags.SingleMesh;
 
         if (meshName.Contains(notVisible))
             meshConfig.MeshFlags |= MeshFlags.Invisible;
@@ -272,14 +311,14 @@ internal class FbxMeshConverter
     }
 
 
-    public static ToolResult<List<MeshGroup>> GroupMeshes(List<MeshDef> meshItems, List<SocketDef> sockets, FbxGbxConversionInput config)
+    public static ToolResult<List<MeshGroup>> GroupNodes(List<NodeDef> nodes, List<SocketDef> sockets, FbxGbxConversionInput config)
     {
         var lods = config.ItemConfig.LodParameters?.MaxLodDistances ?? [];
 #if FbxGbxDebugLod
         lods = [100,200,400];
 #endif
-        var grouper = new MeshGrouper(lods, config.ItemConfig);
-        var calculatedGroups = grouper.Group(meshItems);
+        var grouper = new NodeGrouper(lods, config.ItemConfig);
+        var calculatedGroups = grouper.Group(nodes);
         var groups = calculatedGroups.Select(g =>
         {
             g.MeshGroup.LODDistances = g.LodDistances.ToArray();
@@ -289,11 +328,11 @@ internal class FbxMeshConverter
         for (int i = 0; i < groups.Count; ++i)
         {
             var group = calculatedGroups[i];
-            foreach (var meshAssignment in group.Meshes)
+            foreach (var nodeAssignment in group.Nodes)
             {
-                var mesh = meshAssignment.MeshItem.Mesh;
-                mesh.GroupIndex = i;
-                mesh.LODMask = LODUtils.LodMaskFromLods(meshAssignment.LodIndices.ToArray());
+                var nodeDef = nodeAssignment.NodeDef;
+                nodeDef.GroupIndex = i;
+                nodeDef.LodMask = LODUtils.LodMaskFromLods(nodeAssignment.LodIndices.ToArray());
             }
         }
         if (sockets.Count > 0) 
@@ -308,6 +347,30 @@ internal class FbxMeshConverter
             }
         }
         return ToolResult.Success(groups, nameof(FbxGbxConverter));
+    }
+
+    public static ToolResult<List<NormalizedMesh>> ExtractMeshes(Scene scene, List<MeshGroup> groups, List<MaterialDef> materials, List<NodeDef> nodes, FbxGbxConversionInput config)
+    {
+        List<NormalizedMesh> normalizedMeshes = new List<NormalizedMesh>();
+        foreach (var node in nodes)
+        {
+            if (node.NodeConfig.MeshFlags.HasMeshData())
+            {
+                if (node.Node.MeshCount == 0)
+                    continue;
+
+                foreach (int meshIndex in node.Node.MeshIndices)
+                {
+                    var mesh = scene.Meshes[meshIndex];
+                    var normMesh = FbxMeshConverter.ConvertMesh(mesh, materials[mesh.MaterialIndex], node.GlobalTransform, node.NodeConfig, config.ItemConfig.Scale);
+                    normMesh.GroupIndex = node.GroupIndex;
+                    normMesh.LODMask = node.LodMask;
+
+                    normalizedMeshes.Add(normMesh);
+                }
+            }
+        }
+        return ToolResult.Success(normalizedMeshes, nameof(FbxGbxConverter));
     }
 
 
@@ -342,7 +405,7 @@ internal class FbxMeshConverter
                   + a3 * (b1 * c2 - b2 * c1);
 
         if (MathF.Abs(det) < 1e-8f)
-            return Assimp.Matrix4x4.Identity; // degenerate transform, fallback
+            return Assimp.Matrix4x4.Identity;
 
         float invDet = 1f / det;
 
@@ -357,10 +420,10 @@ internal class FbxMeshConverter
         float i33 = (a1 * b2 - a2 * b1) * invDet;
 
         var result = Assimp.Matrix4x4.Identity;
-        // transpose of the 3x3 inverse
-        result.A1 = i11; result.A2 = i21; result.A3 = i31;
-        result.B1 = i12; result.B2 = i22; result.B3 = i32;
-        result.C1 = i13; result.C2 = i23; result.C3 = i33;
+        // i11..i33 is already inverse-transpose — write it straight through, no re-transpose
+        result.A1 = i11; result.A2 = i12; result.A3 = i13;
+        result.B1 = i21; result.B2 = i22; result.B3 = i23;
+        result.C1 = i31; result.C2 = i32; result.C3 = i33;
         return result;
     }
 }

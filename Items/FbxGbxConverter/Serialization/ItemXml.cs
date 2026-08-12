@@ -2,7 +2,7 @@
 using System.Xml.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
-namespace TM_GenericMapping.Items.FbxConverter.Serialization;
+namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 
 [XmlRoot("Item")]

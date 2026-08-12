@@ -1,7 +1,7 @@
 ﻿using GBX.NET.Engines.Plug;
 using System.Text.RegularExpressions;
 
-namespace TM_GenericMapping.Items.FbxConverter.Serialization;
+namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 public class DMaterialLibrary
 {

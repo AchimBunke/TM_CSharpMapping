@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Xml.Serialization;
 using TM_GenericMapping.Common;
 
-namespace TM_GenericMapping.Items.FbxConverter.Serialization;
+namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 
 [XmlRoot("MeshParams")]

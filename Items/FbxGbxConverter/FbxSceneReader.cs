@@ -3,7 +3,7 @@ using Assimp.Configs;
 using TM_GenericMapping.Messaging;
 using static GBX.NET.Engines.Game.CGameCtnCollection;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 internal static class FbxSceneReader
 {
@@ -19,13 +19,15 @@ internal static class FbxSceneReader
             // maybe flipUV
             var scene = context.ImportFileFromStream(fbxStream,
                 PostProcessSteps.Triangulate |
-                //PostProcessSteps.JoinIdenticalVertices |
-                PostProcessSteps.CalculateTangentSpace |
-                PostProcessSteps.GenerateNormals
+                PostProcessSteps.JoinIdenticalVertices |
+                PostProcessSteps.CalculateTangentSpace
+                //PostProcessSteps.GenerateNormals
                 
                 //PostProcessSteps.FlipWindingOrder
                 //PostProcessSteps.ValidateDataStructure
                 );
+
+           
             return ToolResult.Success(scene, nameof(FbxSceneReader));
         }
         catch (Exception e)

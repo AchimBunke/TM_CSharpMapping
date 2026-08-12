@@ -10,10 +10,10 @@ using SixLabors.ImageSharp.Processing;
 using System.Numerics;
 using System.Xml.Serialization;
 using TM_GenericMapping.Common;
-using TM_GenericMapping.Items.FbxConverter.Serialization;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 public class FbxGbxConverter
 {
@@ -77,7 +77,7 @@ public class FbxGbxConverter
         normalizedItem.PlacementParam = CreatePlacementParameters(config);
 
         List<NormalizedMesh> meshes = new List<NormalizedMesh>();
-        List<MeshDefGroup> groups = new List<MeshDefGroup>();
+        List<NodeDefGroup> groups = new List<NodeDefGroup>();
 
         var materialConverter = new FbxMaterialConverter(config.MaterialLibrary, Solid2ModelTemplate.CustomMaterials![0].MaterialUserInst!);
 
@@ -85,9 +85,9 @@ public class FbxGbxConverter
         if (materialResults.IsFailure)
             return ToolResult.Fail(materialResults);
 
-        var meshResults = FbxMeshConverter.ExtractMeshes(scene, materialResults.Value, config);
-        if (meshResults.IsFailure)
-            return ToolResult.Fail(meshResults);
+        var nodeResults = FbxMeshConverter.ExtractNodes(scene, config);
+        if (nodeResults.IsFailure)
+            return ToolResult.Fail(nodeResults);
 
         var socketResults = FbxMeshConverter.ExtractSockets(scene, config);
         if (socketResults.IsFailure)
@@ -100,14 +100,17 @@ public class FbxGbxConverter
             return ToolResult.Fail(lightResults);
 
 
-        var meshItems = FilterAndApplySpecialMeshItems(meshResults.Value, normalizedItem);
+        var nodes = FilterAndApplySpecialMeshItems(nodeResults.Value);
 
-        var groupResults = FbxMeshConverter.GroupMeshes(meshItems, socketResults.Value, config);
+        var groupResults = FbxMeshConverter.GroupNodes(nodes, socketResults.Value, config);
         if (groupResults.IsFailure)
             return ToolResult.Fail(groupResults);
 
         FbxLightConverter.GroupLights(lightResults.Value, groupResults.Value);
 
+        var meshResults = FbxMeshConverter.ExtractMeshes(scene, groupResults.Value, materialResults.Value, nodes, config);
+        if (meshResults.IsFailure)
+            return ToolResult.Fail(meshResults);
 
 
         normalizedItem.Icon = FbxIconLoader.LoadIcon(config);
@@ -122,25 +125,25 @@ public class FbxGbxConverter
             normalizedItem.Description = "No Description";
 
         normalizedItem.Groups = groupResults.Value.ToArray();
-        normalizedItem.Meshes = meshItems.Select(m => m.Mesh).ToArray();
+        normalizedItem.Meshes = meshResults.Value.ToArray();
         normalizedItem.Lights = lightResults.Value.Select(lr => lr.Light).ToArray();
 
         return ToolResult.Success(normalizedItem, nameof(FbxGbxConverter));
     }
 
 
-    List<MeshDef> FilterAndApplySpecialMeshItems(IEnumerable<MeshDef> meshItems, NormalizedItem item)
+    List<NodeDef> FilterAndApplySpecialMeshItems(IEnumerable<NodeDef> nodes)
     {
-        List<MeshDef> meshItemsWithMesh = new List<MeshDef>();
+        List<NodeDef> nodesWithMesh = new List<NodeDef>();
 
-        foreach (var meshItem in meshItems)
+        foreach (var nodeDef in nodes)
         {
-            if (meshItem.MeshConfig.MeshFlags.HasMeshData())
-                meshItemsWithMesh.Add(meshItem);
+            if (nodeDef.NodeConfig.MeshFlags.HasMeshData())
+                nodesWithMesh.Add(nodeDef);
         }
 
 
-        return meshItemsWithMesh;
+        return nodesWithMesh;
     }
 
 

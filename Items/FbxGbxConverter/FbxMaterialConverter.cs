@@ -1,10 +1,10 @@
 ﻿using Assimp;
 using GBX.NET.Engines.Plug;
 using TM_GenericMapping.Common;
-using TM_GenericMapping.Items.FbxConverter.Serialization;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 internal record MaterialDef(CPlugMaterialUserInst MaterialInstance, DMaterial? DMaterial);
 

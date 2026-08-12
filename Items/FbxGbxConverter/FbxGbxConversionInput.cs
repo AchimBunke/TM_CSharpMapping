@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Xml.Serialization;
-using TM_GenericMapping.Items.FbxConverter.Serialization;
+﻿using System.Xml.Serialization;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
-namespace TM_GenericMapping.Items.FbxConverter;
+namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 [Flags]
 public enum ConversionOptions

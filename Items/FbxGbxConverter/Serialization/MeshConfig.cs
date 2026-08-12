@@ -1,15 +1,18 @@
 ﻿using GBX.NET.Engines.Plug;
 using System.Drawing;
+using System.Text.Json.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
-namespace TM_GenericMapping.Items.FbxConverter.Serialization;
+namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 
 public class MaterialConfig
 {
     public string Name { get; set; } = "";
     public string Link { get; set; } = "";
-    public Color? Color { get; set; } = null;
+
+    public System.Drawing.Color? Color { get; set; } = null;
+
     public CPlugSurface.MaterialId? PhysicsId { get; set; } = null;
     public CPlugMaterialUserInst.GameplayId? GameplayId { get; set; } = null;
 }

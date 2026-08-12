@@ -328,11 +328,12 @@ public class MeshBuilder
     public ToolResult<None> PopulateSolid2Model(CPlugSolid2Model target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSetting)
     {
         List<CPlugVisual> visuals = [];
-        List<CPlugSolid2Model.Material> materials = [];
         List<CPlugSolid2Model.ShadedGeom> shadedGeom = [];
         List<LightInst> lightInstances = [];
         List<CPlugLightUserModel> lightUserModels = [];
         List<Socket> sockets = [];
+
+        Dictionary<CPlugMaterialUserInst, int> materialInstances = [];
 
 
         target.LodMaxDistAtFov90 = groupSetting.LODDistances;
@@ -346,22 +347,18 @@ public class MeshBuilder
             var indexedTriangles = BuildIndexedTrianglesVisual(item, submesh);
 
             int visualIndex = visuals.Count;
-            int materialIndex = materials.Count;
-
 
             preLightGen = MergePreLightGenerator(submesh, preLightGen);
 
             visuals.Add(indexedTriangles);
 
-            var materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
-            materialInstance.GetChunk<CPlugMaterialUserInst.Chunk090FD001>().U02 = 0;
-            if (!meshSetting.Collidable)
-                materialInstance.SurfacePhysicId = MaterialId.NotCollidable;
-            materials.Add(new CPlugSolid2Model.Material
+            if(!materialInstances.TryGetValue(submesh.Material, out int materialIndex))
             {
-                MaterialUserInst = materialInstance,
-                MaterialName = ""//submesh.Material.MaterialName
-            });
+                materialIndex = materialInstances.Count;
+                materialInstances.Add(submesh.Material, materialIndex);
+            }
+            submesh.Material.GetChunk<CPlugMaterialUserInst.Chunk090FD001>().U02 = 0;
+
             shadedGeom.Add(new CPlugSolid2Model.ShadedGeom
             {
                 VisualIndex = visualIndex,
@@ -391,7 +388,7 @@ public class MeshBuilder
 
         target.PreLightGenerator = preLightGen;
         target.Visuals = visuals.ToArray();
-        target.CustomMaterials = materials.ToArray();
+        target.CustomMaterials = materialInstances.Keys.Select(k => new Material() { MaterialName = "", MaterialUserInst = k }).ToArray();
         target.ShadedGeoms = shadedGeom.ToArray();
         target.LightInsts = lightInstances.ToArray();
         target.LightUserModels = lightUserModels.ToArray();
