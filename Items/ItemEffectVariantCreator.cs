@@ -3,8 +3,8 @@ using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using TM_GenericMapping.Common;
 using TM_GenericMapping.Messaging;
+using TM_GenericMapping.Templating;
 
 namespace TM_GenericMapping.Items;
 public class ItemEffectVariantCreator

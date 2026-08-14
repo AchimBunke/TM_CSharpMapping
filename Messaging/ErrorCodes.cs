@@ -15,6 +15,7 @@ public static class ErrorCodes
         public const string MissingTrigger = "MeshBuilder.MissingTrigger";
         public const string MissingDynaShape = "MeshBuilder.MissingDynaShape";
         public const string MissingStaticShape = "MeshBuilder.MissingStaticShape";
+        public const string UnsupportedType = "MeshBuilder.UnsupportedType";
     }
     public static class MovingItemCreator
     {

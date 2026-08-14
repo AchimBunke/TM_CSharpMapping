@@ -58,7 +58,7 @@ public class MovingItemCreator
         if(!extractResult.IsSuccess)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, extractResult);
 
-        var movingItemResult = _meshBuilder.BuildMixedItem(extractResult.Value, buildOptions ?? MeshBuilder.BuildSettings.DefaultFromMesh(extractResult.Value));
+        var movingItemResult = _meshBuilder.BuildGeneralItem(extractResult.Value, buildOptions ?? MeshBuilder.BuildSettings.DefaultFromMesh(extractResult.Value));
         if(movingItemResult.IsFailure)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshBuildingFailed, movingItemResult);
 

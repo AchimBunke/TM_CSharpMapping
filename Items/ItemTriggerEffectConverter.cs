@@ -2,6 +2,7 @@
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Templating;
 
 namespace TM_GenericMapping.Items;
 
@@ -37,10 +38,6 @@ public class ItemTriggerEffectConverter
     };
     public static LegacyGameplayId ShortToGameplayId(ushort gameplay) => GameplayIdToShort.FirstOrDefault(x => x.Value == gameplay).Key;
 
-    const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
-    private static CPlugPrefab prefabTemplateInstance = null!;
-    public static CPlugPrefab PrefabTemplate => prefabTemplateInstance ??= (CPlugPrefab)Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerItemTemplatePath)).Node.EntityModel!;
-
     public static bool TryConvertEffect(LegacyGameplayId gameplayId, CGameItemModel item)
         => TryConvertEffect(GameplayIdToShort[gameplayId], item);
     public static void ConvertEffect(LegacyGameplayId gameplayId, NPlugTrigger_SSpecial triggerSpecial)
@@ -71,7 +68,7 @@ public class ItemTriggerEffectConverter
     static void ConvertCommonItemEntityModelToCPlugPrefab(CGameItemModel item)
     {   
         var entityModel = item.EntityModel as CGameCommonItemEntityModel;
-        var prefab = ObjectCloner.DeepCloneObject(PrefabTemplate);
+        var prefab = GbxTemplateLibrary.CreateTriggerItemTemplate().Value.EntityModel as CPlugPrefab;
         prefab.Ents[0].Model = entityModel.StaticObject;
         var triggerSpecial = prefab.Ents[1].Model as NPlugTrigger_SSpecial;
         triggerSpecial.TriggerShape = entityModel.TriggerShape as CPlugSurface;

@@ -1,15 +1,12 @@
-﻿using System.Xml.Serialization;
+﻿using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Plug;
+using System.Xml.Serialization;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
-[Flags]
-public enum ConversionOptions
-{
-    None = 0,
-    MeshConfigFromObjectNames = 1 << 0,
-}
+
 public record FbxGbxConversionInput : IDisposable
 {
     public required ItemConfig ItemConfig { get; set; }
@@ -20,8 +17,6 @@ public record FbxGbxConversionInput : IDisposable
 
     public string? ItemOutputPath { get; set; }
 
-    public ConversionOptions ConversionOptions { get; set; } = ConversionOptions.None;
-
     public void Dispose()
     {
         Fbx.Dispose();
@@ -29,7 +24,7 @@ public record FbxGbxConversionInput : IDisposable
     }
 
 
-    public static FbxGbxConversionInput CreateFromItemXmlFile(string itemXmlFilePath, string materialLibFilePath, ConversionOptions options = ConversionOptions.MeshConfigFromObjectNames)
+    public static FbxGbxConversionInput CreateFromItemXmlFile(string itemXmlFilePath, string materialLibFilePath, ItemConversionOptions options = ItemConversionOptions.MeshConfigFromObjectNames)
     {
         var itemXml = ParseItemXml(itemXmlFilePath);
         var meshParamsPath = GetMeshParamsFilePath(itemXml, itemXmlFilePath);
@@ -46,30 +41,28 @@ public record FbxGbxConversionInput : IDisposable
 
         var config = new FbxGbxConversionInput()
         {
-            ItemConfig = ToItemConfig(itemXml, meshParamsXml),
+            ItemConfig = ToItemConfig(itemXml, meshParamsXml, options),
             Fbx = fbx,
             Icon = icon,
             MaterialLibrary = materialLib,
             ItemOutputPath = GetItemOutputPath(itemXmlFilePath),
-            ConversionOptions = options
         };
         return config;
     }
-    public static FbxGbxConversionInput CreateFromXmlStreams(Stream itemXml, Stream meshParamsXml, Stream fbx, Stream materialLibStream, Stream? icon = null, string? itemOutputPath = null, ConversionOptions options = ConversionOptions.MeshConfigFromObjectNames)
+    public static FbxGbxConversionInput CreateFromXmlStreams(Stream itemXml, Stream meshParamsXml, Stream fbx, Stream materialLibStream, Stream? icon = null, string? itemOutputPath = null, ItemConversionOptions options = ItemConversionOptions.MeshConfigFromObjectNames)
     {
         var config = new FbxGbxConversionInput()
         {
-            ItemConfig = ToItemConfig(ParseItemXml(itemXml), ParseMeshParamsXml(meshParamsXml)),
+            ItemConfig = ToItemConfig(ParseItemXml(itemXml), ParseMeshParamsXml(meshParamsXml), options),
             MaterialLibrary = ParseMaterialLibrary(materialLibStream),
             Fbx = fbx,
             Icon = icon,
             ItemOutputPath = itemOutputPath,
-            ConversionOptions = options
         };
         return config;
     }
 
-    public static FbxGbxConversionInput CreateFromItemConfig(Stream itemConfigStream, Stream fbx, DMaterialLibrary materialLibrary, Stream? icon = null, string? itemOutputPath = null, ConversionOptions options = ConversionOptions.None)
+    public static FbxGbxConversionInput CreateFromItemConfig(Stream itemConfigStream, Stream fbx, DMaterialLibrary materialLibrary, Stream? icon = null, string? itemOutputPath = null)
     {
         var config = new FbxGbxConversionInput()
         {
@@ -78,7 +71,6 @@ public record FbxGbxConversionInput : IDisposable
             Fbx = fbx,
             Icon = icon,
             ItemOutputPath = itemOutputPath,
-            ConversionOptions = options
         };
         return config;
     }
@@ -163,10 +155,8 @@ public record FbxGbxConversionInput : IDisposable
         return Path.Combine(trackmaniaRoot, relative, $"{itemName}.Item.Gbx");
     }
 
-    static ItemConfig ToItemConfig(ItemXml itemXml, MeshParamsXml meshParamsXml)
+    static ItemConfig ToItemConfig(ItemXml itemXml, MeshParamsXml meshParamsXml, ItemConversionOptions itemConversionOptions = ItemConversionOptions.MeshConfigFromObjectNames)
     {
-
-
         var config = new ItemConfig()
         {
             Type = itemXml.Type,
@@ -184,21 +174,20 @@ public record FbxGbxConversionInput : IDisposable
                 },
                 NoRespawn = false,
             } : null,
-            PivotsPositions = itemXml.Pivots?.Select(p => new PivotPosition { Pos = p.GetPosition() }).ToList(),
-            PlacementParams = new PlacementParameters()
+            PlacementParams = new CGameItemPlacementParam()
             {
-                GridHorizontalStep = itemXml.GridSnap?.HStep ?? 0f,
-                GridHorizontalOffset = itemXml.GridSnap?.HOffset ?? 0f,
-                GridVerticalStep = itemXml.GridSnap?.VStep ?? 0f,
-                GridVerticalOffset = itemXml.GridSnap?.VOffset ?? 0f,
-                LevitationVerticalStep = itemXml.Levitation?.VStep ?? 0f,
-                LevitationVerticalOffset = itemXml.Levitation?.VOffset ?? 0f,
-                GhostMode = itemXml.Levitation?.GhostMode ?? false,
-                OneAxisRotation = itemXml.Options?.OneAxisRotation ?? false,
-                ManualPivotSwitch = itemXml.Options?.ManualPivotSwitch ?? false,
-                NotOnItem = itemXml.Options?.NotOnItem ?? false,
+                GridSnapHStep = itemXml.GridSnap?.HStep ?? 0f,
+                GridSnapHOffset = itemXml.GridSnap?.HOffset ?? 0f,
+                GridSnapVStep = itemXml.GridSnap?.VStep ?? 0f,
+                GridSnapVOffset = itemXml.GridSnap?.VOffset ?? 0f,
+                FlyVStep = itemXml.Levitation?.VStep ?? 0f,
+                FlyVOffset = itemXml.Levitation?.VOffset ?? 0f,
+                YawOnly = itemXml.Options?.OneAxisRotation ?? false,
+                SwitchPivotManually = itemXml.Options?.ManualPivotSwitch ?? false,
+                NotOnObject = itemXml.Options?.NotOnItem ?? false,
                 AutoRotation = itemXml.Options?.AutoRotation ?? false,
-                PivotSnapDistance = itemXml.PivotSnap?.Distance ?? -1f
+                PivotSnapDistance = itemXml.PivotSnap?.Distance ?? -1f,
+                PivotPositions = itemXml.Pivots?.Select(p => p.GetPosition()).ToArray(),
             },
             Scale = meshParamsXml.Scale,
             MaterialConfiguration = meshParamsXml.Materials.Select(m => new MaterialConfig
@@ -223,7 +212,8 @@ public record FbxGbxConversionInput : IDisposable
                 SpotOuterAngle = l.SpotOuterAngle,
                 SpotEmissionSizeX = l.SpotEmissionSizeX,
                 SpotEmissionSizeY = l.SpotEmissionSizeY
-            }).ToList()
+            }).ToList(),
+            ConversionOptions = itemConversionOptions,
 
         };
         return config;

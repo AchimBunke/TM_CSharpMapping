@@ -289,6 +289,9 @@ public class MeshExtractor
         List<NormalizedMesh> geometryGroup= [];
         List<NormalizedMesh> triggerGroups = [];
         CPlugSpawnModel? spawnModel = null;
+        List<int> smoothingGroups = crystal.GetChunk<CPlugCrystal.Chunk09003007>()?.U01?.ToList() ?? new List<int>();
+        int firstSmoothingGroupIdx = 0;
+
         foreach (var layer in crystal.Layers)
         {
             // Two-pass: group split vertices by material first, then concatenate
@@ -303,10 +306,12 @@ public class MeshExtractor
                 List<int> indices,
                 MeshType type,
                 bool collidable,
-                Dictionary<(Vec3, Vec2, Vec2), int> weldMap)>();
+                Dictionary<(Vec3, Vec2, Vec2), int> weldMap,
+                int smoothingGroup)>();
 
             MeshProperties properties = MeshProperties.None;
 
+           
             switch (layer)
             {
                 case CPlugCrystal.GeometryLayer geo:
@@ -323,7 +328,7 @@ public class MeshExtractor
                             var mat = face.Material.MaterialUserInst;
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), MeshType.Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, []);
+                                bucket = (new(), new(), new(), new(), new(), MeshType.Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, [], 0);
                                 buckets[mat] = bucket;
                             }
 
@@ -343,11 +348,13 @@ public class MeshExtractor
                                         bucket.texCoords.Add(corner.TexCoord);
                                         bucket.lightmapCoords.Add(corner.LightmapCoord);
                                         bucket.normals.Add(Vec3.Zero);
+                                        bucket.smoothingGroup = smoothingGroups[firstSmoothingGroupIdx];
                                     }
                                     bucket.indices.Add(dst);
                                 }
                             }
                         }
+                        firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
                     }
                     break;
                 case CPlugCrystal.TriggerLayer trigger:
@@ -361,7 +368,7 @@ public class MeshExtractor
 
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), MeshType.Trigger_Waypoint, false, []);
+                                bucket = (new(), new(), new(), new(), new(), MeshType.Trigger_Waypoint, false, [], -1);
                                 buckets[mat] = bucket;
                             }
 
@@ -427,6 +434,7 @@ public class MeshExtractor
                     Type = bucket.type,
                     Properties = properties,
                     Name = MatToName(mat),
+                    SmoothingGroup = bucket.smoothingGroup,
                 };
                 if (bucket.type == MeshType.Trigger_Waypoint)
                     triggerGroups.Add(mesh);

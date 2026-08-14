@@ -1,11 +1,14 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
+using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
+using System.Dynamic;
 using System.Numerics;
 using System.Reflection;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Messaging;
+using TM_GenericMapping.Templating;
 using TmEssentials;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
@@ -24,6 +27,18 @@ public class MeshBuilder
         public string Author;
     };
 
+    public enum ItemModel
+    {
+        MeshModeler,
+        General
+    }
+
+    [Flags]
+    public enum MeshBuilderOptimization
+    {
+        None,
+        PreferMeshCollision = 1 << 0,
+    }
 
     public struct MeshInstanceSetting
     {
@@ -73,6 +88,9 @@ public class MeshBuilder
         public IReadOnlyList<LightInstanceSetting> LightSettings = [];
         public IReadOnlyList<MeshInstanceSetting> MeshSettings = [];
         public IReadOnlyList<GroupSetting> GroupSettings = [];
+
+        public ItemModel TargetModel = ItemModel.General;
+        public MeshBuilderOptimization Optimization = MeshBuilderOptimization.PreferMeshCollision;
 
         public static BuildSettings DefaultFromMesh(NormalizedItem item)
         {
@@ -184,47 +202,46 @@ public class MeshBuilder
  
     }
 
-    const string MovingItemTemplatePath = @"MovingItemTemplate.Item.Gbx";
-    const string EntityModelEditionTemplatePath = @"EntityModelEditionTemplate.Item.Gbx";
-    const string EntityModelTemplatePath = @"EntityModelTemplate.Item.Gbx";
-    const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
-    const string TriggerLayerTemplatePath = @"TriggerLayerTemplate.Item.Gbx";
+    //const string MovingItemTemplatePath = @"MovingItemTemplate.Item.Gbx";
+    //const string EntityModelEditionTemplatePath = @"EntityModelEditionTemplate.Item.Gbx";
+    //const string EntityModelTemplatePath = @"EntityModelTemplate.Item.Gbx";
+    //const string TriggerItemTemplatePath = @"TriggerItemTemplate.Item.Gbx";
+    //const string TriggerLayerTemplatePath = @"TriggerLayerTemplate.Item.Gbx";
 
-    CGameItemModel movingItemTemplate;
-    CGameItemModel entityModelEditionTemplate;
-    CGameItemModel entityModelTemplate;
-    CGameItemModel triggerItemTemplate;
-    CGameItemModel triggerLayerTemplate;
+    //CGameItemModel movingItemTemplate;
+    //CGameItemModel entityModelEditionTemplate;
+    //CGameItemModel entityModelTemplate;
+    //CGameItemModel triggerItemTemplate;
+    //CGameItemModel triggerLayerTemplate;
 
-    CGameItemModel MovingItemTemplate => (movingItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(MovingItemTemplatePath)));
-    CGameItemModel EntityModelEditionTemplate => (entityModelEditionTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelEditionTemplatePath)));
-    CGameItemModel EntityModelTemplate => (entityModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelTemplatePath)));
-    CGameItemModel TriggerItemTemplate => (triggerItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerItemTemplatePath)));
-    CGameItemModel TriggerLayerTemplateItem => (triggerLayerTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerLayerTemplatePath)));
+    //CGameItemModel MovingItemTemplate => (movingItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(MovingItemTemplatePath)));
+    //CGameItemModel EntityModelEditionTemplate => (entityModelEditionTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelEditionTemplatePath)));
+    //CGameItemModel EntityModelTemplate => (entityModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelTemplatePath)));
+    //CGameItemModel TriggerItemTemplate => (triggerItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerItemTemplatePath)));
+    //CGameItemModel TriggerLayerTemplateItem => (triggerLayerTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(TriggerLayerTemplatePath)));
 
-    CGameCommonItemEntityModel CommonItemEntityModelTemplate => (EntityModelTemplate.EntityModel as CGameCommonItemEntityModel);
-    CPlugSolid2Model Solid2ModelTemplate => (CommonItemEntityModelTemplate.StaticObject.Mesh);
-    CPlugVisualIndexedTriangles IndexedTrianglesTemplate => (Solid2ModelTemplate.Visuals[0] as CPlugVisualIndexedTriangles);
-    CPlugVertexStream VertexStreamTemplate => IndexedTrianglesTemplate.VertexStreams[0];
-    CPlugIndexBuffer IndexBufferTemplate => IndexedTrianglesTemplate.IndexBuffer;
-    CGameItemPlacementParam PlacementParamTemplate => EntityModelEditionTemplate.DefaultPlacement;
+    //CGameCommonItemEntityModel CommonItemEntityModelTemplate => (EntityModelTemplate.EntityModel as CGameCommonItemEntityModel);
+    //CPlugSolid2Model Solid2ModelTemplate => (CommonItemEntityModelTemplate.StaticObject.Mesh);
+    //CPlugVisualIndexedTriangles IndexedTrianglesTemplate => (Solid2ModelTemplate.Visuals[0] as CPlugVisualIndexedTriangles);
+    //CPlugVertexStream VertexStreamTemplate => IndexedTrianglesTemplate.VertexStreams[0];
+    //CPlugIndexBuffer IndexBufferTemplate => IndexedTrianglesTemplate.IndexBuffer;
 
-    CGameCommonItemEntityModelEdition CommonItemEntityModelEditionTemplate => (EntityModelEditionTemplate.EntityModelEdition as CGameCommonItemEntityModelEdition);
-    CPlugCrystal MeshCrystalTemplate => CommonItemEntityModelEditionTemplate.MeshCrystal;
-    CPlugCrystal.GeometryLayer GeometryLayerTemplate => MeshCrystalTemplate.Layers[0] as CPlugCrystal.GeometryLayer;
-    CPlugCrystal.Crystal GeometryCrystalTemplate => GeometryLayerTemplate.Crystal;
+    //CGameCommonItemEntityModelEdition CommonItemEntityModelEditionTemplate => (EntityModelEditionTemplate.EntityModelEdition as CGameCommonItemEntityModelEdition);
+    //CPlugCrystal MeshCrystalTemplate => CommonItemEntityModelEditionTemplate.MeshCrystal;
+    //CPlugCrystal.GeometryLayer GeometryLayerTemplate => MeshCrystalTemplate.Layers[0] as CPlugCrystal.GeometryLayer;
+    //CPlugCrystal.Crystal GeometryCrystalTemplate => GeometryLayerTemplate.Crystal;
 
-    CPlugPrefab CPlugPrefabTemplate => (MovingItemTemplate.EntityModel as CPlugPrefab);
-    CPlugDynaObjectModel DynaObjectModelTemplate => ItemExtensions.TryGetDynaObjectModel(MovingItemTemplate, out var dyna) ? dyna : null;
-    NPlugDyna_SKinematicConstraint KinematicConstraintTemplate => (MovingItemTemplate.EntityModel as CPlugPrefab)?.Ents[1].Model as NPlugDyna_SKinematicConstraint;
-    CPlugSurface SurfaceTemplate => DynaObjectModelTemplate.DynaShape;
-    CPlugSurface.Mesh SurfaceMeshTemplate => SurfaceTemplate.Surf as CPlugSurface.Mesh;
+    //CPlugPrefab CPlugPrefabTemplate => (MovingItemTemplate.EntityModel as CPlugPrefab);
+    //CPlugDynaObjectModel DynaObjectModelTemplate => ItemExtensions.TryGetDynaObjectModel(MovingItemTemplate, out var dyna) ? dyna : null;
+    //NPlugDyna_SKinematicConstraint KinematicConstraintTemplate => (MovingItemTemplate.EntityModel as CPlugPrefab)?.Ents[1].Model as NPlugDyna_SKinematicConstraint;
+    //CPlugSurface SurfaceTemplate => DynaObjectModelTemplate.DynaShape;
+    //CPlugSurface.Mesh SurfaceMeshTemplate => SurfaceTemplate.Surf as CPlugSurface.Mesh;
 
-    CPlugStaticObjectModel StaticObjectModelTemplate => ItemExtensions.TryGetStaticObjectModel(TriggerItemTemplate, out var staticObj) ? staticObj : null;
-    NPlugTrigger_SSpecial TriggerSpecialTemplate => ItemExtensions.TryGetTriggerSpecial(TriggerItemTemplate, out var triggerSpecial) ? triggerSpecial : null;
+    //CPlugStaticObjectModel StaticObjectModelTemplate => ItemExtensions.TryGetStaticObjectModel(TriggerItemTemplate, out var staticObj) ? staticObj : null;
+    //NPlugTrigger_SSpecial TriggerSpecialTemplate => ItemExtensions.TryGetTriggerSpecial(TriggerItemTemplate, out var triggerSpecial) ? triggerSpecial : null;
 
-    CPlugCrystal.TriggerLayer TriggerLayerTemplate => (TriggerLayerTemplateItem.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal.Layers[0] as CPlugCrystal.TriggerLayer;
-    CPlugCrystal.Crystal TriggerCrystalTemplate => TriggerLayerTemplate.Crystal;
+    //CPlugCrystal.TriggerLayer TriggerLayerTemplate => (TriggerLayerTemplateItem.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal.Layers[0] as CPlugCrystal.TriggerLayer;
+    //CPlugCrystal.Crystal TriggerCrystalTemplate => TriggerLayerTemplate.Crystal;
 
 
     Ident ident;
@@ -247,10 +264,10 @@ public class MeshBuilder
     // If dynamic needs a convex hull later, that's a separate concern
     public ToolResult<CPlugSurface> BuildSurface(NormalizedItem item, ReadOnlySpan<int> visibles, ReadOnlySpan<int> nonCollidables, ReadOnlySpan<int> surfaces, BuildSettings buildOptions)
     {
-        var surface = ObjectCloner.DeepCloneObject(SurfaceTemplate);
+        var surface = GbxTemplateLibrary.CreateSurfaceTemplate().Value;
 
 
-        var surfMesh = ObjectCloner.DeepCloneObject(SurfaceMeshTemplate);
+        var surfMesh = GbxTemplateLibrary.CreateSurfaceMeshTemplate().Value;
 
         // merge all submesh positions and indices into one surface
         var allPositions = new List<Vec3>();
@@ -535,7 +552,7 @@ public class MeshBuilder
         if (subMesh.Colors is not null)
             colors[0] = subMesh.Colors;
 
-        var vertexStream = ObjectCloner.DeepCloneObject(VertexStreamTemplate);
+        var vertexStream = GbxTemplateLibrary.CreateCPlugVertexStreamTemplate().Value;
         vertexStream.Positions = subMesh.Positions.ToArray();
         vertexStream.Normals = subMesh.Normals.ToArray();
         vertexStream.UVs = uvs;
@@ -641,11 +658,11 @@ public class MeshBuilder
             tangentVs.SetValue(vertexStream, subMesh.TangentVs ?? new Vec3[subMesh.Positions.Length]);
         }
 
-        var indexBuffer = ObjectCloner.DeepCloneObject(IndexBufferTemplate);
+        var indexBuffer = GbxTemplateLibrary.CreateCPlugIndexBufferTemplate().Value;
         indexBuffer.Indices = subMesh.Indices.ToArray();
         indexBuffer.Flags = 2;
 
-        var indexedTriangles = ObjectCloner.DeepCloneObject(IndexedTrianglesTemplate);
+        var indexedTriangles = GbxTemplateLibrary.CreateCPlugVisualIndexedTrianglesTemplate().Value;
         indexedTriangles.VertexStreams = [vertexStream];
         indexedTriangles.IndexBuffer = indexBuffer;
         if (TryGetBoundingBox(item, out var bb))
@@ -669,7 +686,7 @@ public class MeshBuilder
     {
         // grab source solid from SourceData if available as chunk donor
         // otherwise construct empty (may be missing required chunks)
-        CPlugSolid2Model solid = ObjectCloner.DeepCloneObject(Solid2ModelTemplate);
+        CPlugSolid2Model solid = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
 
         var result = PopulateSolid2Model(solid, item, groupSetting, buildSettings);
         if (result.IsFailure)
@@ -706,7 +723,7 @@ public class MeshBuilder
     // Option B: build new DynaObjectModel using target as chunk donor
     public ToolResult<CPlugDynaObjectModel> BuildDynaObjectModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
-        CPlugDynaObjectModel dyna = ObjectCloner.DeepCloneObject(DynaObjectModelTemplate);
+        CPlugDynaObjectModel dyna = GbxTemplateLibrary.CreateDynaObjectModelTemplate().Value;
         var result = PopulateDynaObjectModel(dyna, item, groupSetting, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
@@ -734,7 +751,7 @@ public class MeshBuilder
     }
     public ToolResult<NPlugDyna_SKinematicConstraint> BuildKinematicConstraint(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
-        return ToolResult.Success(groupSetting.KinematicConstraint != null ? groupSetting.KinematicConstraint : ObjectCloner.DeepCloneObject(KinematicConstraintTemplate), nameof(MeshBuilder));
+        return ToolResult.Success(groupSetting.KinematicConstraint != null ? groupSetting.KinematicConstraint : GbxTemplateLibrary.CreateKinematicConstraintTemplate().Value, nameof(MeshBuilder));
     }
 
 
@@ -769,7 +786,7 @@ public class MeshBuilder
 
     public ToolResult<CPlugStaticObjectModel> BuildStaticObjectModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings, bool forceStaticShape)
     {
-        CPlugStaticObjectModel staticObj = ObjectCloner.DeepCloneObject(StaticObjectModelTemplate);
+        CPlugStaticObjectModel staticObj = GbxTemplateLibrary.CreateStaticObjectModelTemplate().Value;
         var result = PopulateStaticObjectModel(staticObj, item, groupSetting, buildSettings, forceStaticShape);
         if (result.IsFailure)
             return ToolResult.Fail(result);
@@ -789,7 +806,7 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     public ToolResult<CPlugCrystal> BuildCrystal(NormalizedItem item, BuildSettings buildSettings)
     {
-        CPlugCrystal crystal = ObjectCloner.DeepCloneObject(MeshCrystalTemplate);
+        CPlugCrystal crystal = GbxTemplateLibrary.CreateCPlugCrystalTemplate().Value;
 
         var result = PopulateMeshCrystal(crystal, item, buildSettings);
         if (result.IsFailure)
@@ -802,6 +819,7 @@ public class MeshBuilder
         List<CPlugCrystal.Layer> layers = [];
         List<CPlugCrystal.Material> materials = [];
         Dictionary<CPlugMaterialUserInst, CPlugMaterialUserInst> materialMap = [];
+        List<int> smoothingGroups = [];
 
         int layerIdx = 0;
         foreach (var meshSetting in buildSettings.MeshSettings
@@ -818,6 +836,7 @@ public class MeshBuilder
             };
             materials.Add(material);
             var layer = BuildGeometryLayer(submesh, material, meshSetting,groupSetting, buildSettings);
+            smoothingGroups.AddRange(layer.Crystal.Faces.Select(_ => submesh.SmoothingGroup.HasValue ? submesh.SmoothingGroup.Value : 0));
             layer.Crystal.U02 = layerIdx;
             layer.LayerId = $"Layer{layerIdx}";
             layer.IsVisible = meshSetting.Visible;
@@ -867,7 +886,7 @@ public class MeshBuilder
         target.Layers = layers;
         target.Materials = materials;
         var chunk = target.Chunks.Get<CPlugCrystal.Chunk09003007>();
-        chunk.U01 = Enumerable.Repeat(2, layers.OfType<CPlugCrystal.GeometryLayer>().Sum(l => l.Crystal.Faces.Length)).ToArray();
+        chunk.U01 = smoothingGroups.ToArray();
         return ToolResult.Success(nameof(MeshBuilder));
     }
 
@@ -878,11 +897,11 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     CPlugCrystal.GeometryLayer BuildGeometryLayer(NormalizedMesh submesh, CPlugCrystal.Material material, MeshInstanceSetting meshSetting, GroupSetting groupSetting, BuildSettings buildSettings)
     {
-        var layer = ObjectCloner.DeepCloneObject(GeometryLayerTemplate);
+        var layer = GbxTemplateLibrary.CreateGeometryLayerTemplate().Value;
         bool isLod = meshSetting.LODMask.HasValue ? !LODUtils.IsVisibleInAllLods(meshSetting.LODMask.Value, groupSetting.LODDistances.Length + 1) : false;
         layer.LayerName = $"Geometry {submesh.Name}{(isLod ? " LOD-" + LodMaskToString(meshSetting.LODMask!.Value, groupSetting.LODDistances.Length + 1) : "")}";
 
-        var crystal = ObjectCloner.DeepCloneObject(GeometryCrystalTemplate);
+        var crystal = GbxTemplateLibrary.CreateGeometryCrystalTemplate().Value;
         crystal.Positions = WeldPositions(submesh.Positions, out var remap);
 
         var group = crystal.Groups[0];
@@ -916,10 +935,10 @@ public class MeshBuilder
     }
     CPlugCrystal.TriggerLayer BuildTriggerLayer(NormalizedMesh submesh, CPlugCrystal.Material material)
     {
-        var layer = ObjectCloner.DeepCloneObject(TriggerLayerTemplate);
+        var layer = GbxTemplateLibrary.CreateTriggerLayerTemplate().Value;
         layer.LayerName = $"Trigger {submesh.Name}";
 
-        var crystal = ObjectCloner.DeepCloneObject(TriggerCrystalTemplate);
+        var crystal = GbxTemplateLibrary.CreateTriggerCrystalTemplate().Value;
         crystal.Positions = WeldPositions(submesh.Positions, out var remap);
 
         var group = crystal.Groups[0];
@@ -995,7 +1014,10 @@ public class MeshBuilder
     }
     public ToolResult<NPlugTrigger_SSpecial> BuildTriggerSpecial(NormalizedItem item, LegacyGameplayId gameplayId, GroupSetting groupSetting, BuildSettings buildSettings)
     {
-        NPlugTrigger_SSpecial triggerSpecial = ObjectCloner.DeepCloneObject(TriggerSpecialTemplate);
+        NPlugTrigger_SSpecial triggerSpecial = new NPlugTrigger_SSpecial()
+        {
+            Version = 3
+        };
         
         var result = PopulateTriggerSpecial(triggerSpecial, item, groupSetting, buildSettings);
         if (result.IsFailure)
@@ -1109,7 +1131,7 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     public ToolResult<CPlugPrefab> BuildMixedPrefab(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
-        var item = ObjectCloner.DeepCloneObject(MovingItemTemplate);
+        var item = GbxTemplateLibrary.CreateMovingItemTemplate().Value;
 
         List<EntRef> ents = [];
 
@@ -1242,28 +1264,53 @@ public class MeshBuilder
 
     }
 
+    public ToolResult<CMwNod> BuildMixedEntityModel(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    {
+        var prefabResult = BuildMixedPrefab(normalizedItem, buildSettings);
+        if (prefabResult.IsFailure)
+            return ToolResult.Fail(prefabResult);
+        var prefab = prefabResult.Value;
 
+        // convert to CGameCommonEntityModel if possible (single static object with no dynamic objects and at most one trigger)
+        if (buildSettings.Optimization.HasFlag(MeshBuilderOptimization.PreferMeshCollision))
+        {
+            var staticShapes = buildSettings.GroupSettings.Where(gs => gs.Type == GroupType.StaticObject);
+            var dynamicShapes = buildSettings.GroupSettings.Where(gs => gs.Type == GroupType.DynaObject);
+            var triggerSpecials = buildSettings.GroupSettings.Where(gs => gs.Type == GroupType.Trigger_Special);
+            var waypointTriggers = buildSettings.GroupSettings.Where(gs => gs.Type == GroupType.Trigger_Waypoint);
+
+            if (staticShapes.Count() == 1 && dynamicShapes.Count() == 0 && (triggerSpecials.Count() + waypointTriggers.Count() <= 1))
+            {
+                bool isMeshCollidable = IsMeshCollidable(staticShapes.First(), buildSettings);
+                if (isMeshCollidable) 
+                {
+                    var commonEntityModel = GbxTemplateLibrary.CreateCommonItemEntityModelTemplate().Value;
+
+                    commonEntityModel.StaticObject = prefab.Ents.First(e => e.Model is CPlugStaticObjectModel).Model as CPlugStaticObjectModel;
+                    commonEntityModel.StaticObject.Shape = null;
+                    commonEntityModel.StaticObject.IsMeshCollidable = true;
+
+                    if (prefab.Ents.Any(t => t.Model is NPlugTrigger_SSpecial))
+                    {
+                        commonEntityModel.TriggerShape = (prefab.Ents.First(t=>t.Model is NPlugTrigger_SSpecial).Model as NPlugTrigger_SSpecial).TriggerShape;
+                    }
+                    if (prefab.Ents.Any(t => t.Model is NPlugTrigger_SWaypoint))
+                    {
+                        commonEntityModel.TriggerShape = (prefab.Ents.First(t => t.Model is NPlugTrigger_SWaypoint).Model as NPlugTrigger_SWaypoint).TriggerShape;
+                    }
+
+                    return ToolResult.Success(commonEntityModel as CMwNod, nameof(MeshBuilder));
+                }
+            }
+        }
+
+        return ToolResult.Success(prefab as CMwNod, nameof(MeshBuilder));
+    }
 
     // ─────────────────────────────────────────────
     // other helpers
     // ─────────────────────────────────────────────
-    CGameItemPlacementParam BuildPlacementParam(NormalizedItem mesh)
-    {
-        if(mesh.PlacementParam != null)
-            return mesh.PlacementParam;
-        var placementParam = ObjectCloner.DeepCloneObject(PlacementParamTemplate);
-        placementParam.AutoRotation = false;
-        placementParam.CubeCenter = (0, 0, 0);
-        placementParam.CubeSize = 0;
-        placementParam.FlyVOffset = 0;
-        placementParam.FlyVStep = 0;
-        placementParam.GridSnapHOffset = 0;
-        placementParam.GridSnapHStep = 1;
-        placementParam.GridSnapVOffset = 0;
-        placementParam.GridSnapVStep = 0;
-        placementParam.PivotSnapDistance = -1;
-        return placementParam;
-    }
+
     BoxAligned BuildBoxAligned(NormalizedMesh subMesh)
     {
         Vec3 min = subMesh.Positions[0];
@@ -1371,7 +1418,7 @@ public class MeshBuilder
         ChunkSafeItemOperations.SetIcon(item, normalizedItem.Icon, normalizedItem.IconWebP);
         item.Description = string.IsNullOrWhiteSpace(normalizedItem.Description) ? "No Description" : normalizedItem.Description;
         item.Ident = ident;
-        item.DefaultPlacement = BuildPlacementParam(normalizedItem);
+        item.DefaultPlacement = GbxTemplateLibrary.CreatePlacementParamTemplateWithPlacementClass();
         if(item.EntityModel is CPlugPrefab prefab)
             prefab.FileWriteTime = DateTime.Now;
         
@@ -1411,7 +1458,7 @@ public class MeshBuilder
 
     public ToolResult<CGameItemModel> BuildCrystalItem(NormalizedItem normalizedItem, BuildSettings buildOptions)
     {
-        var item = ObjectCloner.DeepCloneObject(EntityModelEditionTemplate);
+        var item = GbxTemplateLibrary.CreateCommonItemEntityModelEditionItemTemplate().Value;
         var crystalResult = BuildCrystal(normalizedItem, buildOptions);
         if (crystalResult.IsFailure)
             return ToolResult.Fail(crystalResult);
@@ -1470,28 +1517,12 @@ public class MeshBuilder
 
 
 
-    public ToolResult<CGameItemModel> BuildMixedItem(NormalizedItem normalizedItem, EWaypointType waypointType, BuildSettings buildSettings)
+   
+    public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
-        var result = BuildMixedItem(normalizedItem, buildSettings);
-        if (result.IsFailure)
-            return ToolResult.Fail(result);
-        result.Value.WaypointType = waypointType;
-        return result;
-    }
-    public ToolResult<CGameItemModel> BuildMixedItem(NormalizedItem normalizedItem, LegacyGameplayId gameplayid, BuildSettings buildSettings)
-    {
-        var result = BuildMixedItem(normalizedItem, buildSettings);
-        if (result.IsFailure)
-            return ToolResult.Fail(result);
-        if(!ItemTriggerEffectConverter.TryConvertEffect(gameplayid, result.Value))
-            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingTrigger);
-        return result;
-    }
-    public ToolResult<CGameItemModel> BuildMixedItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
-    {
-        var item = ObjectCloner.DeepCloneObject(TriggerItemTemplate);
+        var item = GbxTemplateLibrary.CreateMovingItemTemplate().Value;
 
-        var mixedPrefabResult = BuildMixedPrefab(normalizedItem, buildSettings);
+        var mixedPrefabResult = BuildMixedEntityModel(normalizedItem, buildSettings);
         if (mixedPrefabResult.IsFailure)
             return ToolResult.Fail(mixedPrefabResult);
 
@@ -1502,6 +1533,37 @@ public class MeshBuilder
         FillItemDataFromMesh(item, normalizedItem);
         FixItemChunks(item, normalizedItem);
         return ToolResult.Success(item, nameof(MeshBuilder));
+    }
+
+     public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, EWaypointType overwriteWaypointType, BuildSettings buildSettings)
+    {
+        var result = BuildItem(normalizedItem, buildSettings);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        result.Value.WaypointType = overwriteWaypointType;
+        return result;
+    }
+    public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, LegacyGameplayId overwriteGameplayid, BuildSettings buildSettings)
+    {
+        var result = BuildItem(normalizedItem, buildSettings);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        if(!ItemTriggerEffectConverter.TryConvertEffect(overwriteGameplayid, result.Value))
+            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingTrigger);
+        return result;
+    }
+
+    public ToolResult<CGameItemModel> BuildItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    {
+        switch(buildSettings.TargetModel)
+        {
+            case ItemModel.General:
+                return BuildGeneralItem(normalizedItem, buildSettings);
+            case ItemModel.MeshModeler:
+                return BuildCrystalItem(normalizedItem, buildSettings);
+            default:
+                return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.UnsupportedType);
+        }
     }
 
 }

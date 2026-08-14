@@ -1,45 +1,31 @@
 ﻿using Assimp;
-using Assimp.Configs;
 using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
-using GBX.NET.Engines.Scene;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using System.Numerics;
-using System.Xml.Serialization;
-using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
+using TM_GenericMapping.Templating;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 public class FbxGbxConverter
 {
-    const string EntityModelTemplatePath = @"EntityModelTemplate.Item.Gbx";
-    CGameItemModel entityModelTemplate = null!;
-    CGameItemModel EntityModelTemplate => (entityModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate(EntityModelTemplatePath)));
-    CGameCommonItemEntityModel CommonItemEntityModelTemplate => (EntityModelTemplate.EntityModel as CGameCommonItemEntityModel)!;
-    CPlugSolid2Model Solid2ModelTemplate => CommonItemEntityModelTemplate.StaticObject!.Mesh!;
-
     MeshBuilder meshBuilder = new();
 
-
-
-    public ToolResult<CGameItemModel> ConvertToGbx(FbxGbxConversionInput conversionInput)
+    public ToolResult<CGameItemModel> ConvertToGbx(
+        FbxGbxConversionInput conversionInput,
+        MeshBuilder.ItemModel targetModel = MeshBuilder.ItemModel.General)
     {
 
-        var fbxSceneResult = FbxSceneReader.ParseFbx(conversionInput.Fbx);
-        if(fbxSceneResult.IsFailure)
-            return ToolResult.Fail(fbxSceneResult);
-
-        var normalizedItemResult = ConvertToNormalizedItem(fbxSceneResult.Value, conversionInput);
+        var normalizedItemResult = ConvertToNormalizedItem(conversionInput);
         if (normalizedItemResult.IsFailure)
             return ToolResult.Fail(normalizedItemResult);
 
         var buildSettings = CreateBuildSettings(normalizedItemResult.Value, conversionInput);
-        var itemResult = meshBuilder.BuildMixedItem(normalizedItemResult.Value, buildSettings);
+        buildSettings.TargetModel = targetModel;
+        var itemResult = meshBuilder.BuildItem(normalizedItemResult.Value, buildSettings);
+
         if(itemResult.IsFailure)
             return ToolResult.Fail(itemResult);
 
@@ -48,12 +34,13 @@ public class FbxGbxConverter
         return ToolResult.Success(itemResult.Value, nameof(FbxGbxConverter));
     }
 
-    public ToolResult<CGameItemModel> ConvertToGbxAndSaveItem(FbxGbxConversionInput conversionInput)
+    public ToolResult<CGameItemModel> ConvertToGbxAndSaveItem(FbxGbxConversionInput conversionInput,
+        MeshBuilder.ItemModel targetModel = MeshBuilder.ItemModel.General)
     {
         if(string.IsNullOrWhiteSpace(conversionInput.ItemOutputPath))
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.InvalidItemOutputPath);
 
-        var itemResult = ConvertToGbx(conversionInput);
+        var itemResult = ConvertToGbx(conversionInput, targetModel);
         if (itemResult.IsFailure)
             return ToolResult.Fail(itemResult);
 
@@ -62,7 +49,14 @@ public class FbxGbxConverter
 
         return itemResult;
     }
+    public ToolResult<NormalizedItem> ConvertToNormalizedItem(FbxGbxConversionInput conversionInput)
+    {
+        var fbxSceneResult = FbxSceneReader.ParseFbx(conversionInput.Fbx);
+        if(fbxSceneResult.IsFailure)
+            return ToolResult.Fail(fbxSceneResult);
 
+        return ConvertToNormalizedItem(fbxSceneResult.Value, conversionInput);
+    }
 
 
     void SetItemMetaData(CGameItemModel item, FbxGbxConversionInput config)
@@ -79,7 +73,8 @@ public class FbxGbxConverter
         List<NormalizedMesh> meshes = new List<NormalizedMesh>();
         List<NodeDefGroup> groups = new List<NodeDefGroup>();
 
-        var materialConverter = new FbxMaterialConverter(config.MaterialLibrary, Solid2ModelTemplate.CustomMaterials![0].MaterialUserInst!);
+        var solid2ModelTemplate = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
+        var materialConverter = new FbxMaterialConverter(config.MaterialLibrary, solid2ModelTemplate.CustomMaterials![0].MaterialUserInst!);
 
         var materialResults = materialConverter.ExtractMaterials(scene, config);
         if (materialResults.IsFailure)
@@ -100,7 +95,7 @@ public class FbxGbxConverter
             return ToolResult.Fail(lightResults);
 
 
-        var nodes = FilterAndApplySpecialMeshItems(nodeResults.Value);
+        var nodes = FilterAndApplySpecialMeshItems(scene, nodeResults.Value, materialResults.Value);
 
         var groupResults = FbxMeshConverter.GroupNodes(nodes, socketResults.Value, config);
         if (groupResults.IsFailure)
@@ -132,14 +127,18 @@ public class FbxGbxConverter
     }
 
 
-    List<NodeDef> FilterAndApplySpecialMeshItems(IEnumerable<NodeDef> nodes)
+    List<NodeDef> FilterAndApplySpecialMeshItems(Scene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)
     {
         List<NodeDef> nodesWithMesh = new List<NodeDef>();
 
         foreach (var nodeDef in nodes)
         {
             if (nodeDef.NodeConfig.MeshFlags.HasMeshData())
-                nodesWithMesh.Add(nodeDef);
+            {
+                // has meshes with valid materials
+                if (nodeDef.Node.MeshIndices.Any(mi => materials[scene.Meshes[mi].MaterialIndex]?.MaterialInstance != null))
+                    nodesWithMesh.Add(nodeDef);
+            }
         }
 
 
@@ -153,24 +152,15 @@ public class FbxGbxConverter
     //-------------------------------------
     CGameItemPlacementParam CreatePlacementParameters(FbxGbxConversionInput config)
     {
-        var placementParams = EntityModelTemplate.DefaultPlacement!;
+        var placementParamsTemplate = config.ItemConfig.PlacementParams?.PlacementClass == null ? 
+            GbxTemplateLibrary.CreatePlacementParamTemplate() : 
+            GbxTemplateLibrary.CreatePlacementParamTemplateWithPlacementClass();
 
-        placementParams.AutoRotation = config.ItemConfig.PlacementParams?.AutoRotation ?? false;
-        placementParams.FlyVOffset = config.ItemConfig.PlacementParams?.LevitationVerticalOffset ?? 0;
-        placementParams.FlyVStep = config.ItemConfig.PlacementParams?.LevitationVerticalStep ?? 0;
-        placementParams.GridSnapHOffset = config.ItemConfig.PlacementParams?.GridHorizontalOffset ?? 0;
-        placementParams.GridSnapVOffset = config.ItemConfig.PlacementParams?.GridVerticalOffset ?? 0;
-        placementParams.GridSnapHStep = config.ItemConfig.PlacementParams?.GridHorizontalStep ?? 0;
-        placementParams.GridSnapVStep = config.ItemConfig.PlacementParams?.GridVerticalStep ?? 0;
-        placementParams.NotOnObject = config.ItemConfig.PlacementParams?.NotOnItem ?? false;
-        placementParams.PivotPositions = config.ItemConfig.PivotsPositions?.Select(p => p.Pos).ToArray();
-        placementParams.PivotRotations = null;
-        placementParams.PivotSnapDistance = config.ItemConfig.PlacementParams?.PivotSnapDistance ?? 0;
-        placementParams.SwitchPivotManually = config.ItemConfig.PlacementParams?.ManualPivotSwitch ?? false;
-        placementParams.YawOnly = config.ItemConfig.PlacementParams?.OneAxisRotation ?? false;
+        if(config.ItemConfig.PlacementParams != null)
+            placementParamsTemplate.InjectData(config.ItemConfig.PlacementParams);
 
 
-        return placementParams;
+        return placementParamsTemplate;
     }
 
     //-------------------------------------

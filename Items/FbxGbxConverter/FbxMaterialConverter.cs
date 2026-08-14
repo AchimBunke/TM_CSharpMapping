@@ -25,7 +25,7 @@ internal class FbxMaterialConverter
         foreach (var mat in scene.Materials)
         {
             var customMatResult = ConvertMaterial(mat, config);
-            if (customMatResult.IsFailure)
+            if (customMatResult.IsFailure && !config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.IgnoreMeshesWithInvalidMaterials))
                 return ToolResult.Fail(customMatResult);
             customMaterial.Add(customMatResult.Value);
         }

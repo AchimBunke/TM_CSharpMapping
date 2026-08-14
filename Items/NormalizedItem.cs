@@ -59,6 +59,7 @@ public class NormalizedMesh
     public int GroupIndex { get; set; } = -1;
 
     public PreLightGen? PreLightGenerator { get; set; }
+    public int? SmoothingGroup { get; set; } = 0;
 
 }
 public enum LightType

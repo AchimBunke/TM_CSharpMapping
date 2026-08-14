@@ -20,7 +20,7 @@ internal static class FbxSceneReader
             var scene = context.ImportFileFromStream(fbxStream,
                 PostProcessSteps.Triangulate |
                 PostProcessSteps.JoinIdenticalVertices |
-                PostProcessSteps.CalculateTangentSpace
+                PostProcessSteps.CalculateTangentSpace 
                 //PostProcessSteps.GenerateNormals
                 
                 //PostProcessSteps.FlipWindingOrder

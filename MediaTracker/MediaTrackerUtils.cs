@@ -3,6 +3,7 @@ using GBX.NET.Engines.Control;
 using GBX.NET.Engines.Game;
 using GBX.NET.Engines.MwFoundations;
 using System.Reflection;
+using TM_GenericMapping.Templating;
 using TmEssentials;
 using static GBX.NET.Engines.Game.CGameCtnMediaBlock;
 using static GBX.NET.Engines.Game.CGameCtnMediaClipGroup;

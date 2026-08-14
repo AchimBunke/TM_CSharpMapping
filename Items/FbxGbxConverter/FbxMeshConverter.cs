@@ -254,11 +254,11 @@ internal class FbxMeshConverter
     static ToolResult<MeshConfig> FindMeshConfigForMesh(string meshName, FbxGbxConversionInput config)
     {
         var meshConfig = config.ItemConfig.MeshConfiguration.FirstOrDefault(m => m.Name == meshName, null);
-        bool configFromMeshName = config.ConversionOptions.HasFlag(ConversionOptions.MeshConfigFromObjectNames);
+        bool configFromMeshName = config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames);
         if (meshConfig is null && !configFromMeshName)
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig, meshName);
 
-        if (config.ConversionOptions.HasFlag(ConversionOptions.MeshConfigFromObjectNames))
+        if (config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames))
         {
             meshConfig = MeshConfigFromMeshName(meshConfig, meshName, config);
         }

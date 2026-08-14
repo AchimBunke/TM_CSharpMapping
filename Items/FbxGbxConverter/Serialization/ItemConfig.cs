@@ -1,12 +1,21 @@
 ﻿namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 using GBX.NET;
+using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Plug;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TM_GenericMapping.Common;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
+[Flags]
+public enum ItemConversionOptions
+{
+    None = 0,
+    MeshConfigFromObjectNames = 1 << 0,
+    IgnoreMeshesWithInvalidMaterials = 1 << 1,
+}
 public class ItemConfig
 {
     public string Type { get; init; } = "StaticObject";
@@ -20,14 +29,9 @@ public class ItemConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Waypoint? Waypoint { get; set; }
 
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<PivotPosition>? PivotsPositions { get; set; }
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<PivotRotation>? PivotRotations { get; set; }
-
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public PlacementParameters? PlacementParams { get; set; }
+    public CGameItemPlacementParam? PlacementParams { get; set; }
 
     public float Scale { get; set; } = 1.0f;
 
@@ -41,6 +45,7 @@ public class ItemConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public LodParameters? LodParameters { get; set; }
 
+    public ItemConversionOptions ConversionOptions { get; set; }
 
 
 
@@ -52,16 +57,7 @@ public class ItemConfig
     }
     public static ItemConfig Deserialize(Stream itemInfoStream)
     {
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Converters = { 
-                new Vec3Converter(),
-                new JsonStringEnumConverter(),
-                 new ColorJsonConverter(),
-            }
-        };
-        return JsonSerializer.Deserialize<ItemConfig>(itemInfoStream, options) ?? throw new InvalidOperationException("Failed to deserialize ItemInfoJson.");
+        return JsonSerializer.Deserialize<ItemConfig>(itemInfoStream, serializerOptions) ?? throw new InvalidOperationException("Failed to deserialize ItemInfoJson.");
     }
     public static void Serialize(ItemConfig item, string filePath)
     {
@@ -70,17 +66,21 @@ public class ItemConfig
     }
     public static void Serialize(ItemConfig item, Stream itemInfoStream)
     {
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Converters = { 
-                new Vec3Converter(),
-                new JsonStringEnumConverter(),
-                new ColorJsonConverter(),
-            }
-        };
-        JsonSerializer.Serialize(itemInfoStream, item, options);
+        JsonSerializer.Serialize(itemInfoStream, item, serializerOptions);
     }
+
+    static JsonSerializerOptions serializerOptions = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        Converters = {
+            new Vec3Converter(),
+            new JsonStringEnumConverter(),
+            new ColorJsonConverter(),
+            new PlacementParameterConverter(),
+            new PatchLayoutConverter(),
+            new NPlugItemPlacement_SClassConverter()
+        }
+    };
 }
 
 
@@ -93,39 +93,13 @@ public class Waypoint
     public int? TorqueDuration { get; set; } = 0;
 }
 
-public class PivotPosition
-{
-    public Vec3 Pos { get; set; } = new Vec3(0, 0, 0);
-}
-public class PivotRotation
-{
-    public Quat Rot { get; set; } = Quat.Identity;
-}
+
 public class LodParameters
 {
     /// <summary>
     /// Mismatch between distance value and actual ingame distance (value = 100 => 200 units ingame)
     /// </summary>
     public List<float> MaxLodDistances { get; set; } = [];
-}
-public class PlacementParameters
-{
-    public float GridHorizontalStep { get; set; }
-    public float GridHorizontalOffset { get; set; }
-    public float GridVerticalStep { get; set; }
-    public float GridVerticalOffset { get; set; }
-
-    public float LevitationVerticalStep { get; set; }
-    public float LevitationVerticalOffset { get; set; }
-
-    public bool GhostMode { get; set; }
-
-    public bool OneAxisRotation { get; set; }
-    public bool ManualPivotSwitch { get; set; }
-    public bool NotOnItem { get; set; }
-    public bool AutoRotation { get; set; }
-    public float PivotSnapDistance { get; set; } = -1;
-
 }
 
 
@@ -197,3 +171,234 @@ public sealed class ColorJsonConverter : JsonConverter<System.Drawing.Color>
         writer.WriteStringValue(value.ToRGBHex());
     }
 }
+
+public sealed class PlacementParameterConverter : JsonConverter<CGameItemPlacementParam>
+{
+    public override CGameItemPlacementParam? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        using JsonDocument document = JsonDocument.ParseValue(ref reader);
+        JsonElement root = document.RootElement;
+
+        var value = new CGameItemPlacementParam
+        {
+            YawOnly = root.TryGetProperty("YawOnly", out var yawOnly)
+                && yawOnly.GetBoolean(),
+
+            NotOnObject = root.TryGetProperty("NotOnObject", out var notOnObject)
+                && notOnObject.GetBoolean(),
+
+            AutoRotation = root.TryGetProperty("AutoRotation", out var autoRotation)
+                && autoRotation.GetBoolean(),
+
+            SwitchPivotManually = root.TryGetProperty("SwitchPivotManually", out var switchPivotManually)
+                && switchPivotManually.GetBoolean(),
+
+            CubeSize = root.GetProperty("CubeSize").GetSingle(),
+            GridSnapHStep = root.GetProperty("GridSnapHStep").GetSingle(),
+            GridSnapVStep = root.GetProperty("GridSnapVStep").GetSingle(),
+            GridSnapHOffset = root.GetProperty("GridSnapHOffset").GetSingle(),
+            GridSnapVOffset = root.GetProperty("GridSnapVOffset").GetSingle(),
+            FlyVStep = root.GetProperty("FlyVStep").GetSingle(),
+            FlyVOffset = root.GetProperty("FlyVOffset").GetSingle(),
+            PivotSnapDistance = root.GetProperty("PivotSnapDistance").GetSingle()
+        };
+
+        if (root.TryGetProperty("CubeCenter", out var cubeCenter))
+        {
+            value.CubeCenter =
+                cubeCenter.Deserialize<Vec3>(options);
+        }
+
+        if (root.TryGetProperty("PivotPositions", out var pivotPositions))
+        {
+            value.PivotPositions =
+                pivotPositions.Deserialize<Vec3[]>(options);
+        }
+
+        if (root.TryGetProperty("PivotRotations", out var pivotRotations))
+        {
+            value.PivotRotations =
+                pivotRotations.Deserialize<Quat[]>(options);
+        }
+
+        if (root.TryGetProperty("PlacementClass", out var placementClass))
+        {
+            value.PlacementClass =
+                placementClass.Deserialize<NPlugItemPlacement_SClass>(options);
+        }
+
+        return value;
+    }
+
+    public override void Write(Utf8JsonWriter writer, CGameItemPlacementParam value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        writer.WriteBoolean("YawOnly", value.YawOnly);
+        writer.WriteBoolean("NotOnObject", value.NotOnObject);
+        writer.WriteBoolean("AutoRotation", value.AutoRotation);
+        writer.WriteBoolean("SwitchPivotManually", value.SwitchPivotManually);
+
+        writer.WritePropertyName("CubeCenter");
+        JsonSerializer.Serialize(writer, value.CubeCenter, options);
+
+        writer.WriteNumber("CubeSize", value.CubeSize);
+        writer.WriteNumber("GridSnapHStep", value.GridSnapHStep);
+        writer.WriteNumber("GridSnapVStep", value.GridSnapVStep);
+        writer.WriteNumber("GridSnapHOffset", value.GridSnapHOffset);
+        writer.WriteNumber("GridSnapVOffset", value.GridSnapVOffset);
+        writer.WriteNumber("FlyVStep", value.FlyVStep);
+        writer.WriteNumber("FlyVOffset", value.FlyVOffset);
+        writer.WriteNumber("PivotSnapDistance", value.PivotSnapDistance);
+
+        writer.WritePropertyName("PivotPositions");
+        JsonSerializer.Serialize(writer, value.PivotPositions, options);
+
+        writer.WritePropertyName("PivotRotations");
+        JsonSerializer.Serialize(writer, value.PivotRotations, options);
+
+        writer.WritePropertyName("PlacementClass");
+        JsonSerializer.Serialize(writer, value.PlacementClass, options);
+
+        writer.WriteEndObject();
+    }
+}
+public sealed class PatchLayoutConverter : JsonConverter<NPlugItemPlacement_SClass.PatchLayout>
+{
+    public override void Write(
+        Utf8JsonWriter writer,
+        NPlugItemPlacement_SClass.PatchLayout value,
+        JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        writer.WriteNumber("ItemCount", value.ItemCount);
+        writer.WriteNumber("ItemSpacing", value.ItemSpacing);
+        writer.WriteNumber("FillAlign", value.FillAlign);
+        writer.WriteNumber("FillDir", value.FillDir);
+        writer.WriteNumber("NormedPos", value.NormedPos);
+        writer.WriteNumber("U01", value.U01);
+
+        writer.WritePropertyName("OnlyOnGroups");
+        JsonSerializer.Serialize(writer, value.OnlyOnGroups, options);
+
+        writer.WriteNumber("Altitude", value.Altitude);
+        writer.WriteNumber("U02", value.U02);
+
+        writer.WriteEndObject();
+    }
+
+    public override NPlugItemPlacement_SClass.PatchLayout Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        using JsonDocument document = JsonDocument.ParseValue(ref reader);
+        JsonElement root = document.RootElement;
+
+        var value = new NPlugItemPlacement_SClass.PatchLayout
+        {
+            ItemCount = root.GetProperty("ItemCount").GetInt32(),
+            ItemSpacing = root.GetProperty("ItemSpacing").GetSingle(),
+            FillAlign = root.GetProperty("FillAlign").GetInt32(),
+            FillDir = root.GetProperty("FillDir").GetInt32(),
+            NormedPos = root.GetProperty("NormedPos").GetSingle(),
+            U01 = root.GetProperty("U01").GetSingle(),
+            Altitude = root.GetProperty("Altitude").GetSingle(),
+            U02 = root.GetProperty("U02").GetSingle()
+        };
+
+        if (root.TryGetProperty("OnlyOnGroups", out var onlyOnGroups))
+        {
+            value.OnlyOnGroups =
+                onlyOnGroups.Deserialize<string[]>(options);
+        }
+
+        return value;
+    }
+}
+public sealed class NPlugItemPlacement_SClassConverter
+    : JsonConverter<NPlugItemPlacement_SClass>
+{
+    public override void Write(
+        Utf8JsonWriter writer,
+        NPlugItemPlacement_SClass value,
+        JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        writer.WritePropertyName("SizeGroup");
+        writer.WriteStringValue(value.SizeGroup);
+
+        writer.WritePropertyName("CompatibleGroupsIds");
+        JsonSerializer.Serialize(writer, value.CompatibleGroupsIds, options);
+
+        writer.WriteBoolean("AlwaysUp", value.AlwaysUp);
+        writer.WriteBoolean("AlignToInterior", value.AlignToInterior);
+        writer.WriteBoolean("AlignToWorldDir", value.AlignToWorldDir);
+
+        writer.WritePropertyName("WorldDir");
+        JsonSerializer.Serialize(writer, value.WorldDir, options);
+
+        writer.WritePropertyName("PatchLayouts");
+        JsonSerializer.Serialize(writer, value.PatchLayouts, options);
+
+        writer.WritePropertyName("GroupCurPatchLayouts");
+        JsonSerializer.Serialize(writer, value.GroupCurPatchLayouts, options);
+
+        writer.WriteEndObject();
+    }
+
+    public override NPlugItemPlacement_SClass Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        using JsonDocument document = JsonDocument.ParseValue(ref reader);
+        JsonElement root = document.RootElement;
+
+        var value = new NPlugItemPlacement_SClass
+        {
+            SizeGroup =
+                root.TryGetProperty("SizeGroup", out var sizeGroup)
+                    ? sizeGroup.GetString()
+                    : null,
+
+            CompatibleGroupsIds =
+                root.TryGetProperty("CompatibleGroupsIds", out var compatibleGroupsIds)
+                    ? compatibleGroupsIds.Deserialize<string[]>(options)
+                    : null,
+
+            AlwaysUp =
+                root.TryGetProperty("AlwaysUp", out var alwaysUp)
+                    && alwaysUp.GetBoolean(),
+
+            AlignToInterior =
+                root.TryGetProperty("AlignToInterior", out var alignToInterior)
+                    && alignToInterior.GetBoolean(),
+
+            AlignToWorldDir =
+                root.TryGetProperty("AlignToWorldDir", out var alignToWorldDir)
+                    && alignToWorldDir.GetBoolean(),
+
+            WorldDir =
+                root.TryGetProperty("WorldDir", out var worldDir)
+                    ? worldDir.Deserialize<Vec3>(options)
+                    : default,
+
+            PatchLayouts =
+                root.TryGetProperty("PatchLayouts", out var patchLayouts)
+                    ? patchLayouts.Deserialize<
+                        NPlugItemPlacement_SClass.PatchLayout[]>(options)
+                    : null,
+
+            GroupCurPatchLayouts =
+                root.TryGetProperty("GroupCurPatchLayouts", out var groupCurPatchLayouts)
+                    ? groupCurPatchLayouts.Deserialize<int[]>(options)
+                    : null
+        };
+
+        return value;
+    }
+}
+

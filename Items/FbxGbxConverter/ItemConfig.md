@@ -88,6 +88,40 @@ Controls how the item can be placed and manipulated.
 
 ---
 
+## `PlacementClass`
+Defines placement attached to items such as on track borders.
+
+| Field                  | Type             | Default   | Description                                                     |
+| ---------------------- | ---------------- | --------- | --------------------------------------------------------------- |
+| `SizeGroup`            | `string?`        | `null`    | ?        |
+| `CompatibleGroupsIds`  | `string[]?`      | `null`    | Defines in which items this item can be placed on.   |
+| `AlwaysUp`             | `bool`           | `false`   | Keeps the item oriented upright no matter the surface normal.                                |
+| `AlignToInterior`      | `bool`           | `false`   | Makes the item face inwards. |
+| `AlignToWorldDir`      | `bool`           | `false`   | Aligns the item according to the configured world direction.    |
+| `WorldDir`             | `Vec3`           | `0, 0, 0` | World-space direction used when `AlignToWorldDir` is enabled.   |
+| `PatchLayouts`         | `PatchLayout[]?` | `null`    | Configured placement config used for placement on specific groups.                    |
+| `GroupCurPatchLayouts` | `int[]?`         | `null`    | Current patch layout index for each compatible group.           |
+
+
+---
+
+## `PatchLayout`
+
+| Field          | Type        | Default | Description                                            |
+| -------------- | ----------- | ------- | ------------------------------------------------------ |
+| `ItemCount`    | `int`       | `0`     | Number of items placed in the patch. (0 for as many as spacing allows)                   |
+| `ItemSpacing`  | `float`     | `0`     | Spacing between items in the patch.                    |
+| `FillAlign`    | `int`       | `0`     | 0 |
+| `FillDir`      | `int`       | `1`     | 1  |
+| `NormedPos`    | `float`     | `0`     | Normalized position within the patch. (Position along the width of the border/patch)                  |
+| `OnlyOnGroups` | `string[]?` | `null`  | Restricts the layout to the specified groups.          |
+| `Altitude`     | `float`     | `0`     | Vertical offset of the layout.                |
+
+`ItemPlacementUtils` can give some helpers to create patch groups.
+
+---
+
+
 ## `MaterialConfig`
 
 Defines how a material in the FBX is converted. **Required for every material used!**
