@@ -23,6 +23,7 @@ public class MeshExtractor
     public ToolResult<NormalizedItem> ExtractMesh(CGameItemModel item)
     {
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
+        List<VariantGroup> variantGroups = [];
         if (ItemExtensions.TryGetCrystal(item, out var crystal))
         {
             var extractionResult = ExtractFromCrystal(crystal);
@@ -48,6 +49,14 @@ public class MeshExtractor
             if (commonEntityModelExtractionResult.IsFailure)
                 return ToolResult.Fail(commonEntityModelExtractionResult);
             groupResults.AddRange(commonEntityModelExtractionResult.Value);
+        }
+        else if(ItemExtensions.TryGetVariantList(item, out var variantList))
+        {
+            var variantResult = ExtractFromVariantList(variantList);
+            if (variantResult.IsFailure)
+                return ToolResult.Fail(variantResult);
+            groupResults.AddRange(variantResult.Value.Item1);
+            variantGroups.AddRange(variantResult.Value.Item2);
         }
         else
         {
@@ -80,6 +89,7 @@ public class MeshExtractor
         normalizedItem.Meshes = allMeshes.ToArray();
         normalizedItem.Groups = allGroups.ToArray();
         normalizedItem.Lights = allLights.ToArray();
+        normalizedItem.VariantGroups = variantGroups.ToArray();
 
         ExtractItemMetaData(item, normalizedItem);
 
@@ -477,6 +487,51 @@ public class MeshExtractor
         return ToolResult.Success(results.ToArray(), nameof(MeshExtractor));
     }
 
+    public ToolResult<((NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[], VariantGroup[])> ExtractFromVariantList(NPlugItem_SVariantList variantList)
+    {
+        List<VariantGroup> variants = [];
+        List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
+        foreach(var variant in variantList.Variants)
+        {
+            var variantGroup = new VariantGroup()
+            {
+                Tags = variant.Tags.ToDictionary(),
+                HiddenInManualCycle = variant.HiddenInManualCycle
+            };
+            variants.Add(variantGroup);
+
+            switch (variant.EntityModel)
+            {
+                case CPlugPrefab prefab:
+                    var prefabResult = ExtractFromPrefab(prefab);
+                    if (prefabResult.IsFailure)
+                        return ToolResult.Fail(prefabResult);
+                    foreach(var v in prefabResult.Value)
+                    {
+                        v.group.VariantIndex = variants.Count;
+                    }
+                    groupResults.AddRange(prefabResult.Value);
+                    break;
+                case CPlugStaticObjectModel staticObjectModel:
+                    var staticResult = ExtractMeshesFromStaticObjectModel(staticObjectModel);
+                    if (staticResult.IsFailure)
+                        return ToolResult.Fail(staticResult);
+                    staticResult.Value.group.VariantIndex = variants.Count;
+                    groupResults.AddRange(staticResult.Value);
+                    break;
+                case CPlugDynaObjectModel dynaObjectModel:
+                    var dynaResult = ExtractFromDynaObjectModel(dynaObjectModel);
+                    if (dynaResult.IsFailure)
+                        return ToolResult.Fail(dynaResult);
+                    dynaResult.Value.group.VariantIndex = variants.Count;
+                    groupResults.AddRange(dynaResult.Value);
+                    break;
+                default:
+                    return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedMesh, variant.EntityModel);
+            }
+        }
+        return ToolResult.Success((groupResults.ToArray(), variants.ToArray()), nameof(MeshExtractor));
+    }
 
     public ToolResult<NormalizedMesh> ExtractFromVisual(CPlugVisualIndexedTriangles visual, CPlugMaterialUserInst material)
     {

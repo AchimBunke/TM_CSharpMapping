@@ -135,6 +135,13 @@ public static class GbxTemplateLibrary
     static CGameItemModel triggerItemModelTemplate = null!;
     public static GbxTemplate<CGameItemModel> CreateTriggerItemTemplate()
         => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(triggerItemModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("TriggerItemTemplate.Item.Gbx"))));
+
+
+    // Variants
+
+    static CGameItemModel variantsItemModel = null!;
+    public static GbxTemplate<CGameItemModel> CreateVariantsItemTemplate()
+        => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(variantsItemModel ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("VariantsEntityModel.Item.Gbx"))));
 }
 
 

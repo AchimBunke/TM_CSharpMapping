@@ -93,6 +93,14 @@ public class MeshGroup
     public EWaypointType? WaypointType { get; set; }
     public bool? WaypointNoRespawn { get; set; }
     public CPlugSpawnModel? WaypointSpawnModel { get; set; }
+
+    public int? VariantIndex { get; set; }
+}
+public class VariantGroup
+{
+    public Dictionary<string, string> Tags { get; set; } = [];
+    public bool HiddenInManualCycle { get; set; }
+
 }
 
 public class NormalizedItem
@@ -101,6 +109,7 @@ public class NormalizedItem
     public NormalizedMesh[] Meshes { get; set; } = [];
     public NormalizedLight[] Lights { get; set; } = [];
     public MeshGroup[] Groups { get; set; } = [];
+    public VariantGroup[] VariantGroups { get; set; } = [];
 
     public object? SourceData { get; set; } // Data where this data comes from
     public CGameItemPlacementParam? PlacementParam { get; set; }

@@ -225,6 +225,16 @@ public static class ItemExtensions
         }
         return prefab != null;
     }
+
+    public static bool TryGetVariantList(this CGameItemModel item, out NPlugItem_SVariantList variantList)
+    {
+        variantList = null;
+        if (item.EntityModel is NPlugItem_SVariantList list)
+        {
+            variantList = list;
+        }
+        return variantList != null;
+    }
     static void ShallowCloneAllFields(object source, object target)
     {
         var currentType = source.GetType();

@@ -1,6 +1,7 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
+using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
 using System.Dynamic;
@@ -30,7 +31,8 @@ public class MeshBuilder
     public enum ItemModel
     {
         MeshModeler,
-        General
+        General,
+        VariantList,
     }
 
     [Flags]
@@ -66,6 +68,7 @@ public class MeshBuilder
         public GroupSetting() { }
         public GroupType Type { get; set; }
         public int GroupId { get; set; }
+        public int? VariantId { get; set; }
         public float[] LODDistances { get; set; } = [];
         public Vector3 Position { get; set; } = Vector3.Zero;
         public Quaternion Rotation { get; set; } = Quaternion.Identity;
@@ -77,6 +80,12 @@ public class MeshBuilder
         public CPlugSpawnModel? WaypointSpawnModel { get; set; }
     }
 
+    public struct VariantSetting()
+    {
+        public Dictionary<string, string> Tags { get; set; } = [];
+        public bool HiddenInManualCycle { get; set; }
+    }
+
 
     public struct BuildSettings
     {
@@ -85,9 +94,10 @@ public class MeshBuilder
 
         }
 
-        public IReadOnlyList<LightInstanceSetting> LightSettings = [];
-        public IReadOnlyList<MeshInstanceSetting> MeshSettings = [];
-        public IReadOnlyList<GroupSetting> GroupSettings = [];
+        public List<LightInstanceSetting> LightSettings = [];
+        public List<MeshInstanceSetting> MeshSettings = [];
+        public List<GroupSetting> GroupSettings = [];
+        public List<VariantSetting> VariantSettings = [];
 
         public ItemModel TargetModel = ItemModel.General;
         public MeshBuilderOptimization Optimization = MeshBuilderOptimization.PreferMeshCollision;
@@ -99,6 +109,13 @@ public class MeshBuilder
             List<LightInstanceSetting> lightSettings = [];
             List<MeshInstanceSetting> meshSettings = [];
             Dictionary<int, GroupSetting> groupSettings = [];
+            List<VariantSetting> variantSettings = [];
+
+            variantSettings = item.VariantGroups.Select(vg => new VariantSetting()
+            {
+                Tags = new Dictionary<string, string>(vg.Tags),
+                HiddenInManualCycle = vg.HiddenInManualCycle
+            }).ToList();
 
             // create meshes
             for (int i = 0; i < item.Meshes.Length; ++i)
@@ -150,6 +167,7 @@ public class MeshBuilder
                         Type = groupType,
                         Position = submeshGroup.Position,
                         Rotation = submeshGroup.Rotation,
+                        VariantId = submeshGroup.VariantIndex,
                     };
                 }
 
@@ -1125,6 +1143,15 @@ public class MeshBuilder
         );
     }
 
+    static NPlugItem_SVariantList CreateVariantList()
+    {
+        var variantList = new NPlugItem_SVariantList()
+        {
+            Version = 1,
+        };
+        return variantList;
+    }
+
 
     // ─────────────────────────────────────────────
     // Prefab
@@ -1305,6 +1332,157 @@ public class MeshBuilder
         }
 
         return ToolResult.Success(prefab as CMwNod, nameof(MeshBuilder));
+    }
+
+
+    // ─────────────────────────────────────────────
+    // VariantList
+    // ─────────────────────────────────────────────
+
+
+    public ToolResult<NPlugItem_SVariantList> BuildVariantList(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    {
+
+        List<NPlugItem_SVariant> variants = [];
+        for (int vi = 0; vi < buildSettings.VariantSettings.Count; ++vi)
+        {
+            var variantGroup = buildSettings.VariantSettings[vi];
+            var variant = new NPlugItem_SVariant()
+            {
+                Tags = variantGroup.Tags.ToDictionary(),
+                HiddenInManualCycle = variantGroup.HiddenInManualCycle,
+            };
+
+            List<EntRef> ents = [];
+
+            var staticGroups = buildSettings.GroupSettings
+                .Where(gs=>gs.VariantId == vi)
+                .Where(gs => gs.Type == GroupType.StaticObject).ToArray();
+
+            for (int i = 0; i < staticGroups.Length; ++i)
+            {
+                var groupSetting = staticGroups[i];
+
+                var staticObjectResult = BuildStaticObjectModel(normalizedItem, groupSetting, buildSettings, forceStaticShape: true);
+                if (staticObjectResult.IsFailure)
+                    return ToolResult.Fail(staticObjectResult);
+
+                var ent = CreateEntRef();
+                ent.Model = staticObjectResult.Value;
+                ent.Position = groupSetting.Position;
+                ent.Rotation = groupSetting.Rotation;
+                ents.Add(ent);
+
+            }
+
+            var dynamicGroups = buildSettings.GroupSettings
+                .Where(gs => gs.VariantId == vi)
+                .Where(gs => gs.Type == GroupType.DynaObject).ToArray();
+
+            for (int i = 0; i < dynamicGroups.Length; ++i)
+            {
+                var groupSetting = dynamicGroups[i];
+
+                var dynamicObjectResult = BuildDynaObjectModelEntRef(normalizedItem, groupSetting, buildSettings);
+                if (dynamicObjectResult.IsFailure)
+                    return ToolResult.Fail(dynamicObjectResult);
+
+                var kinematicConstraintResult = BuildKinematicConstraint(normalizedItem, groupSetting, buildSettings);
+                if (kinematicConstraintResult.IsFailure)
+                    return ToolResult.Fail(kinematicConstraintResult);
+
+
+                var dynaEnt = dynamicObjectResult.Value;
+                var kinematicConstraintEnt = CreateEntRef();
+                kinematicConstraintEnt.Model = kinematicConstraintResult.Value;
+                kinematicConstraintEnt.Params = new NPlugDyna_SPrefabConstraintParams()
+                {
+                    Ent1 = -1,
+                    Ent2 = 0,
+                    Pos1 = Vec3.Zero,
+                    Pos2 = Vec3.Zero,
+                };
+                var dynaPrefab = CreateCPlugPrefab();
+                dynaPrefab.Ents = [dynaEnt, kinematicConstraintEnt];
+                var ent = CreateEntRef();
+                ent.Model = dynaPrefab;
+                ent.Position = groupSetting.Position;
+                ent.Rotation = groupSetting.Rotation;
+                ents.Add(ent);
+            }
+
+
+            var triggerSpecialGroups = buildSettings.GroupSettings
+                .Where(gs => gs.VariantId == vi)
+                .Where(gs => gs.Type == GroupType.Trigger_Special).ToArray();
+
+            for (int i = 0; i < triggerSpecialGroups.Length; ++i)
+            {
+                var groupSetting = triggerSpecialGroups[i];
+
+                var triggerResult = BuildTriggerSpecial(normalizedItem, groupSetting.TriggerGameplayId.HasValue ? groupSetting.TriggerGameplayId.Value : LegacyGameplayId.None, groupSetting, buildSettings);
+                if (triggerResult.IsFailure)
+                    return ToolResult.Fail(triggerResult);
+
+                var ent = CreateEntRef();
+                ent.Model = triggerResult.Value;
+                ent.Position = groupSetting.Position;
+                ent.Rotation = groupSetting.Rotation;
+                ents.Add(ent);
+
+            }
+
+            var triggerWaypointGroups = buildSettings.GroupSettings
+                .Where(gs => gs.VariantId == vi)
+                .Where(gs => gs.Type == GroupType.Trigger_Waypoint).ToArray();
+
+            for (int i = 0; i < triggerWaypointGroups.Length; ++i)
+            {
+                var groupSetting = triggerWaypointGroups[i];
+
+                var triggerResult = BuildTriggerWaypoint(normalizedItem, groupSetting, buildSettings);
+                if (triggerResult.IsFailure)
+                    return ToolResult.Fail(triggerResult);
+
+                var ent = CreateEntRef();
+                ent.Model = triggerResult.Value;
+                ent.Position = groupSetting.Position;
+                ent.Rotation = groupSetting.Rotation;
+                ents.Add(ent);
+
+                if (groupSetting.WaypointType != EGameItemWaypointType.Finish)
+                {
+                    var spawnModelResult = BuildSpawnModel(normalizedItem, groupSetting, buildSettings);
+                    if (spawnModelResult.IsFailure)
+                        return ToolResult.Fail(spawnModelResult);
+                    spawnModelResult.Value.DefaultGravitySpawn = new Vec3(0, 0, 50);
+                    spawnModelResult.Value.TorqueDuration = TimeInt32.FromMilliseconds(500);
+                    spawnModelResult.Value.TorqueX = 0.5f;
+                    var spawnEnt = CreateEntRef();
+                    spawnEnt.Model = spawnModelResult.Value;
+                    var pos = spawnModelResult.Value.Loc.GetPosition();
+                    var rot = spawnModelResult.Value.Loc.GetPitchYawRoll(inDegrees: false);
+                    spawnEnt.Position = pos.ToVector3();
+                    spawnEnt.Rotation = Quaternion.CreateFromYawPitchRoll(rot.Y, rot.X, rot.Z);
+                    ents.Add(spawnEnt);
+                }
+
+
+            }
+
+            var prefab = CreateCPlugPrefab();
+            prefab.FileWriteTime = DateTime.Now;
+            prefab.Ents = ents.ToArray();
+
+            variant.EntityModel = prefab;
+            variants.Add(variant);
+        }
+
+        var variantList = CreateVariantList();
+        variantList.Variants = variants.ToArray();
+
+        return ToolResult.Success(variantList, nameof(MeshBuilder));
+
     }
 
     // ─────────────────────────────────────────────
@@ -1535,9 +1713,9 @@ public class MeshBuilder
         return ToolResult.Success(item, nameof(MeshBuilder));
     }
 
-     public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, EWaypointType overwriteWaypointType, BuildSettings buildSettings)
+    public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, EWaypointType overwriteWaypointType, BuildSettings buildSettings)
     {
-        var result = BuildItem(normalizedItem, buildSettings);
+        var result = BuildGeneralItem(normalizedItem, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
         result.Value.WaypointType = overwriteWaypointType;
@@ -1545,12 +1723,29 @@ public class MeshBuilder
     }
     public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, LegacyGameplayId overwriteGameplayid, BuildSettings buildSettings)
     {
-        var result = BuildItem(normalizedItem, buildSettings);
+        var result = BuildGeneralItem(normalizedItem, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
         if(!ItemTriggerEffectConverter.TryConvertEffect(overwriteGameplayid, result.Value))
             return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingTrigger);
         return result;
+    }
+
+    public ToolResult<CGameItemModel> BuildVariantItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    {
+        var item = GbxTemplateLibrary.CreateVariantsItemTemplate().Value;
+
+        var variantListResult = BuildVariantList(normalizedItem, buildSettings);
+        if (variantListResult.IsFailure)
+            return ToolResult.Fail(variantListResult);
+
+        item.EntityModel = variantListResult.Value;
+
+        SetItemWaypointIfWaypointSetting(item, buildSettings);
+
+        FillItemDataFromMesh(item, normalizedItem);
+        FixItemChunks(item, normalizedItem);
+        return ToolResult.Success(item, nameof(MeshBuilder));
     }
 
     public ToolResult<CGameItemModel> BuildItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
@@ -1561,6 +1756,8 @@ public class MeshBuilder
                 return BuildGeneralItem(normalizedItem, buildSettings);
             case ItemModel.MeshModeler:
                 return BuildCrystalItem(normalizedItem, buildSettings);
+            case ItemModel.VariantList:
+                return BuildVariantItem(normalizedItem, buildSettings);
             default:
                 return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.UnsupportedType);
         }
