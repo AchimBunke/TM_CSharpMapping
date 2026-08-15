@@ -1,11 +1,14 @@
 ﻿#define FbxGbxDebugLod
 using Assimp;
+using EarcutDotNet;
 using GBX.NET;
 using GBX.NET.Engines.Plug;
 using GBX.NET.Engines.Scene;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Xml.Linq;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
+using TM_GenericMapping.Items.FbxGbxConverter;
 using TM_GenericMapping.Messaging;
 using TmEssentials;
 using static GBX.NET.Engines.Plug.CPlugSurface;
@@ -63,7 +66,8 @@ internal class FbxMeshConverter
 
         normalizedMesh.Positions = TransformVectors(mesh.Vertices, globalTransform, scaleMatrix, false).ToArray();
 
-        var indices = mesh.GetIndices();
+        var indices = GetTriangleIndices(mesh).ToArray();
+        //var indices = mesh.GetIndices();
         if (isMirrored)
             indices = FlipWinding(indices);
         normalizedMesh.Indices = indices;
@@ -123,6 +127,82 @@ internal class FbxMeshConverter
 
         return normalizedMesh;
     }
+
+    /// <summary>
+    /// Rebuilds a full triangle index list for an Assimp Mesh, using our own
+    /// per-face earcut triangulation instead of Assimp's built-in Triangulate postprocess step.
+    /// Assumes the mesh was imported WITHOUT PostProcessSteps.Triangulate,
+    /// so mesh.Faces may still contain n-gons (Face.IndexCount > 3).
+    /// </summary>
+    public static List<int> GetTriangleIndices(Assimp.Mesh mesh)
+    {
+        var globalIndices = new List<int>(mesh.FaceCount * 3); // rough capacity guess
+        foreach (Face face in mesh.Faces)
+        {
+            if (face.IndexCount < 3)
+                continue; // degenerate line/point face, skip
+
+            if (face.IndexCount == 3)
+            {
+                // Already a triangle — no need to run it through earcut
+                globalIndices.Add(face.Indices[0]);
+                globalIndices.Add(face.Indices[1]);
+                globalIndices.Add(face.Indices[2]);
+                continue;
+            }
+
+            if (face.IndexCount == 4)
+            {
+                int i0 = face.Indices[0], i1 = face.Indices[1], i2 = face.Indices[2], i3 = face.Indices[3];
+
+                Vector3D n0 = mesh.Normals[i0];
+                Vector3D n1 = mesh.Normals[i1];
+                Vector3D n2 = mesh.Normals[i2];
+                Vector3D n3 = mesh.Normals[i3];
+                n0.Normalize();
+                n1.Normalize();
+                n2.Normalize();
+                n3.Normalize();
+
+                // Dot product of the two corners each diagonal would connect.
+                // Higher dot = more similar normals = smoother interpolation along that seam.
+                float dot02 = Vector3D.Dot(n0, n2);
+                float dot13 = Vector3D.Dot(n1, n3);
+
+                // Pick the diagonal whose two endpoints have the MOST similar normals —
+                // that's the seam that will interpolate most smoothly, minimizing visible discontinuity.
+                if (dot02 >= dot13)
+                {
+                    globalIndices.Add(i0); globalIndices.Add(i1); globalIndices.Add(i2);
+                    globalIndices.Add(i0); globalIndices.Add(i2); globalIndices.Add(i3);
+                }
+                else
+                {
+                    globalIndices.Add(i0); globalIndices.Add(i1); globalIndices.Add(i3);
+                    globalIndices.Add(i1); globalIndices.Add(i2); globalIndices.Add(i3);
+                }
+                continue;
+            }
+
+            // Gather this face's vertex positions in polygon order
+            var faceVerts = new Vector3[face.IndexCount];
+            for (int i = 0; i < face.IndexCount; i++)
+            {
+                int idx = face.Indices[i];
+                Vector3D v = mesh.Vertices[idx];
+                faceVerts[i] = new Vector3(v.X, v.Y, v.Z);
+            }
+
+            var localTris = FaceTriangulator.Triangulate(faceVerts.AsSpan());
+
+            // Map local (0..N-1) indices back to this face's actual mesh-vertex indices
+            foreach (int localIdx in localTris)
+                globalIndices.Add(face.Indices[localIdx]);
+        }
+        return globalIndices;
+    }
+
+
     public static CPlugSpawnModel ConvertSocket(Assimp.Node node, Assimp.Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale, FbxGbxConversionInput config)
     {
         var spawnModel = MeshBuilder.CreateSpawnModel();

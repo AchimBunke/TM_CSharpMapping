@@ -18,11 +18,11 @@ internal static class FbxSceneReader
 
             // maybe flipUV
             var scene = context.ImportFileFromStream(fbxStream,
-                PostProcessSteps.Triangulate |
-                PostProcessSteps.JoinIdenticalVertices |
-                PostProcessSteps.CalculateTangentSpace 
+                //PostProcessSteps.Triangulate |
+                //PostProcessSteps.JoinIdenticalVertices |
+                PostProcessSteps.CalculateTangentSpace
                 //PostProcessSteps.GenerateNormals
-                
+
                 //PostProcessSteps.FlipWindingOrder
                 //PostProcessSteps.ValidateDataStructure
                 );
