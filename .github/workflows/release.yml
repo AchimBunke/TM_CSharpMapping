@@ -14,7 +14,7 @@ on:
  
 env:
   DOTNET_VERSION: "10.0.x"
-  PROJECT_PATH: "MyLibrary/MyLibrary.csproj" # <-- your single .csproj
+  PROJECT_PATH: "TM_GenericMapping.csproj" # <-- your single .csproj
  
 jobs:
   build-and-version:
