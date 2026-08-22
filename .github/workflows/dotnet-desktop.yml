@@ -1,0 +1,119 @@
+name: Build, Version, and Release
+ 
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+      - develop
+ 
+env:
+  DOTNET_VERSION: "10.0.x"
+  PROJECT_PATH: "MyLibrary/MyLibrary.csproj" # <-- your single .csproj
+ 
+jobs:
+  build-and-version:
+    runs-on: ubuntu-latest
+    outputs:
+      nugetVersion: ${{ steps.gitversion.outputs.NuGetVersionV2 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # GitVersion needs full history
+ 
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v3
+        with:
+          versionSpec: "6.x"
+ 
+      - name: Run GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v3
+ 
+      - name: Show resolved version
+        run: echo "Version: ${{ steps.gitversion.outputs.NuGetVersionV2 }}"
+ 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+ 
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+ 
+      - name: Build
+        run: >
+          dotnet build ${{ env.PROJECT_PATH }}
+          --configuration Release --no-restore
+          -p:Version=${{ steps.gitversion.outputs.NuGetVersionV2 }}
+ 
+      - name: Sanity check - still on 0.x
+        run: |
+          VERSION="${{ steps.gitversion.outputs.NuGetVersionV2 }}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          if [ "$MAJOR" != "0" ]; then
+            echo "::warning::Version resolved to $VERSION - this leaves 0.x. Make sure that's intentional (i.e. you're ready to commit to API stability)."
+          fi
+ 
+      - name: Pack
+        run: |
+          mkdir -p ./artifacts
+          dotnet pack ${{ env.PROJECT_PATH }} \
+            --configuration Release \
+            --no-build \
+            -p:PackageVersion=${{ steps.gitversion.outputs.NuGetVersionV2 }} \
+            --output ./artifacts
+ 
+      - name: Upload package as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: ./artifacts/*.nupkg
+ 
+  publish-nuget:
+    needs: build-and-version
+    runs-on: ubuntu-latest
+    # Only publish on an actual version tag push (v1.2.3), not every commit
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write   # needed for the GitHub Release step below
+      id-token: write   # required for NuGet Trusted Publishing (OIDC token issuance)
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: ./artifacts
+ 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+ 
+      # Trusted Publishing: exchanges a short-lived GitHub OIDC token for a
+      # temporary NuGet API key (valid ~1 hour). No long-lived secret needed,
+      # but nuget.org still needs your username to look up the right policy.
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+ 
+      - name: Push to NuGet.org
+        run: |
+          dotnet nuget push ./artifacts/*.nupkg \
+            --api-key ${{ steps.login.outputs.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+ 
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: ./artifacts/*.nupkg
