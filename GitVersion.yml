@@ -1,0 +1,16 @@
+mode: ContinuousDelivery
+branches:
+  main:
+    regex: ^main$
+    tag: "" # main produces clean versions like 0.1.0, no suffix
+    increment: Minor
+  develop:
+    regex: ^develop$
+    tag: alpha # develop produces 2.1.0-alpha.5
+    increment: Minor
+  feature:
+    regex: ^feature/
+    tag: useBranchName # feature/blender-tool -> 2.1.0-feature-blender-tool.1
+    increment: Inherit
+ignore:
+  sha: []
