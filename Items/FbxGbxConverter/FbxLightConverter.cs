@@ -94,13 +94,17 @@ internal class FbxLightConverter
         return lightConfig is not null;
     }
 
-    public static void GroupLights(List<LightDef> lights, List<MeshGroup> meshGroups)
+    public static ToolResult<None> GroupLights(List<LightDef> lights, List<MeshGroup> meshGroups)
     {
-        // TODO: Implement grouping logic based on meshGroups and l
-        foreach(var l in lights)
+        var firstStaticGroup = meshGroups.FirstOrDefault(g => g.GroupType == GroupType.StaticObject);
+        if(firstStaticGroup is null)
+            return ToolResult.Fail(nameof(FbxLightConverter), ErrorCodes.FbxGbxConverter.MissingStaticMeshGroup);
+        int lightGroupIndex = meshGroups.IndexOf(firstStaticGroup);
+        foreach (var l in lights)
         {
-            l.Light.GroupIndex = 0;
+            l.Light.GroupIndex = lightGroupIndex;
         }
+        return ToolResult.Success(None.Value, nameof(FbxLightConverter));
     }
     static Quaternion FromTo(Vector3 from, Vector3 to)
     {

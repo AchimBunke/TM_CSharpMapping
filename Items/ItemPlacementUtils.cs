@@ -1,4 +1,5 @@
 ﻿using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
 
 namespace TM_GenericMapping.Items;

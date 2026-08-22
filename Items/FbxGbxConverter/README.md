@@ -99,3 +99,40 @@ FbxGbxConverter supports CPLugPrefab Gbx structures which allow a variety of fea
 - Custom Mesh grouping
 
 A cost to using CPLugPrefabs is that they alway require a Surface shape. Each mesh produces to outputs, a visible mesh and a surface for collisions. The NadeoImporter only created a collision surface if parts of the mesh were invisible or non-collidable, otherwise they could use the visual mesh data as collision source reducing item size.
+
+
+##  List of Features
+
+## Features
+
+| Feature | Status | Info |
+|---|---|---|
+| Static Items | 🟢 Implemented |
+| Checkpoints | 🟢 Implemented |
+| Gates | 🟢 Implemented |
+| Moving Items and groups | 🟢 Implemented | Also moving configuration
+| Moving Items with separate anchor point | 🟢 Implemented | how to set anchor point?
+| Moving Items with Triggers | ⚪ To investigate | Is it possible? |
+| Moving Items with relative Animations | 🟢 Implemented  | Non-collidable only |
+| LOD (any number) | 🟢 Implemented & ⚪ Investigating | Investigating to allow infinite LOD without splitting model |
+| Blocks | 🔴 Not Planned Yet | will require lots of additional research |
+| Default Placement | 🟢 Implemented | |
+| Advanced Placement | 🟢 Implemented | Attachement to Boarders, Blocks & Edges |
+| Variant Items | 🟡 Planned | How to define variant sets (each variant = 1 item)
+| Animated Textures (moving items) | 🟡 Partially Implemented | Easier way to configure animated textures? |
+| All Materials | 🟢 Implemented | Just accept MaterialLib.txt |
+| Lights | 🟢 Implemented | Currently only valid if at least 1 static model |
+| Mesh Modeler Items | 🟢 Implemented | Conversion to mesh modeler items |
+| MediaTracker Triangles | 🟡 Planned | Convert mesh to MediaTracker 3D triangles |
+| MediaTracker Triangles Animations | 🔴 Not Planned | Convert mesh to MediaTracker 3D triangles |
+| Modify Trigger GameplayMainDir | 🟢 Implemented  | |
+| Water | 🟡 Planned | |
+| Force Lightmap size | 🟢 Implemented | Evaluate if current version is useful |
+
+<!--
+| Feature 1 | 🟢 Implemented | Short description / notes |
+| Feature 2 | 🟡 Planned | What needs to be done |
+| Feature 3 | 🔴 Not Planned | Reason or additional info |
+| Feature 4 | ⚪ Investigating | Current findings / open questions |
+||🟠 On Hold — Temporarily paused / blocked by another dependency.
+-->

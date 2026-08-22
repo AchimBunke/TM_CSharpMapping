@@ -1,5 +1,6 @@
 ﻿using Assimp;
 using Assimp.Configs;
+using TM_GenericMapping.Items.FbxGbxConverter;
 using TM_GenericMapping.Messaging;
 using static GBX.NET.Engines.Game.CGameCtnCollection;
 
@@ -16,18 +17,19 @@ internal static class FbxSceneReader
             if (fbxStream.CanSeek)
                 fbxStream.Seek(0, SeekOrigin.Begin);
 
-            // maybe flipUV
+            //
             var scene = context.ImportFileFromStream(fbxStream,
                 //PostProcessSteps.Triangulate |
-                //PostProcessSteps.JoinIdenticalVertices |
+                //PostProcessSteps.JoinIdenticalVertices
                 PostProcessSteps.CalculateTangentSpace
+                //PostProcessSteps.OptimizeMeshes
                 //PostProcessSteps.GenerateNormals
 
                 //PostProcessSteps.FlipWindingOrder
                 //PostProcessSteps.ValidateDataStructure
                 );
 
-           
+
             return ToolResult.Success(scene, nameof(FbxSceneReader));
         }
         catch (Exception e)
@@ -88,7 +90,7 @@ internal static class FbxSceneReader
     public static List<(Assimp.Light Light, string NodeName, Assimp.Matrix4x4 GlobalTransform)> GetLightInstances(Scene scene, List<(Node node, string NodeName, Assimp.Matrix4x4 GlobalTransform)> nodes)
     {
         var result = new List<(Assimp.Light, string, Assimp.Matrix4x4)>();
-        if(!scene.HasLights)
+        if (!scene.HasLights)
             return result;
 
         foreach (var (node, name, transform) in nodes)

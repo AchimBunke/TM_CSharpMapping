@@ -104,12 +104,12 @@ public class MeshExtractor
         normalizedItem.Description = item.Description;
     }
 
-    public ToolResult<(NormalizedMesh[] mesh, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromPrefab(CPlugPrefab prefab, Vector3? parentPosition = null, Quaternion? parentRotation = null)
+    public ToolResult<(NormalizedMesh[] mesh, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromPrefab(CPlugPrefab prefab, Vector3? parentPosition = null, Quaternion? parentRotation = null, List<MeshGroup> dynaMeshGroups = null)
     {
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> meshGroups = [];
-        Dictionary<int, MeshGroup> EntToMeshGroup = [];
-        int entIdx = 0;
-        foreach(var ent in prefab.Ents)
+        if (dynaMeshGroups is null)
+            dynaMeshGroups = [];
+        foreach (var ent in prefab.Ents)
         {
             var position = ent.Position.ToVector3();
             var rotation = new Quaternion(ent.Rotation.X, ent.Rotation.Y, ent.Rotation.Z, ent.Rotation.W);
@@ -122,7 +122,6 @@ public class MeshExtractor
                     if(staticResult.IsFailure)
                         return ToolResult.Fail(staticResult);
                     meshGroups.Add(staticResult.Value);
-                    EntToMeshGroup[entIdx] = staticResult.Value.group;
                     break;
                 case CPlugDynaObjectModel dynaObjectModel:
                     var dynaResult = ExtractFromDynaObjectModel(dynaObjectModel);
@@ -130,16 +129,23 @@ public class MeshExtractor
                         return ToolResult.Fail(dynaResult);
                     dynaResult.Value.group.DynaObjectModelParams = ent.Params as NPlugDynaObjectModel_SInstanceParams;
                     meshGroups.Add(dynaResult.Value);
-                    EntToMeshGroup[entIdx] = dynaResult.Value.group;
+                    dynaMeshGroups.Add(dynaResult.Value.group);
                     break;
                 case NPlugTrigger_SSpecial triggerSpecial:
-                    var triggerResult = ExtractFromTriggerSpecial(triggerSpecial, out var triggerGameplayId);
+                    var triggerResult = ExtractFromTriggerSpecial(triggerSpecial, out var triggerGameplayId, out var triggerGameplayDir);
                     if (triggerResult.IsFailure)
                         return ToolResult.Fail(triggerResult);
-                    meshGroups.Add(([triggerResult.Value], [], new MeshGroup() { Position = worldPosition, Rotation = worldRotation, GroupType = GroupType.Trigger_Special, TriggerGameplayId = triggerGameplayId }));
+                    meshGroups.Add(([triggerResult.Value], [], new MeshGroup() 
+                    { 
+                        Position = worldPosition, 
+                        Rotation = worldRotation, 
+                        GroupType = GroupType.Trigger_Special, 
+                        TriggerGameplayId = triggerGameplayId, 
+                        GameplayMainDir =  triggerGameplayDir,
+                        }));
                     break;
                 case NPlugTrigger_SWaypoint triggerWaypoint:
-                    var waypointResult = ExtractFromTriggerWaypoint(triggerWaypoint, out var waypointType, out var noRespawn);
+                    var waypointResult = ExtractFromTriggerWaypoint(triggerWaypoint, out var waypointType, out var noRespawn, out var cpGameplayDir);
                     if (waypointResult.IsFailure)
                         return ToolResult.Fail(waypointResult);
                     meshGroups.Add(([waypointResult.Value], [], new MeshGroup() 
@@ -147,11 +153,12 @@ public class MeshExtractor
                         Position = worldPosition, 
                         Rotation = worldRotation, 
                         GroupType = GroupType.Trigger_Waypoint,
-                        WaypointType = (EWaypointType?)waypointType, 
+                        WaypointType = (EWaypointType?)waypointType,
+                        GameplayMainDir = cpGameplayDir,
                         WaypointNoRespawn =  noRespawn }));
                     break;
                 case CPlugPrefab nestedPrefab:
-                    var nestedResult = ExtractFromPrefab(nestedPrefab, worldPosition, worldRotation);
+                    var nestedResult = ExtractFromPrefab(nestedPrefab, worldPosition, worldRotation, dynaMeshGroups);
                     if (nestedResult.IsFailure)
                         return ToolResult.Fail(nestedResult);
                     meshGroups.AddRange(nestedResult.Value);
@@ -159,14 +166,16 @@ public class MeshExtractor
                 case NPlugDyna_SKinematicConstraint kinematicConstraint:
                     var constraintParams = ent.Params as NPlugDyna_SPrefabConstraintParams;
                     var targetEnt = constraintParams.Ent2;
-                    if(!EntToMeshGroup.TryGetValue(targetEnt, out var targetMeshGroup))
+
+                    if(targetEnt >= dynaMeshGroups.Count)
                         return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingDynaModel);
+                    var targetMeshGroup = dynaMeshGroups[targetEnt];
                     targetMeshGroup.KinematicConstraint = kinematicConstraint;
+                    targetMeshGroup.RelativeMovingParentIndex = constraintParams.Ent1 >= 0 ? constraintParams.Ent1 : (int?)null;
                     break;
                 default:
                     return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedPrefabEntity, ent);
             }
-            entIdx++;
         }
         return ToolResult.Success(meshGroups.ToArray(), nameof(MeshExtractor));
     }
@@ -182,7 +191,7 @@ public class MeshExtractor
 
         if(staticObjectModel.Shape is null)
             return meshResult;
-        var shapeResult = ExtractFromSurface(staticObjectModel.Shape);
+        var shapeResult = ExtractFromSurface(staticObjectModel.Shape, out _);
         if(shapeResult.IsFailure)
             return ToolResult.Fail(shapeResult);
         shapeResult.Value.Type = MeshType.Static_Shape;
@@ -203,7 +212,7 @@ public class MeshExtractor
         result.group.GroupType = GroupType.DynaObject;
         if (dynaObjectModel.StaticShape is not null)
         {
-            var staticShapeResult = ExtractFromSurface(dynaObjectModel.StaticShape);
+            var staticShapeResult = ExtractFromSurface(dynaObjectModel.StaticShape, out _);
             if (staticShapeResult.IsFailure)
                 return ToolResult.Fail(staticShapeResult);
             staticShapeResult.Value.Type = MeshType.Static_Shape;
@@ -212,7 +221,7 @@ public class MeshExtractor
         }
         if (dynaObjectModel.DynaShape is not null)
         {
-            var dynaShapeResult = ExtractFromSurface(dynaObjectModel.DynaShape);
+            var dynaShapeResult = ExtractFromSurface(dynaObjectModel.DynaShape, out _);
             if (dynaShapeResult.IsFailure)
                 return ToolResult.Fail(dynaShapeResult);
             dynaShapeResult.Value.Type = MeshType.Dyna_Shape;
@@ -478,12 +487,12 @@ public class MeshExtractor
         if (commonEntityModel.TriggerShape is null || commonEntityModel.TriggerShape is not CPlugSurface triggerSurf)
             return ToolResult.Success(results.ToArray(), nameof(MeshExtractor));
 
-        var shapeResult = ExtractFromSurface(triggerSurf);
+        var shapeResult = ExtractFromSurface(triggerSurf, out var gameplayDir);
         if (shapeResult.IsFailure)
             return ToolResult.Fail(shapeResult);
         shapeResult.Value.Type = isWaypoint ? MeshType.Trigger_Waypoint : MeshType.Trigger_Special;
 
-        results.Add(([shapeResult.Value], [], new MeshGroup() { GroupType = isWaypoint ? GroupType.Trigger_Waypoint : GroupType.Trigger_Special }));
+        results.Add(([shapeResult.Value], [], new MeshGroup() { GroupType = isWaypoint ? GroupType.Trigger_Waypoint : GroupType.Trigger_Special, GameplayMainDir = gameplayDir }));
         return ToolResult.Success(results.ToArray(), nameof(MeshExtractor));
     }
 
@@ -594,13 +603,14 @@ public class MeshExtractor
     }
 
 
-    public ToolResult<NormalizedMesh> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial, out LegacyGameplayId triggerGameplayId)
+    public ToolResult<NormalizedMesh> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial, out LegacyGameplayId triggerGameplayId, out Vec3 gameplayMainDir)
     {
         var triggerShape = triggerSpecial.GetTriggerShape();
         triggerGameplayId = LegacyGameplayId.None;
+        gameplayMainDir = Vec3.Zero;
         if (triggerShape == null)
             return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
-        var result = ExtractFromSurface(triggerShape);
+        var result = ExtractFromSurface(triggerShape, out gameplayMainDir);
         if(result.IsFailure)
             return ToolResult.Fail(result);
         result.Value.Type = MeshType.Trigger_Special;
@@ -608,14 +618,15 @@ public class MeshExtractor
         triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
         return result;
     }
-    public ToolResult<NormalizedMesh> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint, out EGameItemWaypointType waypointType, out bool noRespawn)
+    public ToolResult<NormalizedMesh> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint, out EGameItemWaypointType waypointType, out bool noRespawn, out Vec3 gameplayMainDir)
     {
         var triggerShape = triggerWaypoint.GetTriggerShape();
         waypointType = EGameItemWaypointType.None;
         noRespawn = false;
+        gameplayMainDir = Vec3.Zero;
         if (triggerShape == null)
             return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
-        var result = ExtractFromSurface(triggerShape);
+        var result = ExtractFromSurface(triggerShape, out gameplayMainDir);
         if (result.IsFailure)
             return ToolResult.Fail(result);
         result.Value.Type = MeshType.Trigger_Waypoint;
@@ -623,14 +634,15 @@ public class MeshExtractor
         noRespawn = triggerWaypoint.NoRespawn;
         return result;
     }
-    public ToolResult<NormalizedMesh> ExtractFromSurface(CPlugSurface surface)
+    public ToolResult<NormalizedMesh> ExtractFromSurface(CPlugSurface surface, out Vec3 gameplayMainDir)
     {
         var mesh = new NormalizedMesh();
         var surf = surface.Surf as CPlugSurface.Mesh;
+        gameplayMainDir = surf?.GameplayMainDir ?? new Vec3(0, 0, 1);
         mesh.Positions = surf?.Vertices.ToArray();
         mesh.Indices = surf?.Triangles.SelectMany(t => new[] { t.Indices.X, t.Indices.Y, t.Indices.Z }).ToArray();
         mesh.Material = CreateErrorMat();
-        mesh.SurfaceMaterialIds = surf.Triangles.Select(t => (MaterialId)t.U02).ToArray();
+        mesh.SurfaceMaterialIds = surf?.Triangles.Select(t => (MaterialId)t.U02).ToArray();
         mesh.Name = MatToName(mesh.Material);
         mesh.Properties = MeshProperties.Enabled;
         return ToolResult.Success(mesh, nameof(MeshExtractor));

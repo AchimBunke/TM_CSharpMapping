@@ -3,6 +3,7 @@ using GBX.NET.Engines.Plug;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
+using TM_GenericMapping.Templating;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
@@ -13,10 +14,11 @@ internal class FbxMaterialConverter
     private readonly DMaterialLibrary _materialLibrary;
     private readonly CPlugMaterialUserInst _materialTemplate;
 
-    public FbxMaterialConverter(DMaterialLibrary materialLibrary, CPlugMaterialUserInst materialTemplate)
+    public FbxMaterialConverter(DMaterialLibrary materialLibrary)
     {
         _materialLibrary = materialLibrary;
-        _materialTemplate = materialTemplate;
+        var solid2ModelTemplate = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
+        _materialTemplate = solid2ModelTemplate.CustomMaterials![0].MaterialUserInst!;
     }
 
     public ToolResult<List<MaterialDef>> ExtractMaterials(Scene scene, FbxGbxConversionInput config)

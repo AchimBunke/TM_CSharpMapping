@@ -1,4 +1,4 @@
-﻿#define FbxGbxDebugLod
+﻿//#define FbxGbxDebugLod
 using Assimp;
 using EarcutDotNet;
 using GBX.NET;
@@ -7,6 +7,7 @@ using GBX.NET.Engines.Scene;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Xml.Linq;
+using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.FbxGbxConverter;
 using TM_GenericMapping.Messaging;
@@ -41,6 +42,140 @@ internal class SocketDef
 }
 internal class FbxMeshConverter
 {
+    public static ToolResult<List<NodeDef>> ExtractMeshNodes(Scene scene, FbxGbxConversionInput config)
+    {
+        List<NodeDef> nodeDefs = [];
+        var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
+        foreach (var node in nodes)
+        {
+            var meshConfigResult = FindMeshConfigForMesh(node.NodeName, config);
+
+            if (meshConfigResult.IsFailure)
+                continue;
+
+            var meshConfig = meshConfigResult.Value;
+
+            if (meshConfig.MeshFlags.HasFlag(MeshFlags.Skip))
+                continue;
+
+            nodeDefs.Add(new NodeDef { Node = node.node, NodeConfig = meshConfig, GlobalTransform = node.GlobalTransform });
+        }
+        return ToolResult.Success(nodeDefs, nameof(FbxGbxConverter));
+    }
+
+    public static ToolResult<List<SocketDef>> ExtractSockets(Scene scene, FbxGbxConversionInput config)
+    {
+        List<SocketDef> socketDefs = new List<SocketDef>();
+
+        var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
+
+        foreach (var (node, nodeName, transform) in nodes)
+        {
+            var meshConfigResult = FindMeshConfigForMesh(nodeName, config);
+            if (meshConfigResult.IsFailure)
+                continue;
+
+            var meshConfig = meshConfigResult.Value;
+            if (!meshConfig.MeshFlags.HasFlag(MeshFlags.Socket))
+                continue;
+            var spawnModel = ConvertSocket(node, transform, meshConfig, config.ItemConfig.Scale, config);
+            socketDefs.Add(new SocketDef() { GlobalTransform = transform, WaypointSpawnModel = spawnModel });
+        }
+        return ToolResult.Success(socketDefs, nameof(FbxGbxConverter));
+    }
+
+    public static ToolResult<List<MeshGroup>> GroupNodes(List<NodeDef> nodes, List<SocketDef> sockets, FbxGbxConversionInput config)
+    {
+        var lods = config.ItemConfig.LodParameters?.MaxLodDistances ?? [];
+#if FbxGbxDebugLod
+        lods = [100, 200, 400];
+#endif
+        var grouper = new NodeGrouper(lods, config.ItemConfig);
+        var calculatedGroups = grouper.Group(nodes);
+        var groups = calculatedGroups.Select(g =>
+        {
+            g.MeshGroup.LODDistances = g.LodDistances.ToArray();
+            return g.MeshGroup;
+        }).ToList();
+
+    
+        for (int i = 0; i < groups.Count; ++i)
+        {
+            var group = calculatedGroups[i];
+            foreach (var nodeAssignment in group.Nodes)
+            {
+                var nodeDef = nodeAssignment.NodeDef;
+                nodeDef.GroupIndex = i;
+                nodeDef.LodMask = LODUtils.LodMaskFromLods(nodeAssignment.LodIndices.ToArray());
+                group.MeshGroup.GameplayMainDir = nodeDef.NodeConfig.GameplayMainDir;
+            }
+            group.MeshGroup.RelativeMovingParentIndex = 
+                string.IsNullOrEmpty(group.RelativeMovingParentGroupId) ? null : calculatedGroups.Where(g=>g.MeshGroup.GroupType == GroupType.DynaObject).ToList().FindIndex(g => g.OriginalGroupId == group.RelativeMovingParentGroupId);
+        }
+        if (sockets.Count > 0)
+        {
+            foreach (var group in groups)
+            {
+                if (group.GroupType != GroupType.Trigger_Waypoint)
+                    continue;
+                if (group.WaypointType == GBX.NET.Engines.GameData.CGameItemModel.EWaypointType.Finish)
+                    continue;
+                group.WaypointSpawnModel = sockets[0].WaypointSpawnModel;
+            }
+        }
+
+        return ToolResult.Success(groups, nameof(FbxGbxConverter));
+    }
+
+    public static ToolResult<List<NormalizedMesh>> ExtractMeshes(Scene scene, List<MeshGroup> groups, List<MaterialDef> materials, List<NodeDef> nodes, FbxGbxConversionInput config)
+    {
+        List<NormalizedMesh> normalizedMeshes = new List<NormalizedMesh>();
+        Dictionary<int, float> groupToLightmapSize = [];
+        foreach (var node in nodes)
+        {
+            if (node.NodeConfig.MeshFlags.HasMeshData())
+            {
+                if (node.Node.MeshCount == 0)
+                    continue;
+                
+             
+                List<NormalizedMesh> normalizedSubmeshes = [];
+                foreach (int meshIndex in node.Node.MeshIndices)
+                {
+                    var mesh = scene.Meshes[meshIndex];
+                    var normMesh = FbxMeshConverter.ConvertMesh(mesh, materials[mesh.MaterialIndex], node.GlobalTransform, node.NodeConfig, config.ItemConfig.Scale);
+                    normMesh.GroupIndex = node.GroupIndex;
+                    normMesh.LODMask = node.LodMask;
+
+                    normalizedSubmeshes.Add(normMesh);
+                }
+           
+                var mergedMeshes = normalizedSubmeshes.GroupBy(m => m.Material).Select(g =>
+                {
+                    var merged = MergeMeshes(g);
+                    merged.PreLightGenerator = MeshBuilder.CreatePreLightGeneratorFromMeshData(merged);
+                    return merged;
+                }).ToList();
+
+                normalizedMeshes.AddRange(mergedMeshes);
+            }
+        }
+        if(nodes.Any(n=>n.NodeConfig.LightmapSize.HasValue))
+        {
+            float maxLightmapSize = nodes.Where(n => n.NodeConfig.LightmapSize.HasValue).Max(n => n.NodeConfig.LightmapSize.Value);
+            foreach(var mesh in normalizedMeshes)
+            {
+                if(mesh.PreLightGenerator != null)
+                {
+                    mesh.PreLightGenerator.U02 = maxLightmapSize;
+                }
+            }
+        }
+        return ToolResult.Success(normalizedMeshes, nameof(FbxGbxConverter));
+    }
+
+
+
     public static Assimp.Matrix4x4 CoordinateConversionMatrix = new Assimp.Matrix4x4(
       1, 0, 0, 0,
       0, 1, 0, 0,
@@ -48,28 +183,26 @@ internal class FbxMeshConverter
       0, 0, 0, 1
         );
 
-    public static NormalizedMesh ConvertMesh(Assimp.Mesh mesh, MaterialDef material, Assimp.Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale)
+    static NormalizedMesh ConvertMesh(Assimp.Mesh mesh, MaterialDef material, Assimp.Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale)
     {
         var normalizedMesh = new NormalizedMesh();
 
-        bool hasNormals = mesh.HasNormals;
-        if (!hasNormals) 
-        {
-            int i = 0;
-        }
         var scaleMatrix = Assimp.Matrix4x4.FromScaling(new Vector3D(meshScale, meshScale, meshScale));
+
         var normalMatrix = ComputeNormalMatrix(globalTransform);
         //normalMatrix.Inverse();
         //normalMatrix.Transpose();
 
-        bool isMirrored = GetDeterminant3x3(globalTransform) < 0f;
+
 
         normalizedMesh.Positions = TransformVectors(mesh.Vertices, globalTransform, scaleMatrix, false).ToArray();
 
-        var indices = GetTriangleIndices(mesh).ToArray();
+        var indices = MeshOperations.Triangulate(mesh).ToArray();
         //var indices = mesh.GetIndices();
-        if (isMirrored)
-            indices = FlipWinding(indices);
+
+        //bool isMirrored = GetDeterminant3x3(globalTransform) < 0f;
+        //if (isMirrored)
+        //    indices = FlipWinding(indices);
         normalizedMesh.Indices = indices;
 
         normalizedMesh.Normals = TransformVectors(mesh.Normals, normalMatrix, Assimp.Matrix4x4.Identity, true).ToArray();
@@ -83,12 +216,10 @@ internal class FbxMeshConverter
                 normalizedMesh.TexCoords = mesh.TextureCoordinateChannels[texChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
             }
 
-            //normalizedMesh.TangentUs = mesh.Tangents.Select(v=>new Vec3(v.X, v.Y, v.Z)).ToArray();
-            //normalizedMesh.TangentVs = mesh.BiTangents.Select(v=>new Vec3(v.X, v.Y, v.Z)).ToArray();
-
             normalizedMesh.TangentUs = TransformVectors(mesh.Tangents, globalTransform, Assimp.Matrix4x4.Identity, true).ToArray();
             normalizedMesh.TangentVs = TransformVectors(mesh.BiTangents, globalTransform, Assimp.Matrix4x4.Identity, true).ToArray();
         }
+
      
         if (material.DMaterial is null || material.DMaterial.HasLightmapUvlayer)
         {
@@ -96,12 +227,9 @@ internal class FbxMeshConverter
             if (mesh.TextureCoordinateChannelCount > lightmapChannelIndex)
             {
                 normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[lightmapChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
-                var neg = normalizedMesh.LightmapCoords.Any(uv => uv.X < 0);
-                if (neg)
-                {
-                    int i = 0;
-                }
                 normalizedMesh.PreLightGenerator = MeshBuilder.CreatePreLightGeneratorFromMeshData(normalizedMesh);
+                if(meshConfig.LightmapSize.HasValue)
+                    normalizedMesh.PreLightGenerator.U02 = meshConfig.LightmapSize.Value;
             }
         }
 
@@ -128,82 +256,7 @@ internal class FbxMeshConverter
         return normalizedMesh;
     }
 
-    /// <summary>
-    /// Rebuilds a full triangle index list for an Assimp Mesh, using our own
-    /// per-face earcut triangulation instead of Assimp's built-in Triangulate postprocess step.
-    /// Assumes the mesh was imported WITHOUT PostProcessSteps.Triangulate,
-    /// so mesh.Faces may still contain n-gons (Face.IndexCount > 3).
-    /// </summary>
-    public static List<int> GetTriangleIndices(Assimp.Mesh mesh)
-    {
-        var globalIndices = new List<int>(mesh.FaceCount * 3); // rough capacity guess
-        foreach (Face face in mesh.Faces)
-        {
-            if (face.IndexCount < 3)
-                continue; // degenerate line/point face, skip
-
-            if (face.IndexCount == 3)
-            {
-                // Already a triangle — no need to run it through earcut
-                globalIndices.Add(face.Indices[0]);
-                globalIndices.Add(face.Indices[1]);
-                globalIndices.Add(face.Indices[2]);
-                continue;
-            }
-
-            if (face.IndexCount == 4)
-            {
-                int i0 = face.Indices[0], i1 = face.Indices[1], i2 = face.Indices[2], i3 = face.Indices[3];
-
-                Vector3D n0 = mesh.Normals[i0];
-                Vector3D n1 = mesh.Normals[i1];
-                Vector3D n2 = mesh.Normals[i2];
-                Vector3D n3 = mesh.Normals[i3];
-                n0.Normalize();
-                n1.Normalize();
-                n2.Normalize();
-                n3.Normalize();
-
-                // Dot product of the two corners each diagonal would connect.
-                // Higher dot = more similar normals = smoother interpolation along that seam.
-                float dot02 = Vector3D.Dot(n0, n2);
-                float dot13 = Vector3D.Dot(n1, n3);
-
-                // Pick the diagonal whose two endpoints have the MOST similar normals —
-                // that's the seam that will interpolate most smoothly, minimizing visible discontinuity.
-                if (dot02 >= dot13)
-                {
-                    globalIndices.Add(i0); globalIndices.Add(i1); globalIndices.Add(i2);
-                    globalIndices.Add(i0); globalIndices.Add(i2); globalIndices.Add(i3);
-                }
-                else
-                {
-                    globalIndices.Add(i0); globalIndices.Add(i1); globalIndices.Add(i3);
-                    globalIndices.Add(i1); globalIndices.Add(i2); globalIndices.Add(i3);
-                }
-                continue;
-            }
-
-            // Gather this face's vertex positions in polygon order
-            var faceVerts = new Vector3[face.IndexCount];
-            for (int i = 0; i < face.IndexCount; i++)
-            {
-                int idx = face.Indices[i];
-                Vector3D v = mesh.Vertices[idx];
-                faceVerts[i] = new Vector3(v.X, v.Y, v.Z);
-            }
-
-            var localTris = FaceTriangulator.Triangulate(faceVerts.AsSpan());
-
-            // Map local (0..N-1) indices back to this face's actual mesh-vertex indices
-            foreach (int localIdx in localTris)
-                globalIndices.Add(face.Indices[localIdx]);
-        }
-        return globalIndices;
-    }
-
-
-    public static CPlugSpawnModel ConvertSocket(Assimp.Node node, Assimp.Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale, FbxGbxConversionInput config)
+    static CPlugSpawnModel ConvertSocket(Assimp.Node node, Assimp.Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale, FbxGbxConversionInput config)
     {
         var spawnModel = MeshBuilder.CreateSpawnModel();
 
@@ -222,6 +275,7 @@ internal class FbxMeshConverter
             spawnModel.TorqueDuration = TimeInt32.FromMilliseconds(config.ItemConfig.Waypoint.TorqueDuration.Value);
         return spawnModel;
     }
+
     static void ApplyMeshConfig(NormalizedMesh normalizedMesh, Assimp.Mesh mesh, MeshConfig meshConfig)
     {
         normalizedMesh.Name = mesh.Name;
@@ -241,7 +295,6 @@ internal class FbxMeshConverter
         if (meshConfig.MeshFlags.HasFlag(MeshFlags.TriggerEffect))
             type = MeshType.Trigger_Special;
 
-
         if (meshConfig.Lods.Count > 0)
             properties |= MeshProperties.LOD;
 
@@ -256,80 +309,6 @@ internal class FbxMeshConverter
                 .Select(n => CoordinateConversionMatrix * m2 * n)
                 .Select(v => normalize ? new Vec3(v.X, v.Y, v.Z).GetNormalized() : new Vec3(v.X, v.Y, v.Z));
     }
-
-    public static ToolResult<List<NodeDef>> ExtractNodes(Scene scene, FbxGbxConversionInput config)
-    {
-        List<NodeDef> nodeDefs = [];
-        var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
-        foreach(var node in nodes)
-        {
-            var meshConfigResult = FindMeshConfigForMesh(node.NodeName, config);
-
-            if (meshConfigResult.IsFailure)
-                return ToolResult.Fail(meshConfigResult);
-
-            var meshConfig = meshConfigResult.Value;
-
-            if (meshConfig.MeshFlags.HasFlag(MeshFlags.Skip))
-                continue;
-
-            nodeDefs.Add(new NodeDef { Node = node.node, NodeConfig = meshConfig, GlobalTransform = node.GlobalTransform });
-        }
-        return ToolResult.Success(nodeDefs, nameof(FbxGbxConverter));
-    }
-
-    //public static ToolResult<List<MeshDef>> ExtractMeshes(Scene scene, List<MaterialDef> materials, FbxGbxConversionInput config)
-    //{
-    //    List<MeshDef> normalizedMeshes = [];
-
-    //    var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
-        //var meshInstances = FbxSceneReader.GetMeshInstances(scene, nodes);
-
-    //    foreach (var (mesh, nodeName, globalTransform) in meshInstances)
-    //    {
-    //        var meshConfigResult = FindMeshConfigForMesh(nodeName, config);
-
-    //        if (meshConfigResult.IsFailure)
-    //            return ToolResult.Fail(meshConfigResult);
-
-    //        var meshConfig = meshConfigResult.Value;
-
-    //        if (meshConfig.MeshFlags.HasFlag(MeshFlags.Skip))
-    //            continue;
-
-    //        if (meshConfig.MeshFlags.HasMeshData())
-    //        {
-    //            var normMesh = FbxMeshConverter.ConvertMesh(mesh, materials[mesh.MaterialIndex], globalTransform, meshConfig, config.ItemConfig.Scale);
-
-    //            normalizedMeshes.Add(new MeshDef { Mesh = normMesh, MeshConfig = meshConfig, AssimpMesh = mesh, GlobalTransform = globalTransform });
-    //        }
-    //        else
-    //            normalizedMeshes.Add(new MeshDef { Mesh = null, MeshConfig = meshConfig, AssimpMesh = mesh, GlobalTransform = globalTransform });
-    //    }
-    //    return ToolResult.Success(normalizedMeshes, nameof(FbxGbxConverter));
-    //}
-
-    public static ToolResult<List<SocketDef>> ExtractSockets(Scene scene, FbxGbxConversionInput config)
-    {
-        List<SocketDef> socketDefs = new List<SocketDef>();
-
-        var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
-
-        foreach (var (node, nodeName, transform) in nodes)
-        {
-            var meshConfigResult = FindMeshConfigForMesh(nodeName, config);
-            if (meshConfigResult.IsFailure)
-                return ToolResult.Fail(meshConfigResult);
-
-            var meshConfig = meshConfigResult.Value;
-            if (!meshConfig.MeshFlags.HasFlag(MeshFlags.Socket))
-                continue;
-            var spawnModel = ConvertSocket(node, transform, meshConfig, config.ItemConfig.Scale, config);
-            socketDefs.Add(new SocketDef() { GlobalTransform = transform, WaypointSpawnModel = spawnModel });
-        }
-        return ToolResult.Success(socketDefs, nameof(FbxGbxConverter));
-    }
-
 
     static ToolResult<MeshConfig> FindMeshConfigForMesh(string meshName, FbxGbxConversionInput config)
     {
@@ -390,69 +369,153 @@ internal class FbxMeshConverter
         return meshConfig;
     }
 
-
-    public static ToolResult<List<MeshGroup>> GroupNodes(List<NodeDef> nodes, List<SocketDef> sockets, FbxGbxConversionInput config)
+    private static NormalizedMesh MergeMeshes(IEnumerable<NormalizedMesh> meshes)
     {
-        var lods = config.ItemConfig.LodParameters?.MaxLodDistances ?? [];
-#if FbxGbxDebugLod
-        lods = [100,200,400];
-#endif
-        var grouper = new NodeGrouper(lods, config.ItemConfig);
-        var calculatedGroups = grouper.Group(nodes);
-        var groups = calculatedGroups.Select(g =>
-        {
-            g.MeshGroup.LODDistances = g.LodDistances.ToArray();
-            return g.MeshGroup;
-        }).ToList();
+        var list = meshes.ToList();
 
-        for (int i = 0; i < groups.Count; ++i)
+        var result = new NormalizedMesh
         {
-            var group = calculatedGroups[i];
-            foreach (var nodeAssignment in group.Nodes)
-            {
-                var nodeDef = nodeAssignment.NodeDef;
-                nodeDef.GroupIndex = i;
-                nodeDef.LodMask = LODUtils.LodMaskFromLods(nodeAssignment.LodIndices.ToArray());
-            }
-        }
-        if (sockets.Count > 0) 
+            Material = list[0].Material,
+            GroupIndex = list[0].GroupIndex,
+            LODMask = list[0].LODMask,
+            Properties = list[0].Properties,
+            SmoothingGroup = list[0].SmoothingGroup,
+            SurfaceMaterialIds = list[0].SurfaceMaterialIds,
+            Name = list[0].Name,
+            Type = list[0].Type
+        };
+
+        var positions = new List<Vec3>();
+        var normals = new List<Vec3>();
+        var texCoords = new List<Vec2>();
+        var lightmapCoords = new List<Vec2>();
+        var tangentsU = new List<Vec3>();
+        var tangentsV = new List<Vec3>();
+        var colors = new List<int>();
+        var indices = new List<int>();
+
+        int vertexOffset = 0;
+
+        foreach (var mesh in list)
         {
-            foreach (var group in groups)
-            {
-                if (group.GroupType != GroupType.Trigger_Waypoint)
-                    continue;
-                if (group.WaypointType == GBX.NET.Engines.GameData.CGameItemModel.EWaypointType.Finish)
-                    continue;
-                group.WaypointSpawnModel = sockets[0].WaypointSpawnModel;
-            }
+            positions.AddRange(mesh.Positions);
+            normals.AddRange(mesh.Normals);
+
+            if (mesh.TexCoords != null)
+                texCoords.AddRange(mesh.TexCoords);
+
+            if (mesh.LightmapCoords != null)
+                lightmapCoords.AddRange(mesh.LightmapCoords);
+
+            if (mesh.TangentUs != null)
+                tangentsU.AddRange(mesh.TangentUs);
+
+            if (mesh.TangentVs != null)
+                tangentsV.AddRange(mesh.TangentVs);
+
+            if (mesh.Colors != null)
+                colors.AddRange(mesh.Colors);
+
+            foreach (var index in mesh.Indices)
+                indices.Add(index + vertexOffset);
+
+            vertexOffset += mesh.Positions.Length;
         }
-        return ToolResult.Success(groups, nameof(FbxGbxConverter));
+
+        result.Positions = positions.ToArray();
+        result.Normals = normals.ToArray();
+        result.Indices = indices.ToArray();
+
+        result.TexCoords = texCoords.Count > 0
+            ? texCoords.ToArray()
+            : null;
+
+        result.LightmapCoords = lightmapCoords.Count > 0
+            ? lightmapCoords.ToArray()
+            : null;
+
+        result.TangentUs = tangentsU.Count > 0
+            ? tangentsU.ToArray()
+            : null;
+
+        result.TangentVs = tangentsV.Count > 0
+            ? tangentsV.ToArray()
+            : null;
+
+        result.Colors = colors.Count > 0
+            ? colors.ToArray()
+            : null;
+
+        DeduplicateVertices(result);
+        return result;
     }
 
-    public static ToolResult<List<NormalizedMesh>> ExtractMeshes(Scene scene, List<MeshGroup> groups, List<MaterialDef> materials, List<NodeDef> nodes, FbxGbxConversionInput config)
+    private static void DeduplicateVertices(NormalizedMesh mesh)
     {
-        List<NormalizedMesh> normalizedMeshes = new List<NormalizedMesh>();
-        foreach (var node in nodes)
+        var vertexMap = new Dictionary<VertexKey, int>();
+
+        var positions = new List<Vec3>();
+        var normals = new List<Vec3>();
+        var texCoords = mesh.TexCoords != null ? new List<Vec2>() : null;
+        var lightmapCoords = mesh.LightmapCoords != null ? new List<Vec2>() : null;
+        var tangentUs = mesh.TangentUs != null ? new List<Vec3>() : null;
+        var tangentVs = mesh.TangentVs != null ? new List<Vec3>() : null;
+        var colors = mesh.Colors != null ? new List<int>() : null;
+
+        var newIndices = new int[mesh.Indices.Length];
+
+        for (int i = 0; i < mesh.Indices.Length; i++)
         {
-            if (node.NodeConfig.MeshFlags.HasMeshData())
+            int oldIndex = mesh.Indices[i];
+
+            var key = new VertexKey(
+                mesh.Positions[oldIndex],
+                mesh.Normals[oldIndex],
+                mesh.TexCoords?[oldIndex],
+                mesh.LightmapCoords?[oldIndex],
+                mesh.TangentUs?[oldIndex],
+                mesh.TangentVs?[oldIndex],
+                mesh.Colors?[oldIndex]
+            );
+
+            if (!vertexMap.TryGetValue(key, out int newIndex))
             {
-                if (node.Node.MeshCount == 0)
-                    continue;
+                newIndex = positions.Count;
+                vertexMap.Add(key, newIndex);
 
-                foreach (int meshIndex in node.Node.MeshIndices)
-                {
-                    var mesh = scene.Meshes[meshIndex];
-                    var normMesh = FbxMeshConverter.ConvertMesh(mesh, materials[mesh.MaterialIndex], node.GlobalTransform, node.NodeConfig, config.ItemConfig.Scale);
-                    normMesh.GroupIndex = node.GroupIndex;
-                    normMesh.LODMask = node.LodMask;
+                positions.Add(mesh.Positions[oldIndex]);
+                normals.Add(mesh.Normals[oldIndex]);
 
-                    normalizedMeshes.Add(normMesh);
-                }
+                texCoords?.Add(mesh.TexCoords![oldIndex]);
+                lightmapCoords?.Add(mesh.LightmapCoords![oldIndex]);
+                tangentUs?.Add(mesh.TangentUs![oldIndex]);
+                tangentVs?.Add(mesh.TangentVs![oldIndex]);
+                colors?.Add(mesh.Colors![oldIndex]);
             }
+
+            newIndices[i] = newIndex;
         }
-        return ToolResult.Success(normalizedMeshes, nameof(FbxGbxConverter));
+
+        mesh.Positions = positions.ToArray();
+        mesh.Normals = normals.ToArray();
+        mesh.TexCoords = texCoords?.ToArray();
+        mesh.LightmapCoords = lightmapCoords?.ToArray();
+        mesh.TangentUs = tangentUs?.ToArray();
+        mesh.TangentVs = tangentVs?.ToArray();
+        mesh.Colors = colors?.ToArray();
+        mesh.Indices = newIndices;
     }
 
+    private readonly record struct VertexKey(
+    Vec3 Position,
+    Vec3 Normal,
+    Vec2? TexCoord,
+    Vec2? LightmapCoord,
+    Vec3? TangentU,
+    Vec3? TangentV,
+    int? Color);
+
+   
 
     static float GetDeterminant3x3(Assimp.Matrix4x4 m)
     {
@@ -505,5 +568,90 @@ internal class FbxMeshConverter
         result.B1 = i21; result.B2 = i22; result.B3 = i23;
         result.C1 = i31; result.C2 = i32; result.C3 = i33;
         return result;
+    }
+}
+
+internal static class MeshOperations
+{
+    /// <summary>
+    /// Rebuilds a full triangle index list for an Assimp Mesh, using our own
+    /// per-face earcut triangulation instead of Assimp's built-in Triangulate postprocess step.
+    /// Assumes the mesh was imported WITHOUT PostProcessSteps.Triangulate,
+    /// so mesh.Faces may still contain n-gons (Face.IndexCount > 3).
+    /// </summary>
+    public static List<int> Triangulate(Assimp.Mesh mesh)
+    {
+        var globalIndices = new List<int>(mesh.FaceCount * 3); // rough capacity guess
+        foreach (Face face in mesh.Faces)
+        {
+            if (face.IndexCount < 3)
+                continue; // degenerate line/point face, skip
+
+            if (face.IndexCount == 3)
+            {
+                // Already a triangle — no need to run it through earcut
+                globalIndices.Add(face.Indices[0]);
+                globalIndices.Add(face.Indices[1]);
+                globalIndices.Add(face.Indices[2]);
+                continue;
+            }
+
+            if (face.IndexCount == 4)
+            {
+                int i0 = face.Indices[0], i1 = face.Indices[1], i2 = face.Indices[2], i3 = face.Indices[3];
+
+                Vector3D n0 = mesh.Normals[i0];
+                Vector3D n1 = mesh.Normals[i1];
+                Vector3D n2 = mesh.Normals[i2];
+                Vector3D n3 = mesh.Normals[i3];
+                n0.Normalize();
+                n1.Normalize();
+                n2.Normalize();
+                n3.Normalize();
+
+                // Dot product of the two corners each diagonal would connect.
+                // Higher dot = more similar normals = smoother interpolation along that seam.
+                float dot02 = Vector3D.Dot(n0, n2);
+                float dot13 = Vector3D.Dot(n1, n3);
+
+                // Pick the diagonal whose two endpoints have the MOST similar normals —
+                // that's the seam that will interpolate most smoothly, minimizing visible discontinuity.
+                if (dot02 >= dot13)
+                {
+                    globalIndices.Add(i0);
+                    globalIndices.Add(i1);
+                    globalIndices.Add(i2);
+                    globalIndices.Add(i0);
+                    globalIndices.Add(i2);
+                    globalIndices.Add(i3);
+                }
+                else
+                {
+                    globalIndices.Add(i0);
+                    globalIndices.Add(i1);
+                    globalIndices.Add(i3);
+                    globalIndices.Add(i1);
+                    globalIndices.Add(i2);
+                    globalIndices.Add(i3);
+                }
+                continue;
+            }
+
+            // Gather this face's vertex positions in polygon order
+            var faceVerts = new Vector3[face.IndexCount];
+            for (int i = 0; i < face.IndexCount; i++)
+            {
+                int idx = face.Indices[i];
+                Vector3D v = mesh.Vertices[idx];
+                faceVerts[i] = new Vector3(v.X, v.Y, v.Z);
+            }
+
+            var localTris = FaceTriangulator.Triangulate(faceVerts.AsSpan());
+
+            // Map local (0..N-1) indices back to this face's actual mesh-vertex indices
+            foreach (int localIdx in localTris)
+                globalIndices.Add(face.Indices[localIdx]);
+        }
+        return globalIndices;
     }
 }

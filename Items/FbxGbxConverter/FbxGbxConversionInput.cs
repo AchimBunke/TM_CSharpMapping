@@ -2,6 +2,7 @@
 using GBX.NET.Engines.Plug;
 using System.Xml.Serialization;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
+using TM_GenericMapping.Items.FbxGbxConverter.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
@@ -174,7 +175,7 @@ public record FbxGbxConversionInput : IDisposable
                 },
                 NoRespawn = false,
             } : null,
-            PlacementParams = new CGameItemPlacementParam()
+            PlacementParams = new PlacementConfig()
             {
                 GridSnapHStep = itemXml.GridSnap?.HStep ?? 0f,
                 GridSnapHOffset = itemXml.GridSnap?.HOffset ?? 0f,
@@ -187,7 +188,7 @@ public record FbxGbxConversionInput : IDisposable
                 NotOnObject = itemXml.Options?.NotOnItem ?? false,
                 AutoRotation = itemXml.Options?.AutoRotation ?? false,
                 PivotSnapDistance = itemXml.PivotSnap?.Distance ?? -1f,
-                PivotPositions = itemXml.Pivots?.Select(p => p.GetPosition()).ToArray(),
+                PivotPositions = itemXml.Pivots?.Select(p => p.GetPosition()).ToList(),
             },
             Scale = meshParamsXml.Scale,
             MaterialConfiguration = meshParamsXml.Materials.Select(m => new MaterialConfig
@@ -220,4 +221,9 @@ public record FbxGbxConversionInput : IDisposable
 
     }
 
+}
+
+public record VariantItemCreationInput
+{
+    public List<ItemVariantInput> ItemVariants { get; set; } = [];
 }

@@ -78,6 +78,8 @@ public class MeshBuilder
         public EGameItemWaypointType? WaypointType { get; set; }
         public bool? WaypointNoRespawn { get; set; }
         public CPlugSpawnModel? WaypointSpawnModel { get; set; }
+        public Vec3? GameplayMainDir { get; set; }
+        public int? RelativeMovingParentGroup { get; set; }
     }
 
     public struct VariantSetting()
@@ -116,6 +118,30 @@ public class MeshBuilder
                 Tags = new Dictionary<string, string>(vg.Tags),
                 HiddenInManualCycle = vg.HiddenInManualCycle
             }).ToList();
+            if (variantSettings.Count > 0)
+                options.TargetModel = ItemModel.VariantList;
+            for (int i = 0; i < item.Groups.Length; ++i)
+            {
+                var g = item.Groups[i];
+                var gSetting = new GroupSetting()
+                {
+                    LODDistances = g.LODDistances,
+                    GroupId = i,
+                    Type = g.GroupType,
+                    Position = g.Position,
+                    Rotation = g.Rotation,
+                    VariantId = g.VariantIndex,
+                    WaypointSpawnModel = g.WaypointSpawnModel,
+                    DynaObjectModelParams = g.DynaObjectModelParams,
+                    KinematicConstraint = g.KinematicConstraint,
+                    TriggerGameplayId = g.TriggerGameplayId,
+                    WaypointNoRespawn = g.WaypointNoRespawn,
+                    WaypointType = (EGameItemWaypointType?)g.WaypointType,
+                    GameplayMainDir = g.GameplayMainDir,
+                    RelativeMovingParentGroup = g.RelativeMovingParentIndex
+                };
+                groupSettings.Add(i, gSetting);
+            }
 
             // create meshes
             for (int i = 0; i < item.Meshes.Length; ++i)
@@ -127,23 +153,20 @@ public class MeshBuilder
                 var instanceSetting = new MeshInstanceSetting();
                 instanceSetting.MeshIndex = i;
                 instanceSetting.GroupId = submesh.GroupIndex;
-                GroupType groupType = GroupType.StaticObject;
                 switch (submesh.Type)
                 {
                     case MeshType.Mesh:
+                        instanceSetting.Movable = submeshGroup.GroupType == GroupType.DynaObject;
                         break;
                     case MeshType.Trigger_Waypoint:
                         instanceSetting.Trigger = true;
-                        groupType = GroupType.Trigger_Waypoint;
                         break;
                     case MeshType.Trigger_Special:
                         instanceSetting.Trigger = true;
-                        groupType = GroupType.Trigger_Special;
                         break;
                     case MeshType.Dyna_Shape:
                         instanceSetting.Movable = true;
                         instanceSetting.Collidable = true;
-                        groupType = GroupType.DynaObject;
                         break;
                     case MeshType.Static_Shape:
                         instanceSetting.Collidable = true;
@@ -157,44 +180,6 @@ public class MeshBuilder
                     instanceSetting.LODMask = submesh.LODMask;
 
                 meshSettings.Add(instanceSetting);
-
-                if (!groupSettings.TryGetValue(submesh.GroupIndex, out var groupSetting))
-                {
-                    groupSettings[submesh.GroupIndex] = groupSetting = new GroupSetting()
-                    {
-                        LODDistances = submeshGroup.LODDistances,
-                        GroupId = submesh.GroupIndex,
-                        Type = groupType,
-                        Position = submeshGroup.Position,
-                        Rotation = submeshGroup.Rotation,
-                        VariantId = submeshGroup.VariantIndex,
-                    };
-                }
-
-                if (groupType != GroupType.StaticObject)
-                    groupSettings[submesh.GroupIndex] = groupSetting with { Type = groupType };
-                if (groupType == GroupType.DynaObject)
-                    groupSettings[submesh.GroupIndex] = groupSetting with 
-                    { 
-                        Type = groupType,
-                        DynaObjectModelParams = submeshGroup.DynaObjectModelParams,
-                        KinematicConstraint = submeshGroup.KinematicConstraint
-                    };
-                if (groupType == GroupType.Trigger_Special)
-                    groupSettings[submesh.GroupIndex] = groupSetting with 
-                    { 
-                        Type = groupType,
-                        TriggerGameplayId = submeshGroup.TriggerGameplayId
-                    };
-                if (groupType == GroupType.Trigger_Waypoint)
-                    groupSettings[submesh.GroupIndex] = groupSetting with
-                    {
-                        Type = groupType,
-                        WaypointNoRespawn = submeshGroup.WaypointNoRespawn,
-                        WaypointType = (EGameItemWaypointType?)submeshGroup.WaypointType,
-                        WaypointSpawnModel = submeshGroup.WaypointSpawnModel,
-                    };
-
             }
 
             for (int i = 0; i < item.Lights.Length; ++i)
@@ -212,7 +197,7 @@ public class MeshBuilder
             options.MeshSettings = meshSettings;
             options.GroupSettings = groupSettings.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToList();
             options.LightSettings = lightSettings;
-
+            options.VariantSettings = variantSettings;
 
             // create groups
             return options;
@@ -286,7 +271,6 @@ public class MeshBuilder
 
 
         var surfMesh = GbxTemplateLibrary.CreateSurfaceMeshTemplate().Value;
-
         // merge all submesh positions and indices into one surface
         var allPositions = new List<Vec3>();
         var allTriangles = new List<CPlugSurface.Mesh.Triangle>();
@@ -765,6 +749,8 @@ public class MeshBuilder
             Phase01Max = -1,
             TextureId = 0,
         };
+        entRef.Position = groupSetting.Position;
+        entRef.Rotation = groupSetting.Rotation;
         return ToolResult.Success(entRef, nameof(MeshBuilder));
     }
     public ToolResult<NPlugDyna_SKinematicConstraint> BuildKinematicConstraint(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
@@ -1026,7 +1012,7 @@ public class MeshBuilder
             return ToolResult.Fail(surfaceResult);
         CPlugSurface surface = surfaceResult.Value;
         NullifySurfaceMaterial(surface);
-        surface.Surf!.GameplayMainDir = new Vec3(0, 0, 1);
+        surface.Surf!.GameplayMainDir = groupSetting.GameplayMainDir.HasValue ? groupSetting.GameplayMainDir.Value : new Vec3(0, 0, 1);
         target.TriggerShape = surface;
         return ToolResult.Success(nameof(MeshBuilder));
     }
@@ -1057,7 +1043,7 @@ public class MeshBuilder
             return ToolResult.Fail(surfaceResult);
         CPlugSurface surface = surfaceResult.Value;
         NullifySurfaceMaterial(surface);
-        surface.Surf!.GameplayMainDir = new Vec3(0, 0, 1);
+        surface.Surf!.GameplayMainDir = groupSetting.GameplayMainDir.HasValue ? groupSetting.GameplayMainDir.Value : new Vec3(0, 0, 1);
         target.TriggerShape = surface;
         return ToolResult.Success(nameof(MeshBuilder));
     }
@@ -1185,7 +1171,6 @@ public class MeshBuilder
         for (int i = 0; i < dynamicGroups.Length; ++i)
         {
             var groupSetting = dynamicGroups[i];
-
             var dynamicObjectResult = BuildDynaObjectModelEntRef(normalizedItem, groupSetting, buildSettings);
             if (dynamicObjectResult.IsFailure)
                 return ToolResult.Fail(dynamicObjectResult);
@@ -1198,10 +1183,11 @@ public class MeshBuilder
             var dynaEnt = dynamicObjectResult.Value;
             var kinematicConstraintEnt = CreateEntRef();
             kinematicConstraintEnt.Model = kinematicConstraintResult.Value;
+         
             kinematicConstraintEnt.Params = new NPlugDyna_SPrefabConstraintParams()
             {
-                Ent1 = -1,
-                Ent2 = 0,
+                Ent1 = groupSetting.RelativeMovingParentGroup.HasValue ? dynamicGroups.IndexOf(dynamicGroups.FirstOrDefault(g => g.GroupId == groupSetting.RelativeMovingParentGroup.Value)) : -1,
+                Ent2 = i,
                 Pos1 = Vec3.Zero,
                 Pos2 = Vec3.Zero,
             };
@@ -1209,8 +1195,6 @@ public class MeshBuilder
             dynaPrefab.Ents = [dynaEnt, kinematicConstraintEnt];
             var ent = CreateEntRef();
             ent.Model = dynaPrefab;
-            ent.Position = groupSetting.Position;
-            ent.Rotation = groupSetting.Rotation;
             ents.Add(ent);
         }
 
@@ -1406,8 +1390,6 @@ public class MeshBuilder
                 dynaPrefab.Ents = [dynaEnt, kinematicConstraintEnt];
                 var ent = CreateEntRef();
                 ent.Model = dynaPrefab;
-                ent.Position = groupSetting.Position;
-                ent.Rotation = groupSetting.Rotation;
                 ents.Add(ent);
             }
 

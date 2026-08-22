@@ -1,4 +1,5 @@
-﻿using GBX.NET.Engines.Plug;
+﻿using GBX.NET;
+using GBX.NET.Engines.Plug;
 using System.Drawing;
 using System.Text.Json.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
@@ -23,7 +24,10 @@ public class MeshConfig
     public MeshFlags MeshFlags { get; set; }
     public LegacyGameplayId? TriggerEffect { get; set; } = null;
     public EWaypointType? WaypointType { get; set; } = null;
+    public Vec3? GameplayMainDir{ get; set;  } = null;
     public string? MovingGroup { get; set; }
+    public string? AnchorNodeName { get; set; } = null;
+    public float? LightmapSize { get; set; } = null;
 
     /// <summary>
     /// Global LOD indices this mesh has actual geometry for, e.g. [1, 3, 5].

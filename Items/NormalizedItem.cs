@@ -60,7 +60,6 @@ public class NormalizedMesh
 
     public PreLightGen? PreLightGenerator { get; set; }
     public int? SmoothingGroup { get; set; } = 0;
-
 }
 public enum LightType
 {
@@ -93,6 +92,8 @@ public class MeshGroup
     public EWaypointType? WaypointType { get; set; }
     public bool? WaypointNoRespawn { get; set; }
     public CPlugSpawnModel? WaypointSpawnModel { get; set; }
+    public Vec3? GameplayMainDir { get; set; } = new Vec3(0, 0, 1);
+    public int? RelativeMovingParentIndex { get; set; } = null;
 
     public int? VariantIndex { get; set; }
 }

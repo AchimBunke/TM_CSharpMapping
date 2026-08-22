@@ -1,4 +1,6 @@
-﻿using GBX.NET.Engines.Meta;
+﻿using GBX.NET;
+using GBX.NET.Engines.Meta;
+using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
@@ -9,6 +11,8 @@ internal class MovingParameter
 {
     public NPlugDyna_SKinematicConstraint KinematicConstraint { get; set; }
     public NPlugDynaObjectModel_SInstanceParams InstanceParams { get; set; }
+    public string? ParentMovingGroupId { get; set; } = null;
+    public Vec3? AnchorPosition { get; set; } = null;
 }
 
 /// <summary>
@@ -36,6 +40,8 @@ internal class NodeDefGroup
     /// Empty means "no LOD switching in this group".
     /// </summary>
     public List<float> LodDistances { get; set; } = new();
+    public string? RelativeMovingParentGroupId { get; set; } = null;
+    public string OriginalGroupId { get; set; } = null;
 
     public List<NodeLodAssignment> Nodes { get; set; } = new();
 }
@@ -60,11 +66,17 @@ internal class NodeGrouper
     private readonly IReadOnlyDictionary<string, MovingParameter> _movingConfig;
     private ItemConfig _itemConfig;
 
-    public NodeGrouper(IReadOnlyList<float> globalLodDistances, ItemConfig itemConfig, IReadOnlyDictionary<string, MovingParameter> movingConfig = null)
+    public NodeGrouper(IReadOnlyList<float> globalLodDistances, ItemConfig itemConfig)
     {
         _globalLodDistances = globalLodDistances;
         _itemConfig = itemConfig;
-        _movingConfig = movingConfig ?? new Dictionary<string, MovingParameter>();
+        _movingConfig = itemConfig.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => new MovingParameter
+        {
+            KinematicConstraint = MovingGroupConfig.ToKinematicConstaraint(mg.KinematicMovement),
+            InstanceParams = MovingGroupConfig.ToInstanceParams(mg.KinematicModelConfig),
+            ParentMovingGroupId = mg.ParentMovingGroupId,
+            AnchorPosition = mg.AnchorPosition,
+        });
     }
 
     public List<NodeDefGroup> Group(IEnumerable<NodeDef> nodeDefs)
@@ -118,7 +130,7 @@ internal class NodeGrouper
             bool hasGroup = !string.IsNullOrEmpty(node.NodeConfig.MovingGroup);
             string key = isSingle || !hasGroup
                 ? $"{(isSingle ? "single" : "moving")}_{isolatedCounter++}"
-                : $"movegroup_{node.NodeConfig.MovingGroup}";
+                : $"{node.NodeConfig.MovingGroup}";
             return new BucketInfo { Key = key, Type = GroupType.DynaObject, MovingGroup = node.NodeConfig.MovingGroup };
         }
 
@@ -137,9 +149,11 @@ internal class NodeGrouper
         if (bucket.Type == GroupType.DynaObject && !string.IsNullOrEmpty(bucket.MovingGroup))
             _movingConfig.TryGetValue(bucket.MovingGroup, out movingParams);
 
+        var groups = new List<NodeDefGroup>();
         NodeDefGroup NewGroup(string key) => new NodeDefGroup
         {
             GroupKey = key,
+            OriginalGroupId = bucket.Key,
             MeshGroup = new MeshGroup
             {
                 GroupType = bucket.Type,
@@ -148,7 +162,9 @@ internal class NodeGrouper
                 TriggerGameplayId = bucket.TriggerEffectId,
                 WaypointType = bucket.WaypointType,
                 WaypointNoRespawn = _itemConfig.Waypoint?.NoRespawn ?? false,
+                Position = movingParams?.AnchorPosition ?? Vector3.Zero,
             },
+            RelativeMovingParentGroupId = movingParams?.ParentMovingGroupId,
         };
 
         // A mesh with no Lods specified is implicitly visible at every LOD
@@ -172,7 +188,7 @@ internal class NodeGrouper
 
         var chunks = ChooseChunksMinimizingDuplication(nodesWithLods, distinctLods);
 
-        var groups = new List<NodeDefGroup>();
+       
         for (int c = 0; c < chunks.Count; c++)
         {
             var chunk = chunks[c];

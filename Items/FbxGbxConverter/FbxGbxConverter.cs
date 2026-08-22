@@ -3,6 +3,7 @@ using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using SixLabors.ImageSharp;
+using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
 using TM_GenericMapping.Templating;
@@ -49,6 +50,7 @@ public class FbxGbxConverter
 
         return itemResult;
     }
+
     public ToolResult<NormalizedItem> ConvertToNormalizedItem(FbxGbxConversionInput conversionInput)
     {
         var fbxSceneResult = FbxSceneReader.ParseFbx(conversionInput.Fbx);
@@ -56,6 +58,15 @@ public class FbxGbxConverter
             return ToolResult.Fail(fbxSceneResult);
 
         return ConvertToNormalizedItem(fbxSceneResult.Value, conversionInput);
+    }
+
+    public ToolResult<CGameItemModel> CreateVariantItem(VariantItemCreationInput variantCreationInput)
+    {
+        var builder = new VariantItemBuilder();
+        var itemResult = builder.CreateVariantItem(variantCreationInput.ItemVariants.ToArray());
+        if (itemResult.IsFailure)
+            return ToolResult.Fail(itemResult);
+        return ToolResult.Success(itemResult.Value, nameof(FbxGbxConverter));
     }
 
 
@@ -73,14 +84,13 @@ public class FbxGbxConverter
         List<NormalizedMesh> meshes = new List<NormalizedMesh>();
         List<NodeDefGroup> groups = new List<NodeDefGroup>();
 
-        var solid2ModelTemplate = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
-        var materialConverter = new FbxMaterialConverter(config.MaterialLibrary, solid2ModelTemplate.CustomMaterials![0].MaterialUserInst!);
+        var materialConverter = new FbxMaterialConverter(config.MaterialLibrary);
 
         var materialResults = materialConverter.ExtractMaterials(scene, config);
         if (materialResults.IsFailure)
             return ToolResult.Fail(materialResults);
 
-        var nodeResults = FbxMeshConverter.ExtractNodes(scene, config);
+        var nodeResults = FbxMeshConverter.ExtractMeshNodes(scene, config);
         if (nodeResults.IsFailure)
             return ToolResult.Fail(nodeResults);
 
@@ -101,7 +111,11 @@ public class FbxGbxConverter
         if (groupResults.IsFailure)
             return ToolResult.Fail(groupResults);
 
-        FbxLightConverter.GroupLights(lightResults.Value, groupResults.Value);
+        var lightGroupResult = FbxLightConverter.GroupLights(lightResults.Value, groupResults.Value);
+        if (lightGroupResult.IsFailure)
+            return ToolResult.Fail(lightGroupResult);
+
+        AnchorObjects(scene, groupResults.Value, nodes, lightResults.Value);
 
         var meshResults = FbxMeshConverter.ExtractMeshes(scene, groupResults.Value, materialResults.Value, nodes, config);
         if (meshResults.IsFailure)
@@ -126,6 +140,33 @@ public class FbxGbxConverter
         return ToolResult.Success(normalizedItem, nameof(FbxGbxConverter));
     }
 
+    void AnchorObjects(Scene scene, List<MeshGroup> meshGroups, List<NodeDef> nodes, List<LightDef> lights)
+    {
+        for (int i = 0; i < meshGroups.Count; ++i)
+        {
+            var group = meshGroups[i];
+            var pos = group.Position;
+            if (pos == Vector3.Zero)
+                continue;
+            //pos = new Vector3(pos.X, pos.Z, -pos.Y);
+            foreach(var node in nodes.Where(n=>n.GroupIndex == i))
+            {
+                node.GlobalTransform = MakeRelativeToPosition(node.GlobalTransform, pos);
+            }
+            foreach (var light in lights.Where(l => l.Light.GroupIndex == i))
+            {
+                light.Light.Position -= pos;
+            }
+        }
+    }
+    static Assimp.Matrix4x4 MakeRelativeToPosition(Assimp.Matrix4x4 globalTransform, Vector3 position)
+    {
+        Assimp.Matrix4x4 result = globalTransform;
+        result.A4 -= position.X;
+        result.B4 -= position.Y;
+        result.C4 -= position.Z;
+        return result;
+    }
 
     List<NodeDef> FilterAndApplySpecialMeshItems(Scene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)
     {
@@ -152,15 +193,7 @@ public class FbxGbxConverter
     //-------------------------------------
     CGameItemPlacementParam CreatePlacementParameters(FbxGbxConversionInput config)
     {
-        var placementParamsTemplate = config.ItemConfig.PlacementParams?.PlacementClass == null ? 
-            GbxTemplateLibrary.CreatePlacementParamTemplate() : 
-            GbxTemplateLibrary.CreatePlacementParamTemplateWithPlacementClass();
-
-        if(config.ItemConfig.PlacementParams != null)
-            placementParamsTemplate.InjectData(config.ItemConfig.PlacementParams);
-
-
-        return placementParamsTemplate;
+        return PlacementConfig.ToPlacementParam(config.ItemConfig.PlacementParams);
     }
 
     //-------------------------------------
