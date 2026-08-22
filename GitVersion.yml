@@ -7,7 +7,7 @@ branches:
   develop:
     regex: ^develop$
     tag: alpha # develop produces 2.1.0-alpha.5
-    increment: Minor
+    increment: Patch
   feature:
     regex: ^feature/
     tag: useBranchName # feature/blender-tool -> 2.1.0-feature-blender-tool.1
