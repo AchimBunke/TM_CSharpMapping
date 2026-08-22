@@ -37,7 +37,8 @@ jobs:
         uses: gittools/actions/gitversion/execute@v3
  
       - name: Show resolved version
-        run: echo "Version: ${{ steps.gitversion.outputs.NuGetVersionV2 }}"
+        run: |
+          echo "Version: ${{ steps.gitversion.outputs.NuGetVersionV2 }}"
  
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
