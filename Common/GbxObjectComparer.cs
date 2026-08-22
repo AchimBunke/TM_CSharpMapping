@@ -555,22 +555,13 @@ public static class GbxObjectComparer
             return;
         }
 
-        // Primitives, strings, enums, decimals — use Equals directly
-        if (type.IsPrimitive || type.IsEnum || obj1 is string || obj1 is decimal)
-        {
-            if (!obj1.Equals(obj2))
-            {
-                differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.Value));
-            }
-            return;
-        }
-
         // Circular reference guard (reference types only)
         if (!type.IsValueType)
         {
             if (ReferenceEquals(obj1, obj2)) return;
             if (!visited.Add((obj1, obj2))) return;
         }
+
 
         // custom comparers
         IGbxStructureComparer? customComparer = null;
@@ -603,6 +594,19 @@ public static class GbxObjectComparer
                     }
             }
         }
+
+
+        // Primitives, strings, enums, decimals — use Equals directly
+        if (type.IsPrimitive || type.IsEnum || obj1 is string || obj1 is decimal)
+        {
+            if (!obj1.Equals(obj2))
+            {
+                differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.Value));
+            }
+            return;
+        }
+
+
 
 
         // Value types that override Equals (e.g. DateTime, Guid, Vector3, etc.)

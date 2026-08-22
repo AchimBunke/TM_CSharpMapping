@@ -1,64 +1,315 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
+using System.Drawing.Drawing2D;
+using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using TM_GenericMapping.Common;
 using TM_GenericMapping.IO;
 using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.Game.CGameCtnMediaClipGroup;
+using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
+using static GBX.NET.Engines.Plug.NPlugTrigger_SWaypoint;
 
 namespace TM_GenericMapping.Items;
 
 public class MeshExtractor
 {
 
-    public ToolResult<NormalizedMesh> ExtractMesh(CGameItemModel item)
+    public ToolResult<NormalizedItem> ExtractMesh(CGameItemModel item)
     {
-        ToolResult<NormalizedMesh> normalizedMeshResult = default;
+        List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
+        List<VariantGroup> variantGroups = [];
         if (ItemExtensions.TryGetCrystal(item, out var crystal))
-            normalizedMeshResult = ExtractFromCrystal(crystal);
-        else if (ItemExtensions.TryGetDynaObjectModel(item, out var dynaModel))
-            normalizedMeshResult = ExtractFromDynaModel(dynaModel);
-        else if (ItemExtensions.TryGetStaticObjectModel(item, out var staticModel))
-            normalizedMeshResult = ExtractFromStaticModel(staticModel);
-        // needs to be last because could cover static object model
-        //else if (ItemExtensions.TryGetSolid2Model(item, out var solid2Model))
-        //    normalizedMeshResult = ExtractFromSolid2Model(solid2Model);
-
-        if (normalizedMeshResult.IsSuccess)
         {
-            ToolResult<NormalizedSubmesh>? subMeshResult = null!;
-            if (ItemExtensions.TryGetTriggerSpecial(item, out var triggerSpecial))
+            var extractionResult = ExtractFromCrystal(crystal);
+            if(extractionResult.IsFailure)
+                return ToolResult.Fail(extractionResult);
+            foreach(var group in extractionResult.Value.Where(g=>g.group.GroupType == GroupType.Trigger_Waypoint))
             {
-                subMeshResult = ExtractFromTriggerSpecial(triggerSpecial);
+                group.group.WaypointType = item.WaypointType;
             }
-            else if (ItemExtensions.TryGetTriggerWaypoint(item, out var triggerWaypoint))
-            {
-                subMeshResult = ExtractFromTriggerWaypoint(triggerWaypoint);
-            }
-            else if (item.EntityModel is not null && 
-                item.EntityModel is CGameCommonItemEntityModel commonItemEntityModel && 
-                commonItemEntityModel.TriggerShape is not null &&
-                commonItemEntityModel.TriggerShape is CPlugSurface surf)
-            {
-                subMeshResult = ExtractFromSurface(surf);
-                subMeshResult.Value.Value.Type = SubmeshType.Trigger_Special;
-            }
-            if(subMeshResult.HasValue)
-                normalizedMeshResult.Value.Submeshes = [.. normalizedMeshResult.Value.Submeshes, subMeshResult.Value.Value];
-
-            normalizedMeshResult.Value.PlacementParam = item.DefaultPlacement;
-            normalizedMeshResult.Value.IconWebP = item.IconWebP;
-            normalizedMeshResult.Value.Icon = item.Icon;
-            return normalizedMeshResult;
+          
+            groupResults.AddRange(extractionResult.Value);
+        }
+        else if (ItemExtensions.TryGetPrefab(item, out var prefab))
+        {
+            var prefabExtractionResult = ExtractFromPrefab(prefab);
+            if (prefabExtractionResult.IsFailure)
+                return ToolResult.Fail(prefabExtractionResult);
+            groupResults.AddRange(prefabExtractionResult.Value);
+        }
+        else if (ItemExtensions.TryGetCommonItemEntityModel(item, out var commonEntityModel))
+        {
+            var commonEntityModelExtractionResult = ExtractFromCommonEntityModel(commonEntityModel, item.WaypointType != CGameItemModel.EWaypointType.None);
+            if (commonEntityModelExtractionResult.IsFailure)
+                return ToolResult.Fail(commonEntityModelExtractionResult);
+            groupResults.AddRange(commonEntityModelExtractionResult.Value);
+        }
+        else if(ItemExtensions.TryGetVariantList(item, out var variantList))
+        {
+            var variantResult = ExtractFromVariantList(variantList);
+            if (variantResult.IsFailure)
+                return ToolResult.Fail(variantResult);
+            groupResults.AddRange(variantResult.Value.Item1);
+            variantGroups.AddRange(variantResult.Value.Item2);
+        }
+        else
+        {
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedMesh);
         }
 
-        return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedMesh);
+        var normalizedItem = new NormalizedItem();
+
+        List<NormalizedMesh> allMeshes = [];
+        List<MeshGroup> allGroups = [];
+        List<NormalizedLight> allLights = [];
+
+        for (int i = 0; i < groupResults.Count; i++)
+        {
+            var (meshes, lights, group) = groupResults[i];
+            var groupIndex = allGroups.Count;
+            allGroups.Add(group);
+            foreach (var mesh in meshes)
+            {
+                mesh.GroupIndex = groupIndex;
+            }
+            foreach (var light in lights)
+            {
+                light.GroupIndex = groupIndex;
+            }
+            allMeshes.AddRange(meshes);
+            allLights.AddRange(lights);
+        }
+
+        normalizedItem.Meshes = allMeshes.ToArray();
+        normalizedItem.Groups = allGroups.ToArray();
+        normalizedItem.Lights = allLights.ToArray();
+        normalizedItem.VariantGroups = variantGroups.ToArray();
+
+        ExtractItemMetaData(item, normalizedItem);
+
+        return ToolResult.Success(normalizedItem, nameof(MeshExtractor));
+    }
+    void ExtractItemMetaData(CGameItemModel item, NormalizedItem normalizedItem)
+    {
+        normalizedItem.PlacementParam = item.DefaultPlacement;
+        normalizedItem.IconWebP = item.IconWebP;
+        normalizedItem.Icon = item.Icon;
+        normalizedItem.Name = item.Name;
+        normalizedItem.Description = item.Description;
     }
 
-    public ToolResult<NormalizedMesh> ExtractFromCrystal(CPlugCrystal crystal)
+    public ToolResult<(NormalizedMesh[] mesh, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromPrefab(CPlugPrefab prefab, Vector3? parentPosition = null, Quaternion? parentRotation = null, List<MeshGroup> dynaMeshGroups = null)
     {
+        List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> meshGroups = [];
+        if (dynaMeshGroups is null)
+            dynaMeshGroups = [];
+        foreach (var ent in prefab.Ents)
+        {
+            var position = ent.Position.ToVector3();
+            var rotation = new Quaternion(ent.Rotation.X, ent.Rotation.Y, ent.Rotation.Z, ent.Rotation.W);
+            var worldRotation = parentRotation.HasValue ? rotation * parentRotation.Value : rotation;
+            var worldPosition = parentPosition.HasValue ? Vector3.Transform(position, parentRotation!.Value) + parentPosition.Value : position;
+            switch (ent.Model)
+            {
+                case CPlugStaticObjectModel staticObjectModel:
+                    var staticResult = ExtractMeshesFromStaticObjectModel(staticObjectModel);
+                    if(staticResult.IsFailure)
+                        return ToolResult.Fail(staticResult);
+                    meshGroups.Add(staticResult.Value);
+                    break;
+                case CPlugDynaObjectModel dynaObjectModel:
+                    var dynaResult = ExtractFromDynaObjectModel(dynaObjectModel);
+                    if(dynaResult.IsFailure)
+                        return ToolResult.Fail(dynaResult);
+                    dynaResult.Value.group.DynaObjectModelParams = ent.Params as NPlugDynaObjectModel_SInstanceParams;
+                    meshGroups.Add(dynaResult.Value);
+                    dynaMeshGroups.Add(dynaResult.Value.group);
+                    break;
+                case NPlugTrigger_SSpecial triggerSpecial:
+                    var triggerResult = ExtractFromTriggerSpecial(triggerSpecial, out var triggerGameplayId, out var triggerGameplayDir);
+                    if (triggerResult.IsFailure)
+                        return ToolResult.Fail(triggerResult);
+                    meshGroups.Add(([triggerResult.Value], [], new MeshGroup() 
+                    { 
+                        Position = worldPosition, 
+                        Rotation = worldRotation, 
+                        GroupType = GroupType.Trigger_Special, 
+                        TriggerGameplayId = triggerGameplayId, 
+                        GameplayMainDir =  triggerGameplayDir,
+                        }));
+                    break;
+                case NPlugTrigger_SWaypoint triggerWaypoint:
+                    var waypointResult = ExtractFromTriggerWaypoint(triggerWaypoint, out var waypointType, out var noRespawn, out var cpGameplayDir);
+                    if (waypointResult.IsFailure)
+                        return ToolResult.Fail(waypointResult);
+                    meshGroups.Add(([waypointResult.Value], [], new MeshGroup() 
+                    { 
+                        Position = worldPosition, 
+                        Rotation = worldRotation, 
+                        GroupType = GroupType.Trigger_Waypoint,
+                        WaypointType = (EWaypointType?)waypointType,
+                        GameplayMainDir = cpGameplayDir,
+                        WaypointNoRespawn =  noRespawn }));
+                    break;
+                case CPlugPrefab nestedPrefab:
+                    var nestedResult = ExtractFromPrefab(nestedPrefab, worldPosition, worldRotation, dynaMeshGroups);
+                    if (nestedResult.IsFailure)
+                        return ToolResult.Fail(nestedResult);
+                    meshGroups.AddRange(nestedResult.Value);
+                    break;
+                case NPlugDyna_SKinematicConstraint kinematicConstraint:
+                    var constraintParams = ent.Params as NPlugDyna_SPrefabConstraintParams;
+                    var targetEnt = constraintParams.Ent2;
 
-        var submeshes = new List<NormalizedSubmesh>();
+                    if(targetEnt >= dynaMeshGroups.Count)
+                        return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingDynaModel);
+                    var targetMeshGroup = dynaMeshGroups[targetEnt];
+                    targetMeshGroup.KinematicConstraint = kinematicConstraint;
+                    targetMeshGroup.RelativeMovingParentIndex = constraintParams.Ent1 >= 0 ? constraintParams.Ent1 : (int?)null;
+                    break;
+                default:
+                    return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedPrefabEntity, ent);
+            }
+        }
+        return ToolResult.Success(meshGroups.ToArray(), nameof(MeshExtractor));
+    }
+
+    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractMeshesFromStaticObjectModel(CPlugStaticObjectModel staticObjectModel)
+    {
+        if (staticObjectModel.Mesh is null)
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+        var meshResult = ExtractFromSolid2Model(staticObjectModel.Mesh, meshIsCollisionSource: staticObjectModel.IsMeshCollidable);
+        if(meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+        meshResult.Value.group.GroupType = GroupType.StaticObject;
+
+        if(staticObjectModel.Shape is null)
+            return meshResult;
+        var shapeResult = ExtractFromSurface(staticObjectModel.Shape, out _);
+        if(shapeResult.IsFailure)
+            return ToolResult.Fail(shapeResult);
+        shapeResult.Value.Type = MeshType.Static_Shape;
+        shapeResult.Value.Properties |= MeshProperties.Collidable;
+
+        return ToolResult.Success(meshResult.Value with { meshes = [..meshResult.Value.meshes, shapeResult.Value] }, nameof(MeshExtractor));
+    }
+    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractFromDynaObjectModel(CPlugDynaObjectModel dynaObjectModel)
+    {
+        (NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group) result;
+        if (dynaObjectModel.Mesh is null)
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+
+        var meshResult = ExtractFromSolid2Model(dynaObjectModel.Mesh, meshIsCollisionSource: false);
+        if (meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+        result = meshResult.Value;
+        result.group.GroupType = GroupType.DynaObject;
+        if (dynaObjectModel.StaticShape is not null)
+        {
+            var staticShapeResult = ExtractFromSurface(dynaObjectModel.StaticShape, out _);
+            if (staticShapeResult.IsFailure)
+                return ToolResult.Fail(staticShapeResult);
+            staticShapeResult.Value.Type = MeshType.Static_Shape;
+            staticShapeResult.Value.Properties |= MeshProperties.Collidable;
+            result = result with { meshes = [.. result.meshes, staticShapeResult.Value] };
+        }
+        if (dynaObjectModel.DynaShape is not null)
+        {
+            var dynaShapeResult = ExtractFromSurface(dynaObjectModel.DynaShape, out _);
+            if (dynaShapeResult.IsFailure)
+                return ToolResult.Fail(dynaShapeResult);
+            dynaShapeResult.Value.Type = MeshType.Dyna_Shape;
+            dynaShapeResult.Value.Properties |= MeshProperties.Collidable;
+            result = result with { meshes = [.. result.meshes, dynaShapeResult.Value] };
+        }
+
+        return ToolResult.Success(result, nameof(MeshExtractor));
+    }
+
+    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractFromSolid2Model(CPlugSolid2Model solid2Model, bool meshIsCollisionSource = false)
+    {
+        var meshes = new List<NormalizedMesh>();
+        var lights = new List<NormalizedLight>();
+
+        bool hasLods = solid2Model.LodMaxDistAtFov90?.Length > 0;
+        foreach (var shaded in solid2Model.ShadedGeoms)
+        {
+            var visual = solid2Model.Visuals[shaded.VisualIndex];
+            if (visual is not CPlugVisualIndexedTriangles vit)
+                continue;
+
+            var subMeshResult = ExtractFromVisual(vit, solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst);
+            if (subMeshResult.IsFailure)
+                return ToolResult.Fail(subMeshResult);
+            if (!meshIsCollisionSource)
+                subMeshResult.Value.Properties &= ~MeshProperties.Collidable;
+            if (hasLods)
+            {
+                if (!LODUtils.IsVisibleInAllLods(shaded.LodMask, solid2Model.LodMaxDistAtFov90!.Length)) // check if has any lod or always visible
+                {
+                    subMeshResult.Value.Properties |= MeshProperties.LOD;
+                }
+                subMeshResult.Value.LODMask = shaded.LodMask;
+            }
+            subMeshResult.Value.PreLightGenerator = solid2Model.PreLightGenerator;
+            meshes.Add(subMeshResult.Value);
+        }
+
+        if (solid2Model.LightInsts?.Length > 0) 
+        {
+            var (skel, sockets) = ParseSkel(solid2Model.Skel);
+            foreach (var light in solid2Model.LightInsts)
+            {
+                var model = solid2Model.LightUserModels[light.ModelIndex];
+                var socket = sockets[light.SocketIndex];
+
+                var normalizedLight = ExtractFromLight(model, socket, $"Light_{light.ModelIndex}");
+                lights.Add(normalizedLight);
+            }
+        }
+
+        return ToolResult.Success((meshes.ToArray(), lights.ToArray(), new MeshGroup { LODDistances = solid2Model.LodMaxDistAtFov90 ?? [] }), nameof(MeshExtractor));
+    }
+
+    (CPlugSkel skel, Socket[] sockets) ParseSkel(CPlugSkel skel)
+    {
+        var socketField = typeof(CPlugSkel).GetField("sockets",
+         BindingFlags.NonPublic | BindingFlags.Instance);
+        var sockets = (Socket[])socketField?.GetValue(skel);
+
+        return (skel, sockets);
+    }
+    NormalizedLight ExtractFromLight(CPlugLightUserModel model, Socket socket, string name)
+    {
+        socket.U02.Deconstruct(out var rot, out var xyz);
+        var m = new Matrix4x4(
+            rot.XX, rot.XY, rot.XZ, 0,
+            rot.YX, rot.YY, rot.YZ, 0,
+            rot.ZX, rot.ZY, rot.ZZ, 0,
+            0, 0, 0, 1);
+        var normalizedLight = new NormalizedLight
+        {
+            Position = xyz,
+            Rotation = Quaternion.CreateFromRotationMatrix(m),
+            LightModel = ObjectCloner.DeepCloneObject(model),
+            Name = name
+        };
+        return normalizedLight;
+    }
+
+    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromCrystal(CPlugCrystal crystal)
+    {
+        List<NormalizedMesh> geometryGroup= [];
+        List<NormalizedMesh> triggerGroups = [];
+        CPlugSpawnModel? spawnModel = null;
+        List<int> smoothingGroups = crystal.GetChunk<CPlugCrystal.Chunk09003007>()?.U01?.ToList() ?? new List<int>();
+        int firstSmoothingGroupIdx = 0;
 
         foreach (var layer in crystal.Layers)
         {
@@ -72,29 +323,31 @@ public class MeshExtractor
                 List<Vec2> texCoords,
                 List<Vec2> lightmapCoords,
                 List<int> indices,
-                SubmeshType type,
+                MeshType type,
                 bool collidable,
-                Dictionary<(Vec3, Vec2, Vec2), int> weldMap)>();
+                Dictionary<(Vec3, Vec2, Vec2), int> weldMap,
+                int smoothingGroup)>();
 
-            SubmeshProperties properties = SubmeshProperties.None;
+            MeshProperties properties = MeshProperties.None;
 
+           
             switch (layer)
             {
                 case CPlugCrystal.GeometryLayer geo:
                     {
                         var sourcePositions = geo.Crystal.Positions;
                         if(geo.IsEnabled)
-                            properties |= SubmeshProperties.Enabled;
+                            properties |= MeshProperties.Enabled;
                         if(geo.IsVisible)
-                            properties |= SubmeshProperties.Visible;
+                            properties |= MeshProperties.Visible;
                         if(geo.Collidable)
-                            properties |= SubmeshProperties.Collidable;
+                            properties |= MeshProperties.Collidable;
                         foreach (var face in geo.Crystal.Faces)
                         {
                             var mat = face.Material.MaterialUserInst;
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, []);
+                                bucket = (new(), new(), new(), new(), new(), MeshType.Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, [], 0);
                                 buckets[mat] = bucket;
                             }
 
@@ -114,25 +367,27 @@ public class MeshExtractor
                                         bucket.texCoords.Add(corner.TexCoord);
                                         bucket.lightmapCoords.Add(corner.LightmapCoord);
                                         bucket.normals.Add(Vec3.Zero);
+                                        bucket.smoothingGroup = smoothingGroups[firstSmoothingGroupIdx];
                                     }
                                     bucket.indices.Add(dst);
                                 }
                             }
                         }
+                        firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
                     }
                     break;
                 case CPlugCrystal.TriggerLayer trigger:
                     {
                         var sourcePositions = trigger.Crystal.Positions;
                         if (trigger.IsEnabled)
-                            properties |= SubmeshProperties.Enabled;
+                            properties |= MeshProperties.Enabled;
                         foreach (var face in trigger.Crystal.Faces)
                         {
                             var mat = face.Material.MaterialUserInst;
 
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), SubmeshType.Trigger_Waypoint, false, []);
+                                bucket = (new(), new(), new(), new(), new(), MeshType.Trigger_Waypoint, false, [], -1);
                                 buckets[mat] = bucket;
                             }
 
@@ -164,6 +419,15 @@ public class MeshExtractor
                         }
                     }
                     break;
+                case CPlugCrystal.SpawnPositionLayer spawn:
+                    {
+                        if (!spawn.IsEnabled)
+                            continue;
+                        spawnModel = MeshBuilder.CreateSpawnModel();
+                        var position = spawn.SpawnPosition.ToVector3();
+                        spawnModel.Loc = MeshBuilder.IsoFromPitchYawRoll(position, spawn.VerticalAngle, spawn.HorizontalAngle, spawn.RollAngle);
+                    }
+                    break;
                 default:
                     continue;
             }
@@ -171,14 +435,13 @@ public class MeshExtractor
             // concatenate buckets into final index buffer, recording submesh ranges
             var indices = new List<int>();
 
-
             foreach (var (mat, bucket) in buckets)
             {
                 var posArr = bucket.positions.ToArray();
                 var idxArr = bucket.indices.ToArray();
                 var nrmArr = ComputeSmoothNormals(posArr, idxArr);
-                
-                submeshes.Add(new NormalizedSubmesh
+          
+                var mesh = new NormalizedMesh
                 {
                     Positions = posArr,
                     Normals = nrmArr,
@@ -190,53 +453,96 @@ public class MeshExtractor
                     Type = bucket.type,
                     Properties = properties,
                     Name = MatToName(mat),
-                });
+                    SmoothingGroup = bucket.smoothingGroup,
+                };
+                if (bucket.type == MeshType.Trigger_Waypoint)
+                    triggerGroups.Add(mesh);
+                else
+                    geometryGroup.Add(mesh);
             }
         }
-
-        return ToolResult.Success(new NormalizedMesh
+        List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupedMeshes = [(geometryGroup.ToArray(), [], new MeshGroup() { GroupType = GroupType.StaticObject })];
+        groupedMeshes.AddRange(triggerGroups.Select(m => (new[] { m }, new NormalizedLight[0], new MeshGroup() { GroupType = GroupType.Trigger_Waypoint })));
+        if (spawnModel != null)
         {
-            Submeshes = submeshes.ToArray(),
-            SourceData = crystal
-        }, nameof(MeshExtractor));
-    }
+            var group = groupedMeshes.LastOrDefault(g => g.group.GroupType == GroupType.Trigger_Waypoint);
+            if(group != default)
+                group.group.WaypointSpawnModel = spawnModel;
+        }
 
-    public ToolResult<NormalizedMesh> ExtractFromSolid2Model(CPlugSolid2Model solid2Model, bool meshIsCollisionSource = false)
+        return ToolResult.Success(groupedMeshes.ToArray(), nameof(MeshExtractor));
+    }
+    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromCommonEntityModel(CGameCommonItemEntityModel commonEntityModel, bool isWaypoint)
     {
-        var submeshes = new List<NormalizedSubmesh>();
+        List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> results = [];
 
-        bool hasLods = solid2Model.LodMaxDistAtFov90?.Length > 0;
-        foreach (var shaded in solid2Model.ShadedGeoms)
-        {
-            var visual = solid2Model.Visuals[shaded.VisualIndex];
-            if (visual is not CPlugVisualIndexedTriangles vit)
-                continue;
-            
-            var subMeshResult = ExtractFromVisual(vit, solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst);
-            if (subMeshResult.IsFailure)
-                return ToolResult.Fail(subMeshResult);
-            if(!meshIsCollisionSource)
-                subMeshResult.Value.Properties &= ~SubmeshProperties.Collidable;
-            if(hasLods)
-            {
-                if(!NormalizedMesh.IsVisibleInAllLods(shaded.LodMask, solid2Model.LodMaxDistAtFov90!.Length)) // check if has any lod or always visible
-                {
-                    subMeshResult.Value.Properties |= SubmeshProperties.LOD;
-                }
-                subMeshResult.Value.LODMask = shaded.LodMask;
-            }
-            submeshes.Add(subMeshResult.Value);
-        }
+        if (commonEntityModel.StaticObject is null)
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
+        var meshResult = ExtractMeshesFromStaticObjectModel(commonEntityModel.StaticObject);
+        if (meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+        meshResult.Value.group.GroupType = GroupType.StaticObject;
+        results.Add(meshResult.Value);
 
-        return ToolResult.Success(new NormalizedMesh
-        {
-            Submeshes = submeshes.ToArray(),
-            SourceData = solid2Model,
-            LODDistances = solid2Model.LodMaxDistAtFov90 ?? []
-        }, nameof(MeshExtractor));
+        if (commonEntityModel.TriggerShape is null || commonEntityModel.TriggerShape is not CPlugSurface triggerSurf)
+            return ToolResult.Success(results.ToArray(), nameof(MeshExtractor));
+
+        var shapeResult = ExtractFromSurface(triggerSurf, out var gameplayDir);
+        if (shapeResult.IsFailure)
+            return ToolResult.Fail(shapeResult);
+        shapeResult.Value.Type = isWaypoint ? MeshType.Trigger_Waypoint : MeshType.Trigger_Special;
+
+        results.Add(([shapeResult.Value], [], new MeshGroup() { GroupType = isWaypoint ? GroupType.Trigger_Waypoint : GroupType.Trigger_Special, GameplayMainDir = gameplayDir }));
+        return ToolResult.Success(results.ToArray(), nameof(MeshExtractor));
     }
 
-    public ToolResult<NormalizedSubmesh> ExtractFromVisual(CPlugVisualIndexedTriangles visual, CPlugMaterialUserInst material)
+    public ToolResult<((NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[], VariantGroup[])> ExtractFromVariantList(NPlugItem_SVariantList variantList)
+    {
+        List<VariantGroup> variants = [];
+        List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
+        foreach(var variant in variantList.Variants)
+        {
+            var variantGroup = new VariantGroup()
+            {
+                Tags = variant.Tags.ToDictionary(),
+                HiddenInManualCycle = variant.HiddenInManualCycle
+            };
+            variants.Add(variantGroup);
+
+            switch (variant.EntityModel)
+            {
+                case CPlugPrefab prefab:
+                    var prefabResult = ExtractFromPrefab(prefab);
+                    if (prefabResult.IsFailure)
+                        return ToolResult.Fail(prefabResult);
+                    foreach(var v in prefabResult.Value)
+                    {
+                        v.group.VariantIndex = variants.Count;
+                    }
+                    groupResults.AddRange(prefabResult.Value);
+                    break;
+                case CPlugStaticObjectModel staticObjectModel:
+                    var staticResult = ExtractMeshesFromStaticObjectModel(staticObjectModel);
+                    if (staticResult.IsFailure)
+                        return ToolResult.Fail(staticResult);
+                    staticResult.Value.group.VariantIndex = variants.Count;
+                    groupResults.AddRange(staticResult.Value);
+                    break;
+                case CPlugDynaObjectModel dynaObjectModel:
+                    var dynaResult = ExtractFromDynaObjectModel(dynaObjectModel);
+                    if (dynaResult.IsFailure)
+                        return ToolResult.Fail(dynaResult);
+                    dynaResult.Value.group.VariantIndex = variants.Count;
+                    groupResults.AddRange(dynaResult.Value);
+                    break;
+                default:
+                    return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedMesh, variant.EntityModel);
+            }
+        }
+        return ToolResult.Success((groupResults.ToArray(), variants.ToArray()), nameof(MeshExtractor));
+    }
+
+    public ToolResult<NormalizedMesh> ExtractFromVisual(CPlugVisualIndexedTriangles visual, CPlugMaterialUserInst material)
     {
         var stream = visual.VertexStreams[0];
 
@@ -248,117 +554,97 @@ public class MeshExtractor
           BindingFlags.NonPublic | BindingFlags.Instance);
         var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
 
-        var properties = SubmeshProperties.Enabled | SubmeshProperties.Visible;
+        var properties = MeshProperties.Enabled | MeshProperties.Visible;
         if(material.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable)
-            properties |= SubmeshProperties.Collidable;
-        var mesh = new NormalizedSubmesh
+            properties |= MeshProperties.Collidable;
+
+        Vec2[]? texCoords = null;
+        Vec2[]? lightmapCoords = null;
+
+        bool hasUv0 = stream.UVs.TryGetValue(0, out var uv0);
+        bool hasUv1 = stream.UVs.TryGetValue(1, out var uv1);
+        if (material.Color is null || material.Color.Length == 0)
+        {
+            if(hasUv0)
+                texCoords = uv0;
+            if(hasUv1)
+                lightmapCoords = uv1;
+        }
+        else
+        {
+            if (hasUv0 && hasUv1)
+            {
+                texCoords = uv0;
+                lightmapCoords = uv1;
+            }
+            else
+            {
+                if (hasUv0)
+                    lightmapCoords = uv0;
+            }
+            
+        }
+        var mesh = new NormalizedMesh
         {
             Positions = stream.Positions,
             Normals = stream.Normals,
-            TexCoords = stream.UVs.TryGetValue(0, out var uv0) ? uv0 : null,
-            LightmapCoords = stream.UVs.TryGetValue(1, out var uv1) ? uv1 : null,
+            TexCoords = texCoords,
+            LightmapCoords = lightmapCoords,
             Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
             Indices = visual.IndexBuffer.Indices,
             Material = material,
             TangentUs = tangentsUs,
             TangentVs = tangentVs,
-            Type = SubmeshType.Mesh,
+            Type = MeshType.Mesh,
             Properties = properties,
             Name = MatToName(material)
         };
         return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
 
-    public ToolResult<NormalizedMesh> ExtractFromDynaModel(CPlugDynaObjectModel dynaObjectModel)
-    {
-        NormalizedMesh mesh = null!;
-        if (dynaObjectModel.Mesh is not null)
-        {
-            var result = ExtractFromSolid2Model(dynaObjectModel.Mesh, meshIsCollisionSource: false);
-            if (result.IsFailure)
-                ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
-            mesh = result.Value;
-        }
 
-        if (dynaObjectModel.StaticShape is not null)
-        {
-            var result = ExtractFromSurface(dynaObjectModel.StaticShape);
-            if (result.IsFailure)
-                return ToolResult.Fail(result);
-            result.Value.Type = SubmeshType.Static_Shape;
-            result.Value.Properties |= SubmeshProperties.Collidable;
-            mesh.Submeshes = [.. mesh.Submeshes, result.Value];
-        }
-        if (dynaObjectModel.DynaShape is not null)
-        {
-            var result = ExtractFromSurface(dynaObjectModel.DynaShape);
-            if (result.IsFailure)
-                return ToolResult.Fail(result);
-            result.Value.Type = SubmeshType.Dyna_Shape;
-            result.Value.Properties |= SubmeshProperties.Collidable;
-            mesh.Submeshes = [.. mesh.Submeshes, result.Value];
-        }
-    
-        return ToolResult.Success(mesh, nameof(MeshExtractor));
-    }
-    public ToolResult<NormalizedMesh> ExtractFromStaticModel(CPlugStaticObjectModel staticObjectModel)
-    {
-        // surfaces (DynaShape/StaticShape) are intentionally ignored here —
-        // they will be generated separately from NormalizedMesh when writing the item
-        if (staticObjectModel.Mesh is not null)
-        {
-            var result = ExtractFromSolid2Model(staticObjectModel.Mesh, meshIsCollisionSource: staticObjectModel.IsMeshCollidable);
-            if(result.IsFailure)
-                return result;
-         
-            if (staticObjectModel.Shape == null)
-                return result;
-            var shapeResult = ExtractFromSurface(staticObjectModel.Shape);
-            if (shapeResult.IsSuccess)
-            {
-                shapeResult.Value.Type = SubmeshType.Static_Shape;
-                shapeResult.Value.Properties |= SubmeshProperties.Collidable;
-                result.Value.Submeshes = [.. result.Value.Submeshes, shapeResult.Value];
-            }
-            return result;
-        }
-        else
-            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
-    }
-
-    public ToolResult<NormalizedSubmesh> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial)
+    public ToolResult<NormalizedMesh> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial, out LegacyGameplayId triggerGameplayId, out Vec3 gameplayMainDir)
     {
         var triggerShape = triggerSpecial.GetTriggerShape();
-        if(triggerShape == null)
-            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
-        var result = ExtractFromSurface(triggerShape);
-        if(result.IsFailure)
-            return ToolResult.Fail(result);
-        result.Value.Type = SubmeshType.Trigger_Special;
-        return result;
-    }
-    public ToolResult<NormalizedSubmesh> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint)
-    {
-        var triggerShape = triggerWaypoint.GetTriggerShape();
+        triggerGameplayId = LegacyGameplayId.None;
+        gameplayMainDir = Vec3.Zero;
         if (triggerShape == null)
             return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
-        var result = ExtractFromSurface(triggerShape);
-        if (result.IsFailure)
+        var result = ExtractFromSurface(triggerShape, out gameplayMainDir);
+        if(result.IsFailure)
             return ToolResult.Fail(result);
-        result.Value.Type = SubmeshType.Trigger_Waypoint;
-        //TODO: waypoint type
+        result.Value.Type = MeshType.Trigger_Special;
+        ushort gamplayIdShort = triggerShape.GetChunk<CPlugSurface.Chunk0900C003>()?.U02?.FirstOrDefault() ?? 0;
+        triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
         return result;
     }
-    public ToolResult<NormalizedSubmesh> ExtractFromSurface(CPlugSurface surface)
+    public ToolResult<NormalizedMesh> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint, out EGameItemWaypointType waypointType, out bool noRespawn, out Vec3 gameplayMainDir)
     {
-        var mesh = new NormalizedSubmesh();
+        var triggerShape = triggerWaypoint.GetTriggerShape();
+        waypointType = EGameItemWaypointType.None;
+        noRespawn = false;
+        gameplayMainDir = Vec3.Zero;
+        if (triggerShape == null)
+            return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
+        var result = ExtractFromSurface(triggerShape, out gameplayMainDir);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+        result.Value.Type = MeshType.Trigger_Waypoint;
+        waypointType = triggerWaypoint.Type;
+        noRespawn = triggerWaypoint.NoRespawn;
+        return result;
+    }
+    public ToolResult<NormalizedMesh> ExtractFromSurface(CPlugSurface surface, out Vec3 gameplayMainDir)
+    {
+        var mesh = new NormalizedMesh();
         var surf = surface.Surf as CPlugSurface.Mesh;
+        gameplayMainDir = surf?.GameplayMainDir ?? new Vec3(0, 0, 1);
         mesh.Positions = surf?.Vertices.ToArray();
         mesh.Indices = surf?.Triangles.SelectMany(t => new[] { t.Indices.X, t.Indices.Y, t.Indices.Z }).ToArray();
         mesh.Material = CreateErrorMat();
-        mesh.SurfaceMaterialIds = surf.Triangles.Select(t => (MaterialId)t.U02).ToArray();
+        mesh.SurfaceMaterialIds = surf?.Triangles.Select(t => (MaterialId)t.U02).ToArray();
         mesh.Name = MatToName(mesh.Material);
-        mesh.Properties = SubmeshProperties.Enabled;
+        mesh.Properties = MeshProperties.Enabled;
         return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
 

@@ -207,7 +207,34 @@ public static class ItemExtensions
         }
         return entRef != null;
     }
+    public static bool TryGetCommonItemEntityModel(this CGameItemModel item, out CGameCommonItemEntityModel commonItemEntityModel)
+    {
+        commonItemEntityModel = null;
+        if (item.EntityModel is CGameCommonItemEntityModel c)
+        {
+            commonItemEntityModel = c;
+        }
+        return commonItemEntityModel != null;
+    }
+    public static bool TryGetPrefab(this CGameItemModel item, out CPlugPrefab prefab)
+    {
+        prefab = null;
+        if (item.EntityModel is CPlugPrefab p)
+        {
+            prefab = p;
+        }
+        return prefab != null;
+    }
 
+    public static bool TryGetVariantList(this CGameItemModel item, out NPlugItem_SVariantList variantList)
+    {
+        variantList = null;
+        if (item.EntityModel is NPlugItem_SVariantList list)
+        {
+            variantList = list;
+        }
+        return variantList != null;
+    }
     static void ShallowCloneAllFields(object source, object target)
     {
         var currentType = source.GetType();
@@ -236,6 +263,7 @@ public static class ItemExtensions
         }
         return shell;
     }
+
 
 
 

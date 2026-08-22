@@ -5,6 +5,7 @@
 - [GBX.NET](https://github.com/BigBang1112/gbx-net) - MIT License
 - [GBX.NET.LZO](https://github.com/BigBang1112/gbx-net) - GNU GPL v3
 - [ImageSharp](https://github.com/SixLabors/ImageSharp) - Apache License 2.0
+- [AssimpNET](https://bitbucket.org/Starnick/assimpnet) - MIT License
 
 ## License
 

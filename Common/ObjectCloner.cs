@@ -90,7 +90,7 @@ public static class ObjectCloner
 
             // CopyAllFields already copied the Chunks backing fields (source refs),
             // so wipe it clean before adding the deep-cloned versions
-            clone.Chunks.Clear();
+            clone.Chunks?.Clear();
 
             foreach (var chunk in nod.Chunks)
             {

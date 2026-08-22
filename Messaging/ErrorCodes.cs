@@ -7,12 +7,15 @@ public static class ErrorCodes
         public const string UnsupportedMesh = "MeshExtractor.UnsupportedMesh";
         public const string MissingMesh = "MeshExtractor.MissingMesh";
         public const string MissingTriggerShape = "MeshExtractor.MissingTriggerShape";
+        public const string MissingDynaModel = "MeshExtractor.MissingDynaModel";
+        public const string UnsupportedPrefabEntity = "MeshExtractor.UnsupportedPrefabEntity";
     }
     public static class MeshBuilder
     {
         public const string MissingTrigger = "MeshBuilder.MissingTrigger";
         public const string MissingDynaShape = "MeshBuilder.MissingDynaShape";
         public const string MissingStaticShape = "MeshBuilder.MissingStaticShape";
+        public const string UnsupportedType = "MeshBuilder.UnsupportedType";
     }
     public static class MovingItemCreator
     {
@@ -42,4 +45,20 @@ public static class ErrorCodes
     {
         public const string MissingTriggerSpecial = "ItemEffectVariantCreator.MissingTriggerSpecial";
     }
+
+    public static class FbxGbxConverter
+    {
+        public const string FbxParsingError = "FbxGbxConverter.FbxParsingError";
+        public const string InvalidItemOutputPath = "FbxGbxConverter.InvalidItemOutputPath";
+        public const string MissingMaterialConfig = "FbxGbxConverter.MissingMaterialConfig";
+        public const string MissingMeshConfig = "FbxGbxConverter.MissingMeshConfig";
+        public const string MissingLightConfig = "FbxGbxConverter.MissingLightConfig";
+        public const string MultipleSocketsNotSupported = "FbxGbxConverter.MultipleSocketsNotSupported";
+        public const string MissingStaticMeshGroup = "FbxGbxConverter.MissingStaticMeshGroup";
+    }
+    public static class VariantItemBuilder
+    {
+        public const string MissingVariantInputs = "VariantItemBuilder.MissingVariantInputs";
+    }
 }
+

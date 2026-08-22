@@ -21,7 +21,9 @@
 
 
   <ItemGroup>
+    <PackageReference Include="AssimpNet" Version="4.1.0" />
     <PackageReference Include="DirectXTexNet" Version="1.0.7" />
+    <PackageReference Include="Earcut.NET" Version="1.2.0" />
     <PackageReference Include="GBX.NET" Version="2.4.4" />
     <PackageReference Include="GBX.NET.LZO" Version="2.1.6" />
     <PackageReference Include="GBX.NET.ZLib" Version="1.1.2" />
