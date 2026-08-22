@@ -59,8 +59,8 @@ public class MovingItemCreator
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, extractResult);
 
 
-        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(MeshBuilder.BuildOptions.DefaultFromMesh(extractResult.Value));
-        var movingItemResult = _meshBuilder.BuildMovingItem(extractResult.Value, buildSettings);
+        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(MeshBuilder.BuildSettings.DefaultFromMesh(extractResult.Value));
+        var movingItemResult = _meshBuilder.BuildItem(extractResult.Value, buildSettings);
 
         if(movingItemResult.IsFailure)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshBuildingFailed, movingItemResult);
@@ -77,21 +77,26 @@ public class MovingItemCreator
         return ToolResult.Success(movingItem, nameof(MovingItemCreator));
 
     }
-    MeshBuilder.BuildOptions CreateDefaultBuildOptions(MeshBuilder.BuildOptions defaultOptions)
+    MeshBuilder.BuildSettings CreateDefaultBuildOptions(MeshBuilder.BuildSettings defaultOptions)
     {
-        if(defaultOptions.StaticShapes.Count == 0)
+        if (!defaultOptions.GroupSettings.Any(gs => gs.Type == GroupType.DynaObject))
+            return defaultOptions;
+        var staticGroups = defaultOptions.GroupSettings.Where(gs => gs.Type == GroupType.StaticObject).ToList();
+        for (int i = 0; i < staticGroups.Count; i++)
         {
-            var collidableGeometry = defaultOptions.Geometries.Where(g => !defaultOptions.NonCollidables.Contains(g));
-            if (collidableGeometry.Count() != 0)
-                defaultOptions.StaticShapes = collidableGeometry.ToHashSet();
-            else
-                defaultOptions.StaticShapes = defaultOptions.Geometries.ToHashSet();
+            var group = staticGroups[i];
+            group.Type = GroupType.DynaObject;
+
+            for (int j = 0; j < defaultOptions.MeshSettings.Count; j++)
+            {
+                var meshSetting = defaultOptions.MeshSettings[j];
+                meshSetting.Movable = true;
+                defaultOptions.MeshSettings[j] = meshSetting;
+            }
+
+            defaultOptions.GroupSettings[i] = group;
         }
-        if(defaultOptions.DynaShapes.Count == 0)
-        {
-            defaultOptions.DynaShapes = defaultOptions.StaticShapes.ToHashSet();
-        }
-            
+        defaultOptions.TargetModel = MeshBuilder.ItemModel.General;
         return defaultOptions;
     }
     void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel template)
