@@ -21,8 +21,28 @@ public static class ItemPlacementUtils
         BorderPlatformWater,
         BorderDecoWall,
         BorderTrackWall,
+        Road,
+        RoadDirt,
+        RoadIce,
+        RoadOpen,
+        RoadWater,
+        RoadSlopeSoft,
+        RoadSlopeHard,
+        RoadBump,
+        RoadTilt,
+        RoadWarp,
+        RoadDirtTilt,
+        RoadDirtWarp,
+        RoadIceWarp,
+        RoadIceTilt,
+        RoadOpenTilt,
+        RoadOpenWarp,
+        RoadNarrowCenter,
+        RoadNarrowLeft,
+        RoadNarrowRight,
         BorderRallyRoadDirt,
-        BorderMultiSize
+        BorderMultiSize,
+
     }
 
     public static void SetItemPlacementClass(CGameItemPlacementParam placementParam, NPlugItemPlacement_SClass placementClass)
