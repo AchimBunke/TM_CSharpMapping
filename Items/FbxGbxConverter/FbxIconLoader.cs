@@ -7,7 +7,7 @@ namespace TM_GenericMapping.Items.FbxGbxConversion;
 internal class FbxIconLoader
 {
 
-    public static GBX.NET.Color[,] LoadIcon(FbxGbxConversionInput config)
+    public static GBX.NET.Color[,]? LoadIcon(FbxGbxConversionInput config)
     {
         if (config.Icon is null)
             return null;

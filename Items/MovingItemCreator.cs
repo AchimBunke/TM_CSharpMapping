@@ -99,7 +99,7 @@ public class MovingItemCreator
         defaultOptions.TargetModel = MeshBuilder.ItemModel.General;
         return defaultOptions;
     }
-    void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel template)
+    void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel? template)
     {
 
         ChunkSafeItemOperations.SetIcon(movingItem, sourceItem.Icon, sourceItem.IconWebP);
@@ -130,9 +130,13 @@ public class MovingItemCreator
     {
         if (_settings.MaterialLinkReplacements.Count == 0)
             return;
-        var dynaModel = ItemExtensions.TryGetDynaObjectModel(item, out var model);
-        foreach(var mat in model.Mesh.CustomMaterials)
+        var hasDynaModel = ItemExtensions.TryGetDynaObjectModel(item, out var model);
+        if (!hasDynaModel)
+            return;
+        foreach (var mat in model!.Mesh!.CustomMaterials ?? [])
         {
+            if(mat.MaterialUserInst!.Link == null)
+                continue;
             if (_settings.MaterialLinkReplacements.TryGetValue(mat.MaterialUserInst.Link, out var replacement))
                 mat.MaterialUserInst.Link = replacement;
         }
@@ -162,10 +166,10 @@ public class MovingItemCreator
         if (_settings.TranslationAnimationCount == null && _settings.RotationAnimationCount == null)
             return;
         ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(movingItem, out var kinematic);
-        if(_settings.TranslationAnimationCount != null)
+        if(_settings.TranslationAnimationCount != null && kinematic?.TransAnimFunc != null)
         {
             int requiredNumSubFuncs = _settings.TranslationAnimationCount.Value;
-            var subFuncs = kinematic.TransAnimFunc.SubFuncs.Take(requiredNumSubFuncs).ToList();
+            var subFuncs = kinematic.TransAnimFunc.SubFuncs?.Take(requiredNumSubFuncs).ToList() ?? [];
             for (int i = subFuncs.Count; i < requiredNumSubFuncs; ++i)
             {
                 subFuncs.Add(new NPlugDyna_SKinematicConstraint.SubAnimFunc()
@@ -177,10 +181,10 @@ public class MovingItemCreator
             }
             kinematic.TransAnimFunc.SubFuncs = subFuncs.ToArray();
         }
-        if (_settings.RotationAnimationCount != null)
+        if (_settings.RotationAnimationCount != null && kinematic?.RotAnimFunc != null)
         {
             int requiredNumSubFuncs = _settings.RotationAnimationCount.Value;
-            var subFuncs = kinematic.RotAnimFunc.SubFuncs.Take(requiredNumSubFuncs).ToList();
+            var subFuncs = kinematic.RotAnimFunc.SubFuncs?.Take(requiredNumSubFuncs).ToList() ?? [];
             for (int i = subFuncs.Count; i < requiredNumSubFuncs; ++i)
             {
                 subFuncs.Add(new NPlugDyna_SKinematicConstraint.SubAnimFunc()

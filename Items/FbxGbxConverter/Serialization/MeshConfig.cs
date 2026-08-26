@@ -20,7 +20,7 @@ public class MaterialConfig
 
 public class MeshConfig
 {
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
     public MeshFlags MeshFlags { get; set; }
     public LegacyGameplayId? TriggerEffect { get; set; } = null;
     public EWaypointType? WaypointType { get; set; } = null;

@@ -101,8 +101,8 @@ public class BlockToMediaObjectConverter
         timeMillis = Math.Clamp(timeMillis, (int)trianglesBlock.Keys[0].Time.TotalMilliseconds, (int)trianglesBlock.Keys.Last().Time.TotalMilliseconds);
 
         var (s,e) = FindSurroundingKeys(trianglesBlock, timeMillis);
-        var startKey = s as CGameCtnMediaBlockTriangles.Key;
-        var endKey = e as CGameCtnMediaBlockTriangles.Key;
+        var startKey = (s as CGameCtnMediaBlockTriangles.Key)!;
+        var endKey = (e as CGameCtnMediaBlockTriangles.Key)!;
         Vector3[] vertices;
 
         if (timeMillis == (int)startKey.Time.TotalMilliseconds)
@@ -148,8 +148,8 @@ public class BlockToMediaObjectConverter
         timeMillis = Math.Clamp(timeMillis, (int)block.Keys[0].Time.TotalMilliseconds, (int)block.Keys.Last().Time.TotalMilliseconds);
 
         var (s, e) = FindSurroundingKeys(block, timeMillis);
-        var startKey = s as CGameCtnMediaBlockTriangles.Key;
-        var endKey = e as CGameCtnMediaBlockTriangles.Key;
+        var startKey = (s as CGameCtnMediaBlockTriangles.Key)!;
+        var endKey = (e as CGameCtnMediaBlockTriangles.Key)!;
         Vector3[] vertices;
 
         if (timeMillis == (int)startKey.Time.TotalMilliseconds)

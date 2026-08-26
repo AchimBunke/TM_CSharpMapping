@@ -499,7 +499,7 @@ public static class GbxObjectComparer
         CustomDifference,
 
     }
-    public record struct Difference(string Path1, string Path2, object? Value1, object Value2, DifferenceType Type)
+    public record struct Difference(string Path1, string Path2, object? Value1, object? Value2, DifferenceType Type)
     {
         public override string ToString() => Type switch
         {
@@ -509,6 +509,7 @@ public static class GbxObjectComparer
             DifferenceType.CollectionDivergence => $"Diverge -> {Path1} != {Path2}: len[{Value1}] != len[{Value2}]",
             DifferenceType.OneIsNull => $"Null -> {Path1} != {Path2}: {Value1} != {Value2}",
             DifferenceType.CustomDifference => $"Custom -> {Path1} != {Path2}: {Value1} != {Value2}",
+            _=> $"Unknown -> {Path1} != {Path2}: {Value1} != {Value2}",
         };
         public string ShortString(int pathLength = 50) => Type switch
         {
@@ -518,6 +519,7 @@ public static class GbxObjectComparer
             DifferenceType.CollectionDivergence => $"Diverge -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: len[{Value1}] != len[{Value2}]",
             DifferenceType.OneIsNull => $"Null -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: {Value1} != {Value2}",
             DifferenceType.CustomDifference => $"Custom -> {Shorten(Path1, pathLength)} != {Shorten(Path2, pathLength)}: {Value1} != {Value2}",
+            _ => $"Unknown -> {Path1} != {Path2}: {Value1} != {Value2}",
         };
         string Shorten(string s, int length) => s.Length <= length ? s : s[^length..];
     }

@@ -14,7 +14,7 @@ public static class BlocksUtils
         /// </summary>
         public Vec3 AbsolutePositionInMapSave
         {
-            get => block.IsFree ? (Vec3)block.AbsolutePositionInMap : BlockPositionToAbsolutePosition(block.Coord, block.Direction);
+            get => block.IsFree ? (Vec3)block.AbsolutePositionInMap! : BlockPositionToAbsolutePosition(block.Coord, block.Direction);
         }
         /// <summary>
         /// Gets YawPitchRoll even if block is not in free mode.

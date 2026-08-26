@@ -60,7 +60,7 @@ public class CustomCameraObject : PositionalCamera
 {
     public CGameCtnMediaBlockCameraCustom.Interpolation Interpolation { get; set; } = CGameCtnMediaBlockCameraCustom.Interpolation.None;
 
-    public CustomCameraObject([NotNull] CustomCameraRenderer renderer = null!) : base(renderer ?? new CustomCameraRenderer())
+    public CustomCameraObject(CustomCameraRenderer? renderer = null) : base(renderer ?? new CustomCameraRenderer())
     {
         Name = "CustomCamera";
     }
@@ -73,7 +73,7 @@ public class CustomCameraObject : PositionalCamera
 public class PathCameraObject : PositionalCamera
 {
     public float Weight { get; set; } = 1f;
-    public PathCameraObject([NotNull] PathCameraRenderer renderer = null!) : base(renderer ?? new PathCameraRenderer())
+    public PathCameraObject(PathCameraRenderer? renderer = null) : base(renderer ?? new PathCameraRenderer())
     {
         Name = "PathCamera";
     }
@@ -93,7 +93,7 @@ public class OrbitalCameraObject : CameraObject, IRenderingCamera
     public float Radius { get; set; }
     public float FOV { get; set; } = 60f;
 
-    public OrbitalCameraObject([NotNull] OrbitalCameraRenderer renderer = null!) : base(renderer ?? new OrbitalCameraRenderer())
+    public OrbitalCameraObject(OrbitalCameraRenderer? renderer = null) : base(renderer ?? new OrbitalCameraRenderer())
     {
         Name = "OrbitalCamera";
     }

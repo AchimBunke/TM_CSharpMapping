@@ -13,7 +13,7 @@ public static class MapFileUtils
 
     public static string SanitizeMapPath(string filePath)
     {
-        string directory = Path.GetDirectoryName(filePath); // Extract directory
+        string directory = Path.GetDirectoryName(filePath)!; // Extract directory
         string fileName = Path.GetFileName(filePath);       // Extract file name
 
         fileName = MapNameToFileName(filePath);

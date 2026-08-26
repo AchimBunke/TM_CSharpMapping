@@ -60,19 +60,19 @@ public class ItemTriggerEffectConverter
 
     static void ConvertEffect(ushort gameplay, NPlugTrigger_SSpecial triggerSpecial)
     {
-        var surface = triggerSpecial.TriggerShape;
-        var chunk = surface.Chunks.Get<CPlugSurface.Chunk0900C003>();
+        var surface = triggerSpecial.TriggerShape!;
+        var chunk = surface.Chunks.Get<CPlugSurface.Chunk0900C003>()!;
         chunk.U02 = [gameplay];
     }
 
     static void ConvertCommonItemEntityModelToCPlugPrefab(CGameItemModel item)
     {   
         var entityModel = item.EntityModel as CGameCommonItemEntityModel;
-        var prefab = GbxTemplateLibrary.CreateTriggerItemTemplate().Value.EntityModel as CPlugPrefab;
-        prefab.Ents[0].Model = entityModel.StaticObject;
-        var triggerSpecial = prefab.Ents[1].Model as NPlugTrigger_SSpecial;
+        var prefab = (GbxTemplateLibrary.CreateTriggerItemTemplate().Value.EntityModel as CPlugPrefab)!;
+        prefab.Ents[0].Model = entityModel!.StaticObject!;
+        var triggerSpecial = (prefab.Ents[1].Model as NPlugTrigger_SSpecial)!;
         triggerSpecial.TriggerShape = entityModel.TriggerShape as CPlugSurface;
         item.EntityModel = prefab;
-        item.Chunks.Get<CGameItemModel.Chunk2E00201F>().U08 = 0; // necessary otherwise error
+        item.Chunks.Get<CGameItemModel.Chunk2E00201F>()!.U08 = 0; // necessary otherwise error
     }
 }

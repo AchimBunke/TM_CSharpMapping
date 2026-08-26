@@ -103,7 +103,7 @@ public static class ToolResult
             ToolId = toolId,
         };
 
-    public static ToolResult<T> Fail<T>(string toolId, string errorCode, object data = null!)
+    public static ToolResult<T> Fail<T>(string toolId, string errorCode, object? data = null)
         => new()
         {
             Outcome = ToolOutcome.Failure,
@@ -111,7 +111,7 @@ public static class ToolResult
             ErrorCode = errorCode,
             Data = data
         };
-    public static ToolFailure Fail(string toolId, string errorCode, object data = null!)
+    public static ToolFailure Fail(string toolId, string errorCode, object? data = null)
         => new ToolFailure
         {
             ToolId = toolId,
@@ -122,7 +122,7 @@ public static class ToolResult
         => new ToolFailure
         {
             ToolId = toolResult.ToolId,
-            ErrorCode = toolResult.ErrorCode,
+            ErrorCode = toolResult.ErrorCode ?? ErrorCodes.MissingErrorCode,
             Data = toolResult.Data
         };
 

@@ -95,7 +95,7 @@ public static class ObjectCloner
             foreach (var chunk in nod.Chunks)
             {
                 var chunkClone = (IChunk)DeepCloneValue(chunk, visited)!;
-                clone.Chunks.Add(chunkClone);
+                clone.Chunks?.Add(chunkClone);
             }
             return clone;
         }
@@ -107,9 +107,10 @@ public static class ObjectCloner
         return obj;
     }
 
-    public static T DeepCloneObject<T>(T template) where T : class
+    public static T? DeepCloneObject<T>(T? template) where T : class
     {
+        if (template == null) return null;
         var visited = new Dictionary<object, object>(ReferenceEqualityComparer.Instance);
-        return (T)DeepCloneValue(template, visited)!;
+        return (T?)DeepCloneValue(template, visited);
     }
 }

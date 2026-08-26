@@ -34,7 +34,7 @@ public static class GbxTemplateLibrary
 
     static CGameItemPlacementParam cGameItemPlacementParam = null!;
     public static GbxTemplate<CGameItemPlacementParam> CreatePlacementParamTemplate() 
-        => new GbxTemplate<CGameItemPlacementParam>(ObjectCloner.DeepCloneObject(cGameItemPlacementParam ??= Gbx.Parse<CGameItemPlacementParam>(TemplateLoader.GetTemplate("PlacementParamTemplate.PlaceParam.Gbx"))));
+        => new GbxTemplate<CGameItemPlacementParam>((ObjectCloner.DeepCloneObject(cGameItemPlacementParam ??= Gbx.Parse<CGameItemPlacementParam>(TemplateLoader.GetTemplate("PlacementParamTemplate.PlaceParam.Gbx"))))!);
 
     public static GbxTemplate<CGameItemPlacementParam> CreatePlacementParamTemplateWithPlacementClass()
     {
@@ -46,55 +46,55 @@ public static class GbxTemplateLibrary
 
     static NPlugItemPlacement_SClass nPlugItemPlacement_SClass = null!;
     public static GbxTemplate<NPlugItemPlacement_SClass> CreateItemPlacementClassTemplate()
-        => new GbxTemplate<NPlugItemPlacement_SClass>(ObjectCloner.DeepCloneObject(nPlugItemPlacement_SClass ??= Gbx.Parse<NPlugItemPlacement_SClass>(TemplateLoader.GetTemplate("PlacementClassTemplate.ItemPlacementClass.Gbx"))));
+        => new GbxTemplate<NPlugItemPlacement_SClass>((ObjectCloner.DeepCloneObject(nPlugItemPlacement_SClass ??= Gbx.Parse<NPlugItemPlacement_SClass>(TemplateLoader.GetTemplate("PlacementClassTemplate.ItemPlacementClass.Gbx"))))!);
 
 
     // CommonEntityModel & Mesh
    
     static CGameItemModel commonItemEntityModelItemTemplate = null!;
     public static GbxTemplate<CGameItemModel> CreateCommonItemEntityModelItemTemplate()
-        => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(commonItemEntityModelItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("CommonEntityModelItemTemplate.Item.Gbx"))));
+        => new GbxTemplate<CGameItemModel>((ObjectCloner.DeepCloneObject(commonItemEntityModelItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("CommonEntityModelItemTemplate.Item.Gbx"))))!);
 
 
     static CPlugStaticObjectModel staticObjectModelTemplate = null!;
     public static GbxTemplate<CPlugStaticObjectModel> CreateStaticObjectModelTemplate()
-       => new GbxTemplate<CPlugStaticObjectModel>(ObjectCloner.DeepCloneObject(staticObjectModelTemplate ??= Gbx.Parse<CPlugStaticObjectModel>(TemplateLoader.GetTemplate("StaticObjectModelTemplate.ObjectModel.Gbx"))));
+       => new GbxTemplate<CPlugStaticObjectModel>((ObjectCloner.DeepCloneObject(staticObjectModelTemplate ??= Gbx.Parse<CPlugStaticObjectModel>(TemplateLoader.GetTemplate("StaticObjectModelTemplate.ObjectModel.Gbx"))))!);
 
     static CPlugSolid2Model solid2ModelTemplate = null!;
     public static GbxTemplate<CPlugSolid2Model> CreateCPlugSolid2ModelTemplate()
-       => new GbxTemplate<CPlugSolid2Model>(ObjectCloner.DeepCloneObject(solid2ModelTemplate ??= Gbx.Parse<CPlugSolid2Model>(TemplateLoader.GetTemplate("Solid2ModelTemplate.Mesh.Gbx"))));
+       => new GbxTemplate<CPlugSolid2Model>((ObjectCloner.DeepCloneObject(solid2ModelTemplate ??= Gbx.Parse<CPlugSolid2Model>(TemplateLoader.GetTemplate("Solid2ModelTemplate.Mesh.Gbx"))))!);
 
     public static GbxTemplate<CPlugVisualIndexedTriangles> CreateCPlugVisualIndexedTrianglesTemplate()
-       => new GbxTemplate<CPlugVisualIndexedTriangles>(CreateCPlugSolid2ModelTemplate().Value.Visuals[0] as CPlugVisualIndexedTriangles);
+       => new GbxTemplate<CPlugVisualIndexedTriangles>((CreateCPlugSolid2ModelTemplate().Value.Visuals![0] as CPlugVisualIndexedTriangles)!);
 
     public static GbxTemplate<CPlugVertexStream> CreateCPlugVertexStreamTemplate()
       => new GbxTemplate<CPlugVertexStream>(CreateCPlugVisualIndexedTrianglesTemplate().Value.VertexStreams[0] as CPlugVertexStream);
 
     public static GbxTemplate<CPlugIndexBuffer> CreateCPlugIndexBufferTemplate()
-    => new GbxTemplate<CPlugIndexBuffer>(CreateCPlugVisualIndexedTrianglesTemplate().Value.IndexBuffer as CPlugIndexBuffer);
+    => new GbxTemplate<CPlugIndexBuffer>(CreateCPlugVisualIndexedTrianglesTemplate().Value.IndexBuffer! as CPlugIndexBuffer);
 
 
     // ModelEdition & MeshModeler
     static CGameItemModel commonEntityModelEditionItemTemplate = null!;
     public static GbxTemplate<CGameItemModel> CreateCommonItemEntityModelEditionItemTemplate()
-        => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(commonEntityModelEditionItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("CommonEntityModelEditionItemTemplate.Item.Gbx"))));
+        => new GbxTemplate<CGameItemModel>((ObjectCloner.DeepCloneObject(commonEntityModelEditionItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("CommonEntityModelEditionItemTemplate.Item.Gbx"))))!);
 
     static CGameCommonItemEntityModel commonItemEntityModelTemplate = null!;
     public static GbxTemplate<CGameCommonItemEntityModel> CreateCommonItemEntityModelTemplate()
-       => new GbxTemplate<CGameCommonItemEntityModel>(ObjectCloner.DeepCloneObject(commonItemEntityModelTemplate ??= Gbx.Parse<CGameCommonItemEntityModel>(TemplateLoader.GetTemplate("CommonItemEntityModelTemplate.EntityModel.Gbx"))));
+       => new GbxTemplate<CGameCommonItemEntityModel>((ObjectCloner.DeepCloneObject(commonItemEntityModelTemplate ??= Gbx.Parse<CGameCommonItemEntityModel>(TemplateLoader.GetTemplate("CommonItemEntityModelTemplate.EntityModel.Gbx"))))!);
 
     static CPlugCrystal crystalTemplate = null!;
     public static GbxTemplate<CPlugCrystal> CreateCPlugCrystalTemplate()
-        => new GbxTemplate<CPlugCrystal>(ObjectCloner.DeepCloneObject(crystalTemplate ??= Gbx.Parse<CPlugCrystal>(TemplateLoader.GetTemplate("CrystalTemplate.Mesh.Gbx"))));
+        => new GbxTemplate<CPlugCrystal>((ObjectCloner.DeepCloneObject(crystalTemplate ??= Gbx.Parse<CPlugCrystal>(TemplateLoader.GetTemplate("CrystalTemplate.Mesh.Gbx"))))!);
 
 
     public static GbxTemplate<CPlugCrystal.GeometryLayer> CreateGeometryLayerTemplate()
-        => new GbxTemplate<CPlugCrystal.GeometryLayer>(CreateCPlugCrystalTemplate().Value.Layers[0] as CPlugCrystal.GeometryLayer);
+        => new GbxTemplate<CPlugCrystal.GeometryLayer>((CreateCPlugCrystalTemplate().Value.Layers[0] as CPlugCrystal.GeometryLayer)!);
     public static GbxTemplate<CPlugCrystal.Crystal> CreateGeometryCrystalTemplate()
     => new GbxTemplate<CPlugCrystal.Crystal>(CreateGeometryLayerTemplate().Value.Crystal! as CPlugCrystal.Crystal);
 
     public static GbxTemplate<CPlugCrystal.TriggerLayer> CreateTriggerLayerTemplate()
-       => new GbxTemplate<CPlugCrystal.TriggerLayer>(CreateCPlugCrystalTemplate().Value.Layers[1]! as CPlugCrystal.TriggerLayer);
+       => new GbxTemplate<CPlugCrystal.TriggerLayer>((CreateCPlugCrystalTemplate().Value.Layers![1]! as CPlugCrystal.TriggerLayer)!);
     public static GbxTemplate<CPlugCrystal.Crystal> CreateTriggerCrystalTemplate()
      => new GbxTemplate<CPlugCrystal.Crystal>(CreateTriggerLayerTemplate().Value.Crystal! as CPlugCrystal.Crystal);
 
@@ -102,21 +102,20 @@ public static class GbxTemplateLibrary
     // Moving & mesh
     static CGameItemModel movingItemTemplate = null!;
     public static GbxTemplate<CGameItemModel> CreateMovingItemTemplate()
-        => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(movingItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("MovingItemTemplate.Item.Gbx"))));
+        => new GbxTemplate<CGameItemModel>((ObjectCloner.DeepCloneObject(movingItemTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("MovingItemTemplate.Item.Gbx"))))!);
 
-    static CPlugDynaObjectModel dynaObjectModelTemplate = null!;
     public static GbxTemplate<CPlugDynaObjectModel> CreateDynaObjectModelTemplate()
-        => new GbxTemplate<CPlugDynaObjectModel>((CreateMovingItemTemplate().Value.EntityModel as CPlugPrefab).Ents[0].Model as CPlugDynaObjectModel);
+        => new GbxTemplate<CPlugDynaObjectModel>(((CreateMovingItemTemplate().Value.EntityModel as CPlugPrefab)!.Ents[0].Model as CPlugDynaObjectModel)!);
 
     static CPlugSurface surfaceTemplate = null!;
     public static GbxTemplate<CPlugSurface> CreateSurfaceTemplate()
-        => new GbxTemplate<CPlugSurface>(ObjectCloner.DeepCloneObject(surfaceTemplate ??= Gbx.Parse<CPlugSurface>(TemplateLoader.GetTemplate("SurfaceTemplate.Mesh.Gbx"))));
+        => new GbxTemplate<CPlugSurface>((ObjectCloner.DeepCloneObject(surfaceTemplate ??= Gbx.Parse<CPlugSurface>(TemplateLoader.GetTemplate("SurfaceTemplate.Mesh.Gbx"))))!);
 
     public static GbxTemplate<CPlugSurface.Mesh> CreateSurfaceMeshTemplate()
-    => new GbxTemplate<CPlugSurface.Mesh>(CreateSurfaceTemplate().Value.Surf as CPlugSurface.Mesh);
+    => new GbxTemplate<CPlugSurface.Mesh>((CreateSurfaceTemplate().Value.Surf as CPlugSurface.Mesh)!);
 
     public static GbxTemplate<NPlugDyna_SKinematicConstraint> CreateKinematicConstraintTemplate()
-        => new GbxTemplate<NPlugDyna_SKinematicConstraint>((CreateMovingItemTemplate().Value.EntityModel as CPlugPrefab).Ents[1].Model as NPlugDyna_SKinematicConstraint);
+        => new GbxTemplate<NPlugDyna_SKinematicConstraint>(((CreateMovingItemTemplate().Value.EntityModel as CPlugPrefab)!.Ents[1].Model as NPlugDyna_SKinematicConstraint)!);
 
 
     public static GbxTemplate<CPlugPrefab> CreatePrefabTemplate()
@@ -134,14 +133,14 @@ public static class GbxTemplateLibrary
 
     static CGameItemModel triggerItemModelTemplate = null!;
     public static GbxTemplate<CGameItemModel> CreateTriggerItemTemplate()
-        => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(triggerItemModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("TriggerItemTemplate.Item.Gbx"))));
+        => new GbxTemplate<CGameItemModel>((ObjectCloner.DeepCloneObject(triggerItemModelTemplate ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("TriggerItemTemplate.Item.Gbx"))))!);
 
 
     // Variants
 
     static CGameItemModel variantsItemModel = null!;
     public static GbxTemplate<CGameItemModel> CreateVariantsItemTemplate()
-        => new GbxTemplate<CGameItemModel>(ObjectCloner.DeepCloneObject(variantsItemModel ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("VariantsEntityModel.Item.Gbx"))));
+        => new GbxTemplate<CGameItemModel>((ObjectCloner.DeepCloneObject(variantsItemModel ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("VariantsEntityModel.Item.Gbx"))))!);
 }
 
 

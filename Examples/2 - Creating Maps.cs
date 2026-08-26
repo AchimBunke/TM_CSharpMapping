@@ -33,7 +33,7 @@ public class Example_CreatingMaps
 
         // Example: you can add clips directly to the map
         // !! Assumes map already has 1 clip
-        CGameCtnMediaClip mediaClip = challenge.ClipGroupInGame.Clips[0].Clip;
+        CGameCtnMediaClip mediaClip = challenge.ClipGroupInGame!.Clips[0].Clip;
 
         // ===================== Create Scene =====================
         // ...

@@ -283,7 +283,7 @@ public class TriangleObject : RenderObject, IFillable, IOutlineable, IMorphable,
             LocalPosition = LocalPosition,
             LocalRotation = LocalRotation,
             LocalScale = LocalScale,
-            SubObjects = SubObjects.Where(s => s is TriangleObject).Select(s => (s as TriangleObject).AsTriangleObjectData()).ToArray(),
+            SubObjects = SubObjects.Where(s => s is TriangleObject).Select(s => (s as TriangleObject)!.AsTriangleObjectData()).ToArray(),
             SerializableComponents = Components.OfType<ISerializableComponent>().ToArray(),
 
         };
@@ -763,7 +763,7 @@ public class Line2D : Line
         bool closed = false,
         OutlineExtendsDirection extendsDirection = OutlineExtendsDirection.Bidirectional, 
         bool uniqueVertices = false, 
-        IKeysRenderer renderer = null) 
+        IKeysRenderer renderer = null!) 
         : base(points, color, Vector3.UnitZ, width, closed, extendsDirection, uniqueVertices, renderer)
     {
     }

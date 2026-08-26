@@ -45,7 +45,7 @@ public class FbxGbxConverter
         if (itemResult.IsFailure)
             return ToolResult.Fail(itemResult);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(conversionInput.ItemOutputPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(conversionInput.ItemOutputPath)!);
         itemResult.Value.Save(conversionInput.ItemOutputPath);
 
         return itemResult;

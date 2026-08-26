@@ -51,7 +51,7 @@ public static class ObjectComparer
 
         Console.SetOut(originalOut); // restore console
     }
-    public static List<string> GetDifferences<T>(T obj1, T obj2, ObjectComparerFlags flags = ObjectComparerFlags.None)
+    public static List<string> GetDifferences<T>(T? obj1, T? obj2, ObjectComparerFlags flags = ObjectComparerFlags.None)
     {
         var differences = new List<string>();
         Compare(obj1, obj2, new HashSet<(object, object)>(ReferenceEqualityComparer), differences, "root", flags);
@@ -71,7 +71,7 @@ public static class ObjectComparer
         return differences.Count == 0;
     }
 
-    private static void Compare(object obj1, object obj2, HashSet<(object, object)> visited, List<string> differences, string path, ObjectComparerFlags flags)
+    private static void Compare(object? obj1, object? obj2, HashSet<(object, object)> visited, List<string> differences, string path, ObjectComparerFlags flags)
     {
         // Both null — equal
         if (obj1 == null && obj2 == null) return;
@@ -130,8 +130,8 @@ public static class ObjectComparer
             {
                 foreach (var field in currentType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                 {
-                    object v1 = field.GetValue(obj1);
-                    object v2 = field.GetValue(obj2);
+                    object? v1 = field.GetValue(obj1);
+                    object? v2 = field.GetValue(obj2);
 
                     // Use the property name for compiler-generated backing fields (<PropName>k__BackingField)
                     // so the path is readable
@@ -154,8 +154,8 @@ public static class ObjectComparer
                 if (field.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
                     continue;
 
-                object v1 = field.GetValue(obj1);
-                object v2 = field.GetValue(obj2);
+                object? v1 = field.GetValue(obj1);
+                object? v2 = field.GetValue(obj2);
                 Compare(v1, v2, visited, differences, $"{path}.{field.Name}", flags);
             }
         }
@@ -167,7 +167,7 @@ public static class ObjectComparer
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
 
-                object v1, v2;
+                object? v1, v2;
                 try { v1 = prop.GetValue(obj1); }
                 catch (Exception ex) { differences.Add($"{path}.{prop.Name}: could not read (obj1): {ex.Message}"); continue; }
                 try { v2 = prop.GetValue(obj2); }

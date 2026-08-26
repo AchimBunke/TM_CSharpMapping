@@ -44,7 +44,7 @@ public class NormalizedMesh
     public Vec2[]? LightmapCoords { get; set; }
     public int[]? Colors { get; set; } // packed argb color
     public int[] Indices { get; set; } = [];     // local 0-based
-    public CPlugMaterialUserInst Material { get; set; }
+    public CPlugMaterialUserInst Material { get; set; } = null!;
     public MaterialId[]? SurfaceMaterialIds { get; set; }
 
     public int LODMask { get; set; } = 1;
@@ -73,7 +73,7 @@ public class NormalizedLight
     public Quaternion Rotation { get; set; }
     public LightType Type { get; set; }
 
-    public CPlugLightUserModel LightModel { get; set; }
+    public CPlugLightUserModel LightModel { get; set; } = null!;
 
     public string Name { get; set; } = string.Empty;
     public int GroupIndex { get; set; } = -1;

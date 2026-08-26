@@ -6,7 +6,7 @@ namespace TM_GenericMapping.Common;
 
 public static class RandomUtils
 {
-    static Random _shared;
+    static Random _shared = null!;
     public static Random Shared
     {
         get => _shared ?? (_shared = new Random());

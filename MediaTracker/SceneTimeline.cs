@@ -69,8 +69,8 @@ public record BlockTemplates(
     public CGameCtnMediaBlockCameraGame GetEmptyPlayerCameraBlock() => MediaTrackerUtils.DeepCopyBlockPlayerCamera(PlayerCamera);
     public CGameCtnMediaBlockDOF GetEmptyDepthOfFieldBlock() => MediaTrackerUtils.DeepCopyBlockDepthOfField(DepthOfField);
     public CGameCtnMediaBlockCameraCustom GetEmptyCustomCameraBlock() => MediaTrackerUtils.DeepCopyBlockCustomCamera(CustomCamera);
-    public CGameCtnMediaBlockCameraPath GetEmptyPathCameraBlock() => ObjectCloner.DeepCloneObject(PathCamera);
-    public CGameCtnMediaBlockCameraOrbital GetEmptyOrbitalCameraBlock() => ObjectCloner.DeepCloneObject(OrbitalCamera);
+    public CGameCtnMediaBlockCameraPath GetEmptyPathCameraBlock() => (ObjectCloner.DeepCloneObject(PathCamera))!;
+    public CGameCtnMediaBlockCameraOrbital GetEmptyOrbitalCameraBlock() => (ObjectCloner.DeepCloneObject(OrbitalCamera))!;
 
 }
 
@@ -81,8 +81,10 @@ public class DuplicateKeyComparer<TKey>
 {
     #region IComparer<TKey> Members
 
-    public int Compare(TKey x, TKey y)
+    public int Compare(TKey? x, TKey? y)
     {
+        if (x == null)
+            return -1;
         int result = x.CompareTo(y);
 
         if (result == 0)
@@ -540,6 +542,8 @@ public class SceneTimeline
     {
         BlockTemplates = MediaTrackerUtils.CreateBlockTemplates();
         CameraManager = new SceneCameraManager(this);
+        PreAnimationUpdateTick = default!;
+        PostAnimationUpdateTick = default!;
     }
 
     public ulong AnimationTickRateMillis => animationSettings.AnimationTickRateMillis;
@@ -695,8 +699,8 @@ public class SceneTimeline
     }
     void RegisterObject(MediaObject obj)
     {
-        CGameCtnMediaBlock block = null;
-        CGameCtnMediaTrack track = null;
+        CGameCtnMediaBlock block = null!;
+        CGameCtnMediaTrack track = null!;
         int idx = -1;
         if (obj is RenderObject renderObj)
         {
@@ -727,7 +731,7 @@ public class SceneTimeline
             else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
             {
                 twoKeyRenderer.SetDataToStart(renderObj, block);
-                (block as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
+                (block as CGameCtnMediaBlock.IHasTwoKeys)!.Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
             }
 
         }
@@ -756,10 +760,10 @@ public class SceneTimeline
     {
         if (objectsInScene.ContainsKey(obj))
             return;
-        if (!objectsInScene.ContainsKey(obj.Parent))
+        if (!objectsInScene.ContainsKey(obj.Parent!))
         {
             // always register downwards
-            RegisterSubObject(obj.Parent);
+            RegisterSubObject(obj.Parent!);
             return;
         }
         // here i know parent is registered
@@ -778,7 +782,7 @@ public class SceneTimeline
                 else if (renderObj.Renderer is ITwoKeyRenderer twoKeyRenderer)
                 {
                     twoKeyRenderer.SetDataToStart(renderObj, commonBlock);
-                    (sharedBlockOwner as CGameCtnMediaBlock.IHasTwoKeys).Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
+                    (commonBlock as CGameCtnMediaBlock.IHasTwoKeys)!.Start = TimeSingle.FromMilliseconds((long)AnimationTimeMillis + animationSettings.AnimationOffsetMillis);
                 }
                 objectsInScene[renderObj] = (commonTrack, commonBlock, idx);
               
@@ -872,7 +876,7 @@ public class SceneTimeline
     }
     void GenerateKeyFrame(CGameCtnMediaBlock block, ulong keyFrameTime)
     {
-        IKey key = null;
+        IKey key = null!;
         foreach (var obj in blockToRenderObjects[block])
         {
             var (_, _, idx) = objectsInScene[obj];
@@ -890,7 +894,7 @@ public class SceneTimeline
             else if (obj.Renderer is ITwoKeyRenderer twoKeyRenderer)
             {
                 twoKeyRenderer.SetDataToEnd(obj, block);
-                (block as CGameCtnMediaBlock.IHasTwoKeys).End = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
+                (block as CGameCtnMediaBlock.IHasTwoKeys)!.End = TimeSingle.FromMilliseconds((long)keyFrameTime + animationSettings.AnimationOffsetMillis);
             }
         }
 
@@ -963,7 +967,7 @@ public class SceneTimeline
                 var chunkBase = track.Chunks.Get(cycleChunkId) as CGameCtnMediaTrack.Chunk03078005;
                 track.Chunks.Remove(cycleChunkId);
                 var cycleChunk = track.CreateChunk<CGameCtnMediaTrack.Chunk03078005>();
-                cycleChunk.Version = chunkBase.Version;
+                cycleChunk.Version = chunkBase!.Version;
                 track.IsCycling = cycleData.CycleTrack;
                 var startTime = firstBlock.Keys.FirstOrDefault()?.Time ?? default;
                 var endTime = lastBlock.Keys.LastOrDefault()?.Time ?? default;
@@ -994,7 +998,7 @@ public class SceneTimeline
                 {
                     if (block is IHasKeys hasKeys)
                     {
-                        ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(block as IHasKeys).Time.TotalMilliseconds;
+                        ulong lastKeyframeTime = (ulong)MediaTrackerUtils.GetLastKeyInBlock(hasKeys).Time.TotalMilliseconds;
                         if (hiddenInEditorTimeline.Contains(block))
                             GenerateKeyFrame(block, lastKeyframeTime);
                         else

@@ -3,6 +3,7 @@ using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
 using GBX.NET.Serialization.Chunking;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Xml.Schema;
@@ -120,7 +121,7 @@ public static class ItemExtensions
 
     }
 
-    public static bool TryGetCrystal(this CGameItemModel item, out CPlugCrystal crystal)
+    public static bool TryGetCrystal(this CGameItemModel item, [NotNullWhen(true)] out CPlugCrystal? crystal)
     {
         crystal = null; 
         if (item.EntityModelEdition is CGameCommonItemEntityModelEdition commonItemEntityModelEdition)
@@ -129,7 +130,7 @@ public static class ItemExtensions
         }
         return crystal != null;
     }
-    public static bool TryGetSolid2Model(this CGameItemModel item, out CPlugSolid2Model solid)
+    public static bool TryGetSolid2Model(this CGameItemModel item, [NotNullWhen(true)] out CPlugSolid2Model? solid)
     {
         solid = null;
         if (item.EntityModel is CGameCommonItemEntityModel commonItemEntityModel)
@@ -143,7 +144,7 @@ public static class ItemExtensions
         }
         return solid != null;
     }
-    public static bool TryGetStaticObjectModel(this CGameItemModel item, out CPlugStaticObjectModel staticObjectModel)
+    public static bool TryGetStaticObjectModel(this CGameItemModel item, [NotNullWhen(true)] out CPlugStaticObjectModel? staticObjectModel)
     {
         staticObjectModel = null;
         if (TryGetStaticModelEntRef(item, out var entRef))
@@ -152,21 +153,21 @@ public static class ItemExtensions
             staticObjectModel = commonItemEntityModel.StaticObject;
         return staticObjectModel != null;
     }
-    public static bool TryGetDynaObjectModel(this CGameItemModel item, out CPlugDynaObjectModel dynaObjectModel)
+    public static bool TryGetDynaObjectModel(this CGameItemModel item, [NotNullWhen(true)] out CPlugDynaObjectModel? dynaObjectModel)
     {
         dynaObjectModel = null;
         if(TryGetDynaModelEntRef(item, out var entRef))
             dynaObjectModel = entRef.Model as CPlugDynaObjectModel;
         return dynaObjectModel != null;
     }
-    public static bool TryGetTriggerSpecial(this CGameItemModel item, out NPlugTrigger_SSpecial triggerSpecial)
+    public static bool TryGetTriggerSpecial(this CGameItemModel item, [NotNullWhen(true)] out NPlugTrigger_SSpecial? triggerSpecial)
     {
         triggerSpecial = null;
         if (TryGetTriggerSpecialEntRef(item, out var entRef))
             triggerSpecial = entRef.Model as NPlugTrigger_SSpecial;
         return triggerSpecial != null;
     }
-    public static bool TryGetTriggerShape(this CGameItemModel item, out CPlugSurface triggerShape)
+    public static bool TryGetTriggerShape(this CGameItemModel item, [NotNullWhen(true)] out CPlugSurface? triggerShape)
     {
         triggerShape = null;
         if(item.EntityModel is CGameCommonItemEntityModel commonItemEntityModel)
@@ -175,22 +176,22 @@ public static class ItemExtensions
             triggerShape = entRef.Model as CPlugSurface;
         return triggerShape != null;
     }
-    public static bool TryGetTriggerWaypoint(this CGameItemModel item, out NPlugTrigger_SWaypoint waypoint)
+    public static bool TryGetTriggerWaypoint(this CGameItemModel item, [NotNullWhen(true)] out NPlugTrigger_SWaypoint? waypoint)
     {
         waypoint = null;
         if (TryGetTriggerWaypointEntRef(item, out var entRef))
             waypoint = entRef.Model as NPlugTrigger_SWaypoint;
         return waypoint != null;
     }
-    public static bool TryGetDynaModelEntRef(this CGameItemModel item, out CPlugPrefab.EntRef entRef)
+    public static bool TryGetDynaModelEntRef(this CGameItemModel item, [NotNullWhen(true)] out CPlugPrefab.EntRef? entRef)
         => TryGetEntRef<CPlugDynaObjectModel>(item, out entRef);
-    public static bool TryGetStaticModelEntRef(this CGameItemModel item, out CPlugPrefab.EntRef entRef)
+    public static bool TryGetStaticModelEntRef(this CGameItemModel item, [NotNullWhen(true)] out CPlugPrefab.EntRef? entRef)
         => TryGetEntRef<CPlugStaticObjectModel>(item, out entRef);
-    public static bool TryGetTriggerSpecialEntRef(this CGameItemModel item, out CPlugPrefab.EntRef entRef)
+    public static bool TryGetTriggerSpecialEntRef(this CGameItemModel item, [NotNullWhen(true)] out CPlugPrefab.EntRef? entRef)
         => TryGetEntRef<NPlugTrigger_SSpecial>(item, out entRef);
-    public static bool TryGetTriggerWaypointEntRef(this CGameItemModel item, out CPlugPrefab.EntRef entRef)
+    public static bool TryGetTriggerWaypointEntRef(this CGameItemModel item, [NotNullWhen(true)] out CPlugPrefab.EntRef? entRef)
         => TryGetEntRef<NPlugTrigger_SWaypoint>(item, out entRef);
-    public static bool TryGetEntRef<T>(this CGameItemModel item, out CPlugPrefab.EntRef entRef) where T : CMwNod
+    public static bool TryGetEntRef<T>(this CGameItemModel item, [NotNullWhen(true)] out CPlugPrefab.EntRef? entRef) where T : CMwNod
     {
         entRef = null;
         if (item.EntityModel is CPlugPrefab prefab)
@@ -207,7 +208,7 @@ public static class ItemExtensions
         }
         return entRef != null;
     }
-    public static bool TryGetCommonItemEntityModel(this CGameItemModel item, out CGameCommonItemEntityModel commonItemEntityModel)
+    public static bool TryGetCommonItemEntityModel(this CGameItemModel item, [NotNullWhen(true)] out CGameCommonItemEntityModel? commonItemEntityModel)
     {
         commonItemEntityModel = null;
         if (item.EntityModel is CGameCommonItemEntityModel c)
@@ -216,7 +217,7 @@ public static class ItemExtensions
         }
         return commonItemEntityModel != null;
     }
-    public static bool TryGetPrefab(this CGameItemModel item, out CPlugPrefab prefab)
+    public static bool TryGetPrefab(this CGameItemModel item, [NotNullWhen(true)] out CPlugPrefab? prefab)
     {
         prefab = null;
         if (item.EntityModel is CPlugPrefab p)
@@ -226,7 +227,7 @@ public static class ItemExtensions
         return prefab != null;
     }
 
-    public static bool TryGetVariantList(this CGameItemModel item, out NPlugItem_SVariantList variantList)
+    public static bool TryGetVariantList(this CGameItemModel item, [NotNullWhen(true)] out NPlugItem_SVariantList? variantList)
     {
         variantList = null;
         if (item.EntityModel is NPlugItem_SVariantList list)
@@ -253,7 +254,7 @@ public static class ItemExtensions
     {
         //return template;
         var shell = new T();
-        ShallowCloneAllFields(template, shell);
+        ShallowCloneAllFields(template!, shell);
         if (shell is CMwNod shellNod && template is CMwNod templateNod)
         {
             foreach (var chunk in templateNod.Chunks)

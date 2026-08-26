@@ -106,7 +106,7 @@ public sealed class LevitationXml
     public float VOffset { get; set; }
 
     [XmlAttribute("GhostMode")]
-    public string GhostModeValue { get; set; }
+    public string GhostModeValue { get; set; } = string.Empty;
 
     [XmlIgnore]
     public bool GhostMode
@@ -118,7 +118,7 @@ public sealed class LevitationXml
 public sealed class OptionsXml
 {
     [XmlAttribute("NotOnItem")]
-    public string NotOnItemValue { get; set; }
+    public string NotOnItemValue { get; set; } = string.Empty;
     [XmlIgnore]
     public bool NotOnItem
     {
@@ -127,7 +127,7 @@ public sealed class OptionsXml
     }
 
     [XmlAttribute("OneAxisRotation")]
-    public string OneAxisRotationValue { get; set; }
+    public string OneAxisRotationValue { get; set; } = string.Empty;
     [XmlIgnore]
     public bool OneAxisRotation
     {
@@ -135,7 +135,7 @@ public sealed class OptionsXml
         set => value.ToString();
     }
     [XmlAttribute("ManualPivotSwitch")]
-    public string ManualPivotSwitchValue { get; set; }
+    public string ManualPivotSwitchValue { get; set; } = string.Empty;
     [XmlIgnore]
     public bool ManualPivotSwitch
     {
@@ -143,7 +143,7 @@ public sealed class OptionsXml
         set => value.ToString();
     }
     [XmlAttribute("AutoRotation")]
-    public string AutoRotationValue { get; set; }
+    public string AutoRotationValue { get; set; } = string.Empty;
     [XmlIgnore]
     public bool AutoRotation
     {

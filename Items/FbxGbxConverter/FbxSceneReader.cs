@@ -95,7 +95,7 @@ internal static class FbxSceneReader
 
         foreach (var (node, name, transform) in nodes)
         {
-            Light light;
+            Assimp.Light? light;
             if ((light = scene.Lights.FirstOrDefault(l => l.Name == node.Name)) == null)
                 continue;
             result.Add((light, node.Name, transform));

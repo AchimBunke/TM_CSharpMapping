@@ -42,7 +42,7 @@ public static class MediaTrackerUtils
         var cpy = new CGameCtnMediaClipGroup.Trigger()
         {
             Condition = original.Condition,
-            Coords = original.Coords.ToList(),
+            Coords = original.Coords?.ToList() ?? [],
             ConditionValue = original.ConditionValue,
             U01 = original.U01,
             U02 = original.U02,
@@ -92,7 +92,7 @@ public static class MediaTrackerUtils
         var cpy = new CGameCtnMediaBlockImage()
         {
             Image = original.Image,
-            Effect = DeepCopyEffect(original.Effect),
+            Effect = original.Effect is not null ? DeepCopyEffect(original.Effect) : null,
         };
         DeepCopyChunks(original, cpy);
         return cpy;
@@ -105,7 +105,7 @@ public static class MediaTrackerUtils
             IsInterpolated = original.IsInterpolated,
             Centered = original.Centered,
             ColorBlendMode = original.ColorBlendMode,
-            Keys = original.Keys.Select(DeepCopyKey).ToList(),
+            Keys = original.Keys?.Select(DeepCopyKey).ToList() ?? [],
         };
         DeepCopyChunks(original, cpy);
         return cpy;
@@ -133,7 +133,7 @@ public static class MediaTrackerUtils
         {
             Text = original.Text,
             Color = original.Color,
-            Effect = DeepCopyEffect(original.Effect),
+            Effect = original.Effect is not null ? DeepCopyEffect(original.Effect) : null,
         };
         DeepCopyChunks(original, cpy);
         return cpy;
@@ -142,7 +142,7 @@ public static class MediaTrackerUtils
     {
         var cpy = new CGameCtnMediaBlockTriangles3D()
         {
-            Keys = original.Keys.Select(k => DeepCopyTriangle3DKey(k, original)).ToList(),
+            Keys = original.Keys?.Select(k => DeepCopyTriangle3DKey(k, original)).ToList() ?? [],
             Vertices = original.Vertices.ToArray(),
             Triangles = original.Triangles.ToArray(),
            
@@ -177,7 +177,7 @@ public static class MediaTrackerUtils
     {
         var cpy = new CGameCtnMediaBlockDOF()
         {
-            Keys = original.Keys.Select(k => DeepCopyDOFKey(k)).ToList(),
+            Keys = original.Keys?.Select(k => DeepCopyDOFKey(k)).ToList() ?? [],
         };
 
         DeepCopyChunks(original, cpy);
@@ -188,7 +188,7 @@ public static class MediaTrackerUtils
     {
         var cpy = new CGameCtnMediaBlockCameraCustom()
         {
-            Keys = original.Keys.Select(k => DeepCopyCustomCameraKey(k)).ToList(),
+            Keys = original.Keys?.Select(k => DeepCopyCustomCameraKey(k)).ToList() ?? [],
         };
 
         DeepCopyChunks(original, cpy);
@@ -253,8 +253,8 @@ public static class MediaTrackerUtils
             U07 = original.U07,
             U08 = original.U08,
             U09 = original.U09,
-            LeftTangent = DeepCopyInterpVal(original.LeftTangent),
-            RightTangent = DeepCopyInterpVal(original.RightTangent),
+            LeftTangent = original.LeftTangent is not null ? DeepCopyInterpVal(original.LeftTangent) : null,
+            RightTangent = original.RightTangent is not null ? DeepCopyInterpVal(original.RightTangent) : null,
         };
         return cpy;
     }
@@ -349,32 +349,32 @@ public static class MediaTrackerUtils
             emptyClip,
             emptyTrack,
             UseCustomTemplates ? 
-                Gbx.Parse<CGameCtnMediaClip>(Triangles2DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle2DTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D,
+                (Gbx.Parse<CGameCtnMediaClip>(Triangles2DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle2DTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(Triangles3DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle3DTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D,
+                (Gbx.Parse<CGameCtnMediaClip>(Triangles3DTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("Triangle3DTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles3D)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(TextTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("TextTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText,
+                (Gbx.Parse<CGameCtnMediaClip>(TextTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("TextTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockText)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(ImageTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("ImageTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage,
+                (Gbx.Parse<CGameCtnMediaClip>(ImageTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("ImageTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockImage)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(PlayerCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraGame :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("PlayerCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraGame,
+                (Gbx.Parse<CGameCtnMediaClip>(PlayerCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraGame)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("PlayerCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraGame)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(DepthOfFieldTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("DepthOfFieldTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF,
+                (Gbx.Parse<CGameCtnMediaClip>(DepthOfFieldTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("DepthOfFieldTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockDOF)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(CustomCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("CustomCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom,
+                (Gbx.Parse<CGameCtnMediaClip>(CustomCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("CustomCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraCustom)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(PathCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraPath :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("PathCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraPath,
+                (Gbx.Parse<CGameCtnMediaClip>(PathCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraPath)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("PathCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraPath)!,
             UseCustomTemplates ?
-                Gbx.Parse<CGameCtnMediaClip>(OrbitalCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraOrbital :
-                Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("OrbitalCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraOrbital
+                (Gbx.Parse<CGameCtnMediaClip>(OrbitalCameraTemplatePath).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraOrbital)! :
+                (Gbx.Parse<CGameCtnMediaClip>(TemplateLoader.GetTemplate("OrbitalCameraTemplate.Clip.Gbx")).Node.Tracks[0].Blocks[0] as CGameCtnMediaBlockCameraOrbital)!
             );
     }
 

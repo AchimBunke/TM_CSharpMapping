@@ -32,7 +32,8 @@ public abstract class RenderObject : MediaObject
 
     protected RenderObject([NotNull] IRenderer renderer) 
     {
-        Renderer = renderer ?? Rendering.DefaultTriangleRenderer ?? throw new ArgumentNullException(nameof(renderer));
+        renderer ??= Rendering.DefaultTriangleRenderer ?? throw new ArgumentNullException(nameof(renderer));
+        Renderer = renderer;
     }
     protected RenderObject(RenderObject other) : base(other)
     {

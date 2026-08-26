@@ -9,7 +9,7 @@ namespace TM_GenericMapping.Items.FbxGbxConverter;
 
 public static class FaceTriangulator
 {
-    [ThreadStatic] static double[] _scratchFlat;
+    [ThreadStatic] static double[] _scratchFlat = null!;
 
     /// <summary>
     /// Computes a robust face normal using Newell's method.

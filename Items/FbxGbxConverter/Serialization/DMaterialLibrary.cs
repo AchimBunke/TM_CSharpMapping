@@ -27,8 +27,8 @@ public class DMaterial
     public bool HasTexUvLayer => UvLayers.Any(l => l.Name == "BaseMaterial");
     public bool HasLightmapUvlayer => UvLayers.Any(l => l.Name == "Lightmap");
 
-    public int GetTexChannel => UvLayers.IndexOf(UvLayers.FirstOrDefault(l => l.Name == "BaseMaterial", null)!);
-    public int GetLightmapChannel => UvLayers.IndexOf(UvLayers.FirstOrDefault(l => l.Name == "Lightmap", null)!);
+    public int GetTexChannel => UvLayers.IndexOf(UvLayers.FirstOrDefault(l => l!.Name == "BaseMaterial", null)!);
+    public int GetLightmapChannel => UvLayers.IndexOf(UvLayers.FirstOrDefault(l => l!.Name == "Lightmap", null)!);
     public string? Color0 { get; set; }
     public bool HasColor0 { get; set; }
 }

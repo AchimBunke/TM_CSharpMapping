@@ -34,7 +34,7 @@ namespace TM_GenericMapping.IO
         }
         public void Save()
         {
-            var directory = Path.GetDirectoryName(SavePath);
+            var directory = Path.GetDirectoryName(SavePath)!;
             if (!Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);

@@ -69,7 +69,7 @@ namespace TM_GenericMapping.Items
                 {
                     var dynaModel = cPlugPrefabEntityModel.Ents[0].Model as CPlugDynaObjectModel;
 
-                    var mesh = dynaModel.Mesh;
+                    var mesh = dynaModel!.Mesh!;
                     ReadMesh(mesh, triangleObj, materialLibrary, settings);
 
 
@@ -89,7 +89,7 @@ namespace TM_GenericMapping.Items
                         if (extraItemModel.EntityModelEdition == null ||
                             extraItemModel.EntityModelEdition is not CGameCommonItemEntityModelEdition commonItemEntityModelEdition)
                             return false;
-                        var meshCrystal = commonItemEntityModelEdition.MeshCrystal;
+                        var meshCrystal = commonItemEntityModelEdition.MeshCrystal!;
                         ReadMeshCrystal(meshCrystal, triangleObj, materialLibrary, settings);
                     }
                 }
@@ -97,7 +97,7 @@ namespace TM_GenericMapping.Items
                     itemModel.EntityModelEdition != null &&
                     itemModel.EntityModelEdition is CGameCommonItemEntityModelEdition commonItemEntityModelEdition)
                 {
-                    var meshCrystal = commonItemEntityModelEdition.MeshCrystal;
+                    var meshCrystal = commonItemEntityModelEdition.MeshCrystal!;
                     ReadMeshCrystal(meshCrystal, triangleObj, materialLibrary, settings);
                 }
                 else
@@ -130,14 +130,14 @@ namespace TM_GenericMapping.Items
             }
             catch (Exception)
             {
-                triangleObj = null;
+                triangleObj = null!;
                 return false;
             }
         }
         static Gbx<CGameItemModel> FindExtraItemModel(DirectoryInfo searchDirectory, string itemName)
         {
             var fileInfos = searchDirectory.GetFiles(itemName, SearchOption.AllDirectories);
-            return fileInfos.Length > 0 ? Gbx.Parse<CGameItemModel>(fileInfos[0].FullName) : null;
+            return fileInfos.Length > 0 ? Gbx.Parse<CGameItemModel>(fileInfos[0].FullName) : null!;
         }
         static void ReadMeshCrystal(CPlugCrystal crystal, TriangleObject obj, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings)
         {
@@ -162,7 +162,7 @@ namespace TM_GenericMapping.Items
         static void ReadLayer(GeometryLayer layer, TriangleObject obj, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings)
         {
             Logger.Trace($"Converting crystal layer: {layer.LayerName}");
-            var crystal = layer.Crystal;
+            var crystal = layer.Crystal!;
 
             if (settings.Grouping.HasFlag(TriangleGrouping.Materials))
             {
@@ -184,7 +184,7 @@ namespace TM_GenericMapping.Items
                     float textureSizeInMeters = face?.Material?.MaterialUserInst?.TextureSizeInMeters ?? 1;
                     var tilingU = face?.Material?.MaterialUserInst?.TilingU ?? CPlugMaterialUserInst.ETexAddress.Wrap;
                     var tilingV = face?.Material?.MaterialUserInst?.TilingV ?? CPlugMaterialUserInst.ETexAddress.Wrap;
-                    var v0 = face.Vertices[0];
+                    var v0 = face!.Vertices[0];
                     var v1 = face.Vertices[1];
                     var v2 = face.Vertices[2];
                     Materials.Material material = null!;
@@ -194,7 +194,7 @@ namespace TM_GenericMapping.Items
                         colors[v1.Index] = settings.Color;
                         colors[v2.Index] = settings.Color;
                     }
-                    else if (materialLibrary.TryGetMaterial(TextureSampling.MaterialLinkToMaterialName(materialLink), out material))
+                    else if (materialLibrary.TryGetMaterial(TextureSampling.MaterialLinkToMaterialName(materialLink), out material!))
                     {
                         colors[v0.Index] = TextureSampling.SampleColor(material, v0.TexCoord.X, v0.TexCoord.Y, textureSizeInMeters, tilingU, tilingV);
                         colors[v1.Index] = TextureSampling.SampleColor(material, v1.TexCoord.X, v1.TexCoord.Y, textureSizeInMeters, tilingU, tilingV);
@@ -234,7 +234,7 @@ namespace TM_GenericMapping.Items
                     {
                         data = new();
                         data.faces = new();
-                        data.textureSizeInMeters = face.Material.MaterialUserInst.TextureSizeInMeters;
+                        data.textureSizeInMeters = face.Material!.MaterialUserInst!.TextureSizeInMeters;
                         data.tilingU = face.Material.MaterialUserInst.TilingU;
                         data.tilingV = face.Material.MaterialUserInst.TilingV;
                         materialFaceMap[materialName] = data;
@@ -263,7 +263,7 @@ namespace TM_GenericMapping.Items
                             c1 = settings.Color;
                             c2 = settings.Color;
                         }
-                        else if (materialLibrary.TryGetMaterial(materialName, out material))
+                        else if (materialLibrary.TryGetMaterial(materialName, out material!))
                         {
                             c0 = TextureSampling.SampleColor(material, v0.TexCoord.X, v0.TexCoord.Y, data.textureSizeInMeters, data.tilingU, data.tilingV);
                             c1 = TextureSampling.SampleColor(material, v1.TexCoord.X, v1.TexCoord.Y, data.textureSizeInMeters, data.tilingU, data.tilingV);
@@ -318,10 +318,10 @@ namespace TM_GenericMapping.Items
         static void ReadMesh(CPlugSolid2Model mesh, TriangleObject obj, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings)
         {
             Dictionary<string, TriangleData> materialGroups = [];
-            for (int i = 0; i < mesh.Visuals.Length; ++i)
+            for (int i = 0; i < mesh.Visuals!.Length; ++i)
             {
                 var visual = mesh.Visuals[i] as CPlugVisualIndexedTriangles;
-                var materialInstance = mesh.CustomMaterials[i].MaterialUserInst;
+                var materialInstance = mesh.CustomMaterials![i].MaterialUserInst!;
                 if (visual == null)
                     continue;
 
@@ -329,7 +329,7 @@ namespace TM_GenericMapping.Items
                 ReadVisual(visual, tData, materialInstance, i, materialLibrary, settings);
                 if (!settings.Grouping.HasFlag(TriangleGrouping.Materials))
                 {
-                    string matName = TextureSampling.MaterialLinkToMaterialName(materialInstance.Link);
+                    string matName = TextureSampling.MaterialLinkToMaterialName(materialInstance.Link!);
                     if (!materialGroups.TryGetValue(matName, out var materialTriangleData))
                     {
                         materialTriangleData = new();
@@ -375,21 +375,21 @@ namespace TM_GenericMapping.Items
         {
             Logger.Trace($"Converting Mesh Visual {visualIdx}");
 
-            string materialName = TextureSampling.MaterialLinkToMaterialName(materialInstance.Link);
+            string materialName = TextureSampling.MaterialLinkToMaterialName(materialInstance.Link!);
             if (!materialLibrary.TryGetMaterial(materialName, out var material))
                 material = new Materials.Material();
 
-            for (int i = 0; i < visual.VertexStreams[0].Positions.Length; ++i)
+            for (int i = 0; i < visual.VertexStreams[0].Positions!.Length; ++i)
             {
-                var vertex = visual.VertexStreams[0].Positions[i];
+                var vertex = visual.VertexStreams[0].Positions![i];
                 var uv = visual.VertexStreams[0].UVs[0][i];
                 triangleData.vertices.Add(new Vector3(vertex.X, vertex.Y, vertex.Z));
                 if (settings.UniformColor)
                     triangleData.colors.Add(settings.Color);
                 else
-                    triangleData.colors.Add(TextureSampling.SampleColor(material, uv.X, uv.Y, materialInstance.TextureSizeInMeters, materialInstance.TilingU, materialInstance.TilingV));
+                    triangleData.colors.Add(TextureSampling.SampleColor(material!, uv.X, uv.Y, materialInstance.TextureSizeInMeters, materialInstance.TilingU, materialInstance.TilingV));
             }
-            for (int i = 0; i < visual.IndexBuffer.Indices.Length; i += 3)
+            for (int i = 0; i < visual.IndexBuffer!.Indices.Length; i += 3)
             {
                 triangleData.triangles.Add(new Int3(visual.IndexBuffer.Indices[i], visual.IndexBuffer.Indices[i + 1], visual.IndexBuffer.Indices[i + 2]));
             }

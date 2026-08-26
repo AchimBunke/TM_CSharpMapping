@@ -35,7 +35,7 @@ namespace TM_GenericMapping.Items
         public static CGameItemModel Convert(TriangleObject triangleData, TriangleToItemConverterSettings settings)
         {
             var item = Gbx.Parse<CGameItemModel>(settings.TemplatePath).Node;
-            var meshCrystal = (item.EntityModelEdition as CGameCommonItemEntityModelEdition)!.MeshCrystal;
+            var meshCrystal = (item.EntityModelEdition as CGameCommonItemEntityModelEdition)!.MeshCrystal!;
 
             HideVisibleRoot(meshCrystal); 
 
@@ -50,7 +50,7 @@ namespace TM_GenericMapping.Items
         static void HideVisibleRoot(CPlugCrystal meshCrystal)
         {
             var layer = meshCrystal.Layers.Find(l => l.LayerName == TrianglesUtils.VisibleRootLayerName) as GeometryLayer;
-            var crystal = layer.Crystal;
+            var crystal = layer?.Crystal!;
             if (layer == null)
                 return;
             for (int i = 0; i < crystal.Positions.Length; ++i)
@@ -63,11 +63,11 @@ namespace TM_GenericMapping.Items
         {
             var layerTemplate = meshCrystal.Layers.Find(l => l.LayerName == "Geometry") as GeometryLayer;
 
-            meshCrystal.Layers.Remove(layerTemplate);
+            meshCrystal.Layers.Remove(layerTemplate!);
             meshCrystal.Materials.RemoveAt(meshCrystal.Materials.Count - 1);
 
-            Face faceTemplate = layerTemplate.Crystal.Faces[0];
-            CPlugMaterialUserInst materialUserInstTemplate = ItemExtensions.DeepCopyCPlugMaterialUserInst(faceTemplate.Material.MaterialUserInst);
+            Face faceTemplate = layerTemplate!.Crystal!.Faces[0];
+            CPlugMaterialUserInst materialUserInstTemplate = ItemExtensions.DeepCopyCPlugMaterialUserInst(faceTemplate.Material!.MaterialUserInst!);
             Vertex vertexTemplate = faceTemplate.Vertices[0];
 
             Dictionary<string, CPlugMaterialUserInst> materialDic = [];
@@ -78,7 +78,7 @@ namespace TM_GenericMapping.Items
 
 
                 var layer = ItemExtensions.DeepCopyGeometryLayer(layerTemplate);
-                var crystal = layer.Crystal;
+                var crystal = layer.Crystal!;
                 layer.IsVisible = settings.VisibleGeometry;
                 layer.LayerName = material;
 
@@ -170,7 +170,7 @@ namespace TM_GenericMapping.Items
 
         public static void MakeInvisible(CGameItemModel item)
         {
-            var meshCrystal = (item.EntityModelEdition as CGameCommonItemEntityModelEdition)!.MeshCrystal;
+            var meshCrystal = (item.EntityModelEdition as CGameCommonItemEntityModelEdition)!.MeshCrystal!;
 
             foreach(var layer in meshCrystal.Layers.Where(l => l.LayerName != TrianglesUtils.VisibleRootLayerName).OfType<GeometryLayer>())
             {

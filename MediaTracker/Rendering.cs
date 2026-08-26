@@ -68,15 +68,15 @@ public abstract class TriangleRenderer : KeysRendererBase<TriangleObject>
 
     public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
     {
-        var key = new CGameCtnMediaBlockTriangles.Key(block as CGameCtnMediaBlockTriangles);
-        (block as CGameCtnMediaBlockTriangles).Keys.Add(key);
+        var key = new CGameCtnMediaBlockTriangles.Key((block as CGameCtnMediaBlockTriangles)!);
+        (block as CGameCtnMediaBlockTriangles)!.Keys.Add(key);
         return key;
     }
 
     public virtual int AddTriangleDataToBlock(TriangleObject obj, CGameCtnMediaBlock block)
     {
         var triangleBlock = block as CGameCtnMediaBlockTriangles;
-        int idx = triangleBlock.Vertices.Length;
+        int idx = triangleBlock!.Vertices.Length;
         Int3 triangleOffset = (idx, idx, idx);
 
         var oldVertices = triangleBlock.Vertices;
@@ -194,7 +194,7 @@ public static class ScreenPositionExtensions
 public class Triangle2DRenderer : TriangleRenderer
 {
     public const float DefaultOrthographicSize = 10f;
-    public IRenderingCamera Camera { get; set; } = null!;
+    public IRenderingCamera Camera { get; set; }
     public bool IsOrthographic { get; set; } = true;
     public float OrthographicSize { get; set; } = DefaultOrthographicSize;
     public float AspectRatio { get; set; } = 16f / 9f;
@@ -256,7 +256,7 @@ public class Triangle2DRenderer : TriangleRenderer
         for (int i = 0; i < obj.Vertices.Length; ++i)
         {
             var v = ToMediaTrackerCoordinates(obj, obj.Vertices[i], postProcessingEffectData);
-            triangleKey.Positions[idx + i] = new Vec3(v.X, v.Y, v.Z);
+            triangleKey!.Positions[idx + i] = new Vec3(v.X, v.Y, v.Z);
         }
     }
 
@@ -440,10 +440,10 @@ public class ActiveCameraTriangle2DRenderer : Triangle2DRenderer
     }
     protected override Vector3 ToMediaTrackerCoordinates(TriangleObject obj, Vector3 vec3, PostProcessingEffectData postProcessingEffectData)
     {
-        if(_sceneCameraManager.ActiveCamera is IRenderingCamera renderingCamera)
+        if (_sceneCameraManager.ActiveCamera is IRenderingCamera renderingCamera)
             this.Camera = renderingCamera;
         else
-            this.Camera = null;
+            throw new InvalidOperationException("Missing active Camera");
         return base.ToMediaTrackerCoordinates(obj, vec3, postProcessingEffectData);
     }
 }
@@ -494,7 +494,7 @@ public class Triangle3DRenderer : TriangleRenderer
         if(RelativeToPlayer && EnsureVisibilityWhenRelativeToPlayer)
         {
             var triangleBlock = block as CGameCtnMediaBlockTriangles;
-            int idx = triangleBlock.Vertices.Length;
+            int idx = triangleBlock!.Vertices.Length;
             if (idx != 0) // only add visibility vertices once per block
                 return base.AddRenderDataToBlock(obj, block);
 
@@ -519,7 +519,7 @@ public class Triangle3DRenderer : TriangleRenderer
     }
     public override void SetKeyFrameData(TriangleObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
-        var triangleKey = key as CGameCtnMediaBlockTriangles.Key;
+        var triangleKey = (key as CGameCtnMediaBlockTriangles.Key)!;
         for (int i = 0; i < obj.Vertices.Length; ++i)
         {
             var v = ToWorldCoordinates(obj, obj.Vertices[i], postProcessingEffectData);
@@ -600,7 +600,7 @@ public class PlayerCameraRenderer : ITwoKeyRenderer<PlayerCameraObject>
 
     public void SetDataToEnd(PlayerCameraObject obj, CGameCtnMediaBlock block)
     {
-        var cameraBlock = block as CGameCtnMediaBlockCameraGame;
+        var cameraBlock = (block as CGameCtnMediaBlockCameraGame)!;
         cameraBlock.GameCam = obj.CameraType;
     }
 
@@ -610,7 +610,7 @@ public class PlayerCameraRenderer : ITwoKeyRenderer<PlayerCameraObject>
 
     public void SetDataToStart(PlayerCameraObject obj, CGameCtnMediaBlock block)
     {
-        var cameraBlock = block as CGameCtnMediaBlockCameraGame;
+        var cameraBlock = (block as CGameCtnMediaBlockCameraGame)!;
         cameraBlock.GameCam = obj.CameraType;
     }
 }
@@ -621,12 +621,12 @@ public class DepthOfFieldRenderer : KeysRendererBase<DepthOfFieldObject>
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = templates.GetEmptyDepthOfFieldBlock();
-        block.Keys.Clear();
+        block.Keys?.Clear();
         return block;
     }
     public override void SetKeyFrameData(DepthOfFieldObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
-        var dofKey = key as CGameCtnMediaBlockDOF.Key;
+        var dofKey = (key as CGameCtnMediaBlockDOF.Key)!;
         dofKey.ZFocus = obj.FocusDistance;
         dofKey.LensSize = obj.LensSize;
         dofKey.Target = obj.Target;
@@ -636,7 +636,7 @@ public class DepthOfFieldRenderer : KeysRendererBase<DepthOfFieldObject>
     public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
     {
         var key = new CGameCtnMediaBlockDOF.Key();
-        (block as CGameCtnMediaBlockDOF).Keys.Add(key);
+        (block as CGameCtnMediaBlockDOF)!.Keys?.Add(key);
         return key;
     }
 
@@ -655,12 +655,12 @@ public class CustomCameraRenderer : KeysRendererBase<CustomCameraObject>
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = templates.GetEmptyCustomCameraBlock();
-        block.Keys.Clear();
+        block.Keys?.Clear();
         return block;
     }
     public override void SetKeyFrameData(CustomCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
-        var camKey = key as CGameCtnMediaBlockCameraCustom.Key;
+        var camKey = (key as CGameCtnMediaBlockCameraCustom.Key)!;
         camKey.Position = obj.Position;
         camKey.PitchYawRoll = obj.Rotation.ToPitchYawRoll();
         camKey.U01 = 1065353216; // not sure what this does but its default
@@ -692,7 +692,7 @@ public class CustomCameraRenderer : KeysRendererBase<CustomCameraObject>
     public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
     {
         var key = new CGameCtnMediaBlockCameraCustom.Key();
-        (block as CGameCtnMediaBlockCameraCustom).Keys.Add(key);
+        (block as CGameCtnMediaBlockCameraCustom)!.Keys?.Add(key);
         return key;
     }
     public override bool CanShareBlockWith(CustomCameraObject obj, MediaObject other)
@@ -708,12 +708,12 @@ public class PathCameraRenderer : KeysRendererBase<PathCameraObject>
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = templates.GetEmptyCustomCameraBlock();
-        block.Keys.Clear();
+        block.Keys?.Clear();
         return block;
     }
     public override void SetKeyFrameData(PathCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
-        var camKey = key as CGameCtnMediaBlockCameraPath.Key;
+        var camKey = (key as CGameCtnMediaBlockCameraPath.Key)!;
         camKey.Position = obj.Position;
         camKey.PitchYawRoll = obj.Rotation.ToPitchYawRoll();
         camKey.Anchor = obj.Anchor;
@@ -728,7 +728,7 @@ public class PathCameraRenderer : KeysRendererBase<PathCameraObject>
     public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
     {
         var key = new CGameCtnMediaBlockCameraPath.Key();
-        (block as CGameCtnMediaBlockCameraPath).Keys.Add(key);
+        (block as CGameCtnMediaBlockCameraPath)!.Keys?.Add(key);
         return key;
     }
     public override bool CanShareBlockWith(PathCameraObject obj, MediaObject other)
@@ -744,12 +744,12 @@ public class OrbitalCameraRenderer : KeysRendererBase<OrbitalCameraObject>
     public override CGameCtnMediaBlock CreateEmptyBlock(BlockTemplates templates)
     {
         var block = templates.GetEmptyCustomCameraBlock();
-        block.Keys.Clear();
+        block.Keys?.Clear();
         return block;
     }
     public override void SetKeyFrameData(OrbitalCameraObject obj, CGameCtnMediaBlock block, IKey key, int idx, PostProcessingEffectData postProcessingEffectData)
     {
-        var camKey = key as CGameCtnMediaBlockCameraOrbital.Key;
+        var camKey = (key as CGameCtnMediaBlockCameraOrbital.Key)!;
         camKey.TargetPosition = obj.TargetPosition;
         camKey.Radius = obj.Radius;
         camKey.Fov = obj.FOV;
@@ -759,7 +759,7 @@ public class OrbitalCameraRenderer : KeysRendererBase<OrbitalCameraObject>
     public override IKey CreateAndAddEmptyKey(CGameCtnMediaBlock block)
     {
         var key = new CGameCtnMediaBlockCameraOrbital.Key();
-        (block as CGameCtnMediaBlockCameraOrbital).Keys.Add(key);
+        (block as CGameCtnMediaBlockCameraOrbital)!.Keys?.Add(key);
         return key;
     }
     public override bool CanShareBlockWith(OrbitalCameraObject obj, MediaObject other)

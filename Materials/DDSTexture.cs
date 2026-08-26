@@ -27,7 +27,7 @@ public class DDSTexture : IDisposable
         byte[] data;
         if (stream is MemoryStream ms && ms.TryGetBuffer(out var buffer))
         {
-            data = buffer.Array;
+            data = buffer.Array!;
         }
         else
         {

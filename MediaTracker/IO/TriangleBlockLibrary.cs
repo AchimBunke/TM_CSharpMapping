@@ -24,7 +24,6 @@ public class TriangleBlockLibrary
 
     public const string DefaultTheme = "Default";
 
-    private string dirPath;
     public bool LazyLoading { get; init; } = true;
 
     public void LoadFromDirectory(string rootPath)
@@ -175,7 +174,7 @@ public class TriangleBlockLibrary
             return false;
         }
 
-        if (entry.LODs.TryGetValue(desiredLOD, out triangleObjectData))
+        if (entry.LODs.TryGetValue(desiredLOD, out triangleObjectData!))
             return true;
 
         if (findNearestLOD && entry.LODs.Count > 0)

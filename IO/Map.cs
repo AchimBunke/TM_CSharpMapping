@@ -5,7 +5,7 @@ namespace TM_GenericMapping.IO;
 
 public class Map
 {
-    public string SaveName { get; set; }
+    public string SaveName { get; set; } = "Unnamed";
 
     public string SavePath { get; set; }
     public string MapPath { get; init; }
@@ -28,7 +28,7 @@ public class Map
 
     public bool IsOpen => Challenge is not null;
 
-    public CGameCtnChallenge Challenge { get; private set; }
+    public CGameCtnChallenge Challenge { get; private set; } = null!;
     public void Open()
     {
         Challenge = Gbx.Parse<CGameCtnChallenge>(MapPath, ReadSettings).Node;
@@ -41,7 +41,7 @@ public class Map
     {
         if (!string.IsNullOrWhiteSpace(SaveName))
             Challenge.MapName = SaveName;
-        var directory = Path.GetDirectoryName(SavePath);
+        var directory = Path.GetDirectoryName(SavePath)!;
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
