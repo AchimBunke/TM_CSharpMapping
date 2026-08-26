@@ -121,6 +121,8 @@ public class MeshExtractor
                     var staticResult = ExtractMeshesFromStaticObjectModel(staticObjectModel);
                     if(staticResult.IsFailure)
                         return ToolResult.Fail(staticResult);
+                    staticResult.Value.group.Position = worldPosition;
+                    staticResult.Value.group.Rotation = worldRotation;
                     meshGroups.Add(staticResult.Value);
                     break;
                 case CPlugDynaObjectModel dynaObjectModel:
@@ -128,6 +130,8 @@ public class MeshExtractor
                     if(dynaResult.IsFailure)
                         return ToolResult.Fail(dynaResult);
                     dynaResult.Value.group.DynaObjectModelParams = ent.Params as NPlugDynaObjectModel_SInstanceParams;
+                    dynaResult.Value.group.Position = worldPosition;
+                    dynaResult.Value.group.Rotation = worldRotation;
                     meshGroups.Add(dynaResult.Value);
                     dynaMeshGroups.Add(dynaResult.Value.group);
                     break;
