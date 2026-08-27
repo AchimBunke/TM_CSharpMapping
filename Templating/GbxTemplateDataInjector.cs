@@ -1,4 +1,5 @@
 ﻿using GBX.NET.Engines.GameData;
+using GBX.NET.Serialization.Chunking;
 using System.Reflection;
 using TM_GenericMapping.Common;
 
@@ -48,7 +49,7 @@ public class ReflectionTemplateDataInjector<T> : IGbxTemplateDataInjector<T>
             if (targetValue == null)
                 continue; // template has no object to populate
 
-            targetField.SetValue(target, ObjectCloner.DeepCloneObject(sourceValue));
+            targetField.SetValue(target, ObjectCloner.DeepCloneObject(sourceValue, new Dictionary<object, object>(ReferenceEqualityComparer.Instance) { [source] = target }));
         }
     }
     private static IEnumerable<FieldInfo> GetFields(Type type)

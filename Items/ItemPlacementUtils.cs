@@ -50,7 +50,7 @@ public static class ItemPlacementUtils
         placementParam.PlacementClass = placementClass;
         placementParam.TryCreateChunk<CGameItemPlacementParam.Chunk2E020005>(out _);
     }
-    public static void RemoveItemPlacementClass(CGameItemPlacementParam placementParam, NPlugItemPlacement_SClass placementClass)
+    public static void RemoveItemPlacementClass(CGameItemPlacementParam placementParam)
     {
         placementParam.PlacementClass = null;
         placementParam.RemoveChunk<CGameItemPlacementParam.Chunk2E020005>();
