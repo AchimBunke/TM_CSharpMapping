@@ -79,7 +79,7 @@ public class MovingItemCreator
     }
     MeshBuilder.BuildSettings CreateDefaultBuildOptions(MeshBuilder.BuildSettings defaultOptions)
     {
-        if (!defaultOptions.GroupSettings.Any(gs => gs.Type == GroupType.DynaObject))
+        if (defaultOptions.GroupSettings.Any(gs => gs.Type == GroupType.DynaObject))
             return defaultOptions;
         var staticGroups = defaultOptions.GroupSettings.Where(gs => gs.Type == GroupType.StaticObject).ToList();
         for (int i = 0; i < staticGroups.Count; i++)
