@@ -97,6 +97,7 @@ public class MovingItemCreator
             defaultOptions.GroupSettings[i] = group;
         }
         defaultOptions.TargetModel = MeshBuilder.ItemModel.General;
+
         return defaultOptions;
     }
     void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel? template)
