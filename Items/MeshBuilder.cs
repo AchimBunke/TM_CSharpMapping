@@ -1238,9 +1238,6 @@ public class MeshBuilder
                 var spawnModelResult = BuildSpawnModel(normalizedItem, groupSetting, buildSettings);
                 if (spawnModelResult.IsFailure)
                     return ToolResult.Fail(spawnModelResult);
-                spawnModelResult.Value.DefaultGravitySpawn = new Vec3(0, 0, 50);
-                spawnModelResult.Value.TorqueDuration = TimeInt32.FromMilliseconds(500);
-                spawnModelResult.Value.TorqueX = 0.5f;
                 var spawnEnt = CreateEntRef();
                 spawnEnt.Model = spawnModelResult.Value;
                 var pos = spawnModelResult.Value.Loc.GetPosition();
