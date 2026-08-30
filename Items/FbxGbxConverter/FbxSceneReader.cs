@@ -102,4 +102,11 @@ internal static class FbxSceneReader
         }
         return result;
     }
+
+    public static Assimp.Scene CreateEmptyScene()
+    {
+        var result = new Assimp.Scene();
+        result.RootNode = new Node("RootNode");
+        return result;
+    }
 }

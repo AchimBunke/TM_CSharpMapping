@@ -26,7 +26,6 @@ public class MeshConfig
     public EWaypointType? WaypointType { get; set; } = null;
     public Vec3? GameplayMainDir{ get; set;  } = null;
     public string? MovingGroup { get; set; }
-    public string? AnchorNodeName { get; set; } = null;
     public float? LightmapSize { get; set; } = null;
 
     /// <summary>

@@ -171,4 +171,18 @@ public static class LODUtils
         lodRanges.Add(new Vector2(lodDistances.LastOrDefault(), float.PositiveInfinity)); // Add the last range to infinity
         return lodRanges;
     }
+    public static List<int> ToLodIndexes(int lodMask, float[] lodDistances)
+    {
+        List<int> lodIndexes = new List<int>();
+
+        int lodCount = lodDistances.Length + 1;
+
+        for (int i = 0; i < lodCount; i++)
+        {
+            if ((lodMask & (1 << i)) != 0)
+                lodIndexes.Add(i);
+        }
+
+        return lodIndexes;
+    }
 }

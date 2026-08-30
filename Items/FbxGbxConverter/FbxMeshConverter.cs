@@ -12,6 +12,7 @@ using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.FbxGbxConverter;
 using TM_GenericMapping.Messaging;
 using TmEssentials;
+using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
@@ -176,6 +177,7 @@ internal class FbxMeshConverter
 
 
 
+
     public static Assimp.Matrix4x4 CoordinateConversionMatrix = new Assimp.Matrix4x4(
       1, 0, 0, 0,
       0, 1, 0, 0,
@@ -255,6 +257,8 @@ internal class FbxMeshConverter
 
         return normalizedMesh;
     }
+
+
 
     static CPlugSpawnModel ConvertSocket(Assimp.Node node, Assimp.Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale, FbxGbxConversionInput config)
     {
@@ -569,7 +573,364 @@ internal class FbxMeshConverter
         result.C1 = i31; result.C2 = i32; result.C3 = i33;
         return result;
     }
+
+    // -------------------------------------
+    // inverse conversion
+    // -------------------------------------
+
+
+    public static ToolResult<None> RebuildMeshes(Scene scene, NormalizedItem item, ItemConfig config, Dictionary<CPlugMaterialUserInst, int> materialIndices)
+    {
+        SortedSet<float> maxLodDistances = new SortedSet<float>();
+        for (int i = 0; i < item.Groups.Length; i++)
+        {
+            var group = item.Groups[i];
+            foreach (var lod in group.LODDistances) { maxLodDistances.Add(lod); }
+        }
+
+        int movingGroupIdCounter = 0;
+        Dictionary<MeshGroup, MovingGroupConfig> groupToMovingGroup = new Dictionary<MeshGroup, MovingGroupConfig>();
+        for (int i = 0; i < item.Groups.Length; i++)
+        {
+            var group = item.Groups[i];
+            switch (group.GroupType)
+            {
+                case GroupType.StaticObject:
+                    break;
+                case GroupType.DynaObject:
+                    {
+                        var movingGroup = new MovingGroupConfig()
+                        {
+                            AnchorPosition = group.Position,
+                            MovingGroupId = $"movingGroup_{movingGroupIdCounter++}",
+                            KinematicMovement = MovingGroupConfig.FromKinematicConstraint(group.KinematicConstraint),
+                            KinematicModelConfig = MovingGroupConfig.FromInstanceParams(group.DynaObjectModelParams),
+                            //relative moving groups later once all groups registered
+                        };
+                        groupToMovingGroup[group] = movingGroup;
+                        config.MovingGroups.Add(movingGroup);
+                    }
+                    break;
+                case GroupType.Trigger_Special:
+                    break;
+                case GroupType.Trigger_Waypoint:
+                    {
+                        var waypointConfig = new Waypoint
+                        {
+                            Type = (EWaypointType)group.WaypointType!,
+                            NoRespawn = group.WaypointNoRespawn.HasValue ? group.WaypointNoRespawn.Value : false,
+                        };
+                        config.Waypoint = waypointConfig;
+                    }
+                    break;
+            }
+
+            foreach (var m in item.Meshes)
+            {
+                if (m.GroupIndex != i) continue;
+
+                var meshConfig = RebuildMeshConfig(m, group, maxLodDistances.ToList(), groupToMovingGroup.TryGetValue(group, out var movingGroup) ? movingGroup : null);
+                RebuildMesh(scene, m, group, materialIndices);
+
+            }
+        }
+
+        // fix relative moving groups
+        for (int i = 0; i < item.Groups.Length; i++)
+        {
+            var group = item.Groups[i];
+            if (groupToMovingGroup.TryGetValue(group, out var movingGroup))
+            {
+                if (group.RelativeMovingParentIndex.HasValue)
+                {
+                    var parentGroup = item.Groups[group.RelativeMovingParentIndex.Value];
+                    if (groupToMovingGroup.TryGetValue(parentGroup, out var parentMovingGroup))
+                    {
+                        movingGroup.ParentMovingGroupId = parentMovingGroup.MovingGroupId;
+                    }
+                }
+            }
+        }
+
+        return ToolResult.Success(nameof(FbxGbxConverter));
+    }
+
+    static List<int> MapLocalLodsToGlobal(
+        List<float> globalMaxLODDistances,
+        List<float> localMaxLODDistances,
+        List<int> localLods)
+    {
+        var result = new List<int>();
+
+        foreach (int localLod in localLods)
+        {
+            float localMin = localLod == 0
+                ? 0f
+                : localMaxLODDistances[localLod - 1];
+
+            float localMax = localLod < localMaxLODDistances.Count
+                ? localMaxLODDistances[localLod]
+                : float.PositiveInfinity;
+
+            for (int globalLod = 0; globalLod <= globalMaxLODDistances.Count; globalLod++)
+            {
+                float globalMin = globalLod == 0
+                    ? 0f
+                    : globalMaxLODDistances[globalLod - 1];
+
+                float globalMax = globalLod < globalMaxLODDistances.Count
+                    ? globalMaxLODDistances[globalLod]
+                    : float.PositiveInfinity;
+
+                // Global interval is completely inside this local interval.
+                if (globalMin >= localMin && globalMax <= localMax)
+                    result.Add(globalLod);
+            }
+        }
+
+        return result;
+    }
+
+    static MeshConfig RebuildMeshConfig(
+        NormalizedMesh normalizedMesh,
+        MeshGroup meshGroup,
+        List<float> maxLODDistances,
+        MovingGroupConfig? movingGroupConfig)
+    {
+        var meshConfig = new MeshConfig()
+        {
+            Name = normalizedMesh.Name,
+            LightmapSize = normalizedMesh.PreLightGenerator?.U02,
+        };
+
+        if (!normalizedMesh.Properties.HasFlag(MeshProperties.Collidable))
+            meshConfig.MeshFlags |= MeshFlags.NonCollidable;
+
+
+        if (!normalizedMesh.Properties.HasFlag(MeshProperties.Visible))
+            meshConfig.MeshFlags |= MeshFlags.Invisible;
+
+        if (!normalizedMesh.Properties.HasFlag(MeshProperties.Enabled))
+            meshConfig.MeshFlags |= MeshFlags.Skip;
+
+
+        if (meshGroup.GroupType == GroupType.DynaObject)
+            meshConfig.MeshFlags |= MeshFlags.Moving;
+
+        if (meshGroup.GroupType == GroupType.Trigger_Waypoint)
+            meshConfig.MeshFlags |= MeshFlags.TriggerWaypoint;
+
+        if (meshGroup.GroupType == GroupType.Trigger_Special)
+            meshConfig.MeshFlags |= MeshFlags.TriggerEffect;
+
+
+        if (!normalizedMesh.Properties.HasFlag(MeshProperties.LOD))
+            meshConfig.Lods = [];
+        else
+        {
+            meshConfig.Lods = MapLocalLodsToGlobal(maxLODDistances, meshGroup.LODDistances.ToList(), LODUtils.ToLodIndexes(normalizedMesh.LODMask, meshGroup.LODDistances));
+        }
+
+        meshConfig.TriggerEffect = meshGroup.GroupType == GroupType.Trigger_Special ? meshGroup.TriggerGameplayId : null;
+        meshConfig.WaypointType = meshGroup.GroupType == GroupType.Trigger_Waypoint ? meshGroup.WaypointType : null;
+        meshConfig.GameplayMainDir = meshGroup.GameplayMainDir;
+        if(movingGroupConfig != null)
+        {
+            meshConfig.MovingGroup = movingGroupConfig.MovingGroupId;
+        }
+
+        return meshConfig;
+    }
+
+    static void RebuildMesh(Scene scene, NormalizedMesh normalizedMesh, MeshGroup meshGroup, Dictionary<CPlugMaterialUserInst, int> materialIndices)
+    {
+        var mesh = new Assimp.Mesh(normalizedMesh.Name, PrimitiveType.Triangle);
+
+        var globalTransform = CreateGlobalTransform(meshGroup);
+
+
+        var invGlobal = globalTransform;
+        invGlobal.Inverse();
+
+        var invCoordinate = CoordinateConversionMatrix;
+        invCoordinate.Inverse();
+
+        var scaleMatrix = Assimp.Matrix4x4.FromScaling(
+            new Vector3D(100, 100, 100));
+
+        var invScale = scaleMatrix;
+        invScale.Inverse();
+        // ------------------------------------------------------------
+        // Positions
+        //
+        // Forward:
+        // CoordinateConversionMatrix * scaleMatrix * globalTransform * p
+        //
+        // Reverse:
+        // invGlobal * invScale * invCoordinate * p
+        // ------------------------------------------------------------
+
+        foreach (var p in normalizedMesh.Positions)
+        {
+            var v = new Vector3D(p.X, p.Y, p.Z);
+
+            v = invCoordinate * v;
+            v = invScale * v;
+            v = invGlobal * v;
+
+            mesh.Vertices.Add(v);
+        }
+
+        // ------------------------------------------------------------
+        // Normals
+        //
+        // Forward:
+        // CoordinateConversionMatrix * normalMatrix * globalNormal
+        //
+        // Do NOT apply scale to normals.
+        // ------------------------------------------------------------
+
+        if (normalizedMesh.Normals.Length > 0)
+        {
+            var normalMatrix = ComputeNormalMatrix(globalTransform);
+            normalMatrix.Inverse();
+
+            foreach (var n in normalizedMesh.Normals)
+            {
+                var v = new Vector3D(n.X, n.Y, n.Z);
+
+                v = invCoordinate * v;
+                v = normalMatrix * v;
+
+                v.Normalize();
+                mesh.Normals.Add(v);
+            }
+        }
+
+        // ------------------------------------------------------------
+        // UV0
+        // ------------------------------------------------------------
+
+        if (normalizedMesh.TexCoords is not null)
+        {
+            mesh.TextureCoordinateChannels[0] = normalizedMesh.TexCoords
+                .Select(uv => new Vector3D(uv.X, uv.Y, 0))
+                .ToList();
+
+            mesh.UVComponentCount[0] = 2;
+        }
+
+        // ------------------------------------------------------------
+        // UV1 / Lightmap
+        // ------------------------------------------------------------
+
+        if (normalizedMesh.LightmapCoords is not null)
+        {
+            mesh.TextureCoordinateChannels[1] = normalizedMesh.LightmapCoords
+                .Select(uv => new Vector3D(uv.X, uv.Y, 0))
+                .ToList();
+
+            mesh.UVComponentCount[1] = 2;
+        }
+
+        // ------------------------------------------------------------
+        // Colors
+        // ------------------------------------------------------------
+
+        if (normalizedMesh.Colors is not null)
+        {
+            mesh.VertexColorChannels[0] = normalizedMesh.Colors
+                .Select(argb =>
+                {
+                    var c = new GBX.NET.Color(argb);
+
+                    return new Color4D(
+                        c.R / 255f,
+                        c.G / 255f,
+                        c.B / 255f,
+                        c.A / 255f);
+                })
+                .ToList();
+        }
+
+        // ------------------------------------------------------------
+        // Tangent U/V
+        //
+        // Forward:
+        // CoordinateConversionMatrix * Identity * globalTransform * tangent
+        // ------------------------------------------------------------
+
+        if (normalizedMesh.TangentUs is not null)
+        {
+            foreach (var t in normalizedMesh.TangentUs)
+            {
+                var v = new Vector3D(t.X, t.Y, t.Z);
+
+                v = invCoordinate * v;
+                v = invGlobal * v;
+
+                v.Normalize();
+                mesh.Tangents.Add(v);
+            }
+        }
+
+        if (normalizedMesh.TangentVs is not null)
+        {
+            foreach (var t in normalizedMesh.TangentVs)
+            {
+                var v = new Vector3D(t.X, t.Y, t.Z);
+
+                v = invCoordinate * v;
+                v = invGlobal * v;
+
+                v.Normalize();
+                mesh.BiTangents.Add(v);
+            }
+        }
+
+        // ------------------------------------------------------------
+        // Indices
+        // ------------------------------------------------------------
+
+        for (int i = 0; i < normalizedMesh.Indices.Length; i += 3)
+        {
+            mesh.Faces.Add(new Face(
+                [
+                normalizedMesh.Indices[i],
+                normalizedMesh.Indices[i + 1],
+                normalizedMesh.Indices[i + 2]
+                ]));
+        }
+
+
+        mesh.MaterialIndex = materialIndices.TryGetValue(normalizedMesh.Material, out var index) ? index : 0;
+        scene.Meshes.Add(mesh);
+        int meshIndex = scene.Meshes.Count - 1;
+
+        var node = new Node(mesh.Name.Replace(" ", "_"), scene.RootNode);
+        node.MeshIndices.Add(meshIndex);
+        scene.RootNode.Children.Add(node);
+
+
+    }
+    static Assimp.Matrix4x4 CreateGlobalTransform(MeshGroup meshGroup)
+    {
+        var rotation = Assimp.Matrix4x4.FromEulerAnglesXYZ(
+            meshGroup.Rotation.X,
+            meshGroup.Rotation.Y,
+            meshGroup.Rotation.Z);
+
+        var translation = Assimp.Matrix4x4.FromTranslation(
+            new Vector3D(
+                meshGroup.Position.X,
+                meshGroup.Position.Y,
+                meshGroup.Position.Z));
+
+        return translation * rotation;
+    }
 }
+
+
 
 internal static class MeshOperations
 {

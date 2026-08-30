@@ -72,7 +72,7 @@ internal class NodeGrouper
         _itemConfig = itemConfig;
         _movingConfig = itemConfig.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => new MovingParameter
         {
-            KinematicConstraint = MovingGroupConfig.ToKinematicConstaraint(mg.KinematicMovement),
+            KinematicConstraint = MovingGroupConfig.ToKinematicConstraint(mg.KinematicMovement),
             InstanceParams = MovingGroupConfig.ToInstanceParams(mg.KinematicModelConfig),
             ParentMovingGroupId = mg.ParentMovingGroupId,
             AnchorPosition = mg.AnchorPosition,

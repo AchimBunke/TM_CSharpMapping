@@ -1,4 +1,6 @@
 ﻿using Assimp;
+using Assimp.Unmanaged;
+using DirectXTexNet;
 using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
@@ -30,7 +32,6 @@ public class FbxGbxConverter
         if(itemResult.IsFailure)
             return ToolResult.Fail(itemResult);
 
-        SetItemMetaData(itemResult.Value, conversionInput);
 
         return ToolResult.Success(itemResult.Value, nameof(FbxGbxConverter));
     }
@@ -70,10 +71,7 @@ public class FbxGbxConverter
     }
 
 
-    void SetItemMetaData(CGameItemModel item, FbxGbxConversionInput config)
-    {
 
-    }
 
     ToolResult<NormalizedItem> ConvertToNormalizedItem(Scene scene, FbxGbxConversionInput config)
     {
@@ -122,16 +120,7 @@ public class FbxGbxConverter
             return ToolResult.Fail(meshResults);
 
 
-        normalizedItem.Icon = FbxIconLoader.LoadIcon(config);
-
-        if(config.ItemConfig.Name != null)
-            normalizedItem.Name = config.ItemConfig.Name;
-        else
-            normalizedItem.Name = "Unnamed Item";
-        if(config.ItemConfig.Description != null)
-            normalizedItem.Description = config.ItemConfig.Description;
-        else
-            normalizedItem.Description = "No Description";
+        SetMetaData(normalizedItem, config);
 
         normalizedItem.Groups = groupResults.Value.ToArray();
         normalizedItem.Meshes = meshResults.Value.ToArray();
@@ -139,7 +128,19 @@ public class FbxGbxConverter
 
         return ToolResult.Success(normalizedItem, nameof(FbxGbxConverter));
     }
+    void SetMetaData(NormalizedItem normalizedItem, FbxGbxConversionInput config)
+    {
+        normalizedItem.Icon = FbxIconLoader.LoadIcon(config);
 
+        if (config.ItemConfig.Name != null)
+            normalizedItem.Name = config.ItemConfig.Name;
+        else
+            normalizedItem.Name = "Unnamed Item";
+        if (config.ItemConfig.Description != null)
+            normalizedItem.Description = config.ItemConfig.Description;
+        else
+            normalizedItem.Description = "No Description";
+    }
     void AnchorObjects(Scene scene, List<MeshGroup> meshGroups, List<NodeDef> nodes, List<LightDef> lights)
     {
         for (int i = 0; i < meshGroups.Count; ++i)
@@ -187,7 +188,6 @@ public class FbxGbxConverter
     }
 
 
-
     //-------------------------------------
     // Placement Parameter
     //-------------------------------------
@@ -195,6 +195,7 @@ public class FbxGbxConverter
     {
         return PlacementConfig.ToPlacementParam(config.ItemConfig.PlacementParams);
     }
+ 
 
     //-------------------------------------
     // Build Settings
@@ -226,4 +227,75 @@ public class FbxGbxConverter
         return buildSettings;
     }
 
+
+
+    //-------------------------------------
+    // Convert to Fbx
+    //-------------------------------------
+
+    public ToolResult<(Stream fbx, ItemConfig config, Stream icon)> ConvertToFbx(CGameItemModel itemModel, DMaterialLibrary materialLibrary)
+    {
+        var scene = FbxSceneReader.CreateEmptyScene();
+
+        var result = ConvertToFbx(scene, itemModel, materialLibrary);
+        if (result.IsFailure)
+            return ToolResult.Fail(result);
+
+        using var context = new AssimpContext();
+        ExportDataBlob blob = context.ExportToBlob(scene, "glb");
+
+        var fbxStream = new MemoryStream(blob.Data);
+
+        return ToolResult.Success(((Stream)fbxStream, result.Value.config, result.Value.icon), nameof(FbxGbxConverter));
+    }
+
+    void ExtractPlacementParamConfig(CGameItemModel item, ItemConfig config)
+    {
+        var placementConfig = PlacementConfig.FromPlacementParam(item.DefaultPlacement!);
+        config.PlacementParams = placementConfig;
+    }
+    void ExtractMetaData(NormalizedItem normalizedItem, CGameItemModel item, ItemConfig config, out Stream iconStream)
+    {
+        iconStream = FbxIconLoader.ExtractIcon(normalizedItem);
+
+        if (!string.IsNullOrWhiteSpace(normalizedItem.Name))
+            config.Name = normalizedItem.Name;
+        if (!string.IsNullOrWhiteSpace(normalizedItem.Description))
+            config.Description = normalizedItem.Description;
+        config.AuthorName = string.IsNullOrEmpty(item.Ident.Author) ? "Unknown Author" : item.Ident.Author;
+    }
+
+    ToolResult<(ItemConfig config, Stream icon)> ConvertToFbx(Scene scene, CGameItemModel item, DMaterialLibrary materialLibrary)
+    {
+        var config = new ItemConfig();
+
+        var meshExtractor = new MeshExtractor();
+        var extractionResult = meshExtractor.ExtractMesh(item);
+        if (extractionResult.IsFailure)
+            return ToolResult.Fail(extractionResult);
+
+        var normalizedItem = extractionResult.Value;
+
+        ExtractMetaData(normalizedItem, item, config, out var iconStream);
+        ExtractPlacementParamConfig(item, config);
+
+        var result = ConvertToFbx(scene, config, normalizedItem, materialLibrary);
+        if(result.IsFailure)
+            return ToolResult.Fail(result);
+
+        return ToolResult.Success((config, iconStream), nameof(FbxGbxConverter));
+    }
+
+    ToolResult<None> ConvertToFbx(Scene scene, ItemConfig itemConfig, NormalizedItem normalizedItem, DMaterialLibrary materialLibrary)
+    {
+        var materialConverter = new FbxMaterialConverter(materialLibrary);
+
+        var materialResults = materialConverter.RebuildMaterials(scene, normalizedItem, itemConfig);
+
+        var result = FbxMeshConverter.RebuildMeshes(scene, normalizedItem, itemConfig, materialResults);
+        if(result.IsFailure)
+            return ToolResult.Fail(result);
+
+        return ToolResult.Success(None.Value, nameof(FbxGbxConverter));
+    }
 }

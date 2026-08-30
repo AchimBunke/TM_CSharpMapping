@@ -166,7 +166,21 @@ public class MovingGroupConfig
         };
         return instanceParams;
     }
-    public static NPlugDyna_SKinematicConstraint ToKinematicConstaraint(KinematicMovement kinematicMovementConfig)
+    public static KinematicModelConfig FromInstanceParams(NPlugDynaObjectModel_SInstanceParams instanceParams)
+    {
+        var kinematicModelConfig = new KinematicModelConfig
+        {
+            PeriodicSc = instanceParams.PeriodSc,
+            TextureId = instanceParams.TextureId,
+            IsKinematic = instanceParams.IsKinematic,
+            PeriodicScMax = instanceParams.PeriodScMax,
+            Phase01 = instanceParams.Phase01,
+            Phase01Max = instanceParams.Phase01Max,
+            CastStaticShadow = instanceParams.CastStaticShadow,
+        };
+        return kinematicModelConfig;
+    }
+    public static NPlugDyna_SKinematicConstraint ToKinematicConstraint(KinematicMovement kinematicMovementConfig)
     {
         var instanceParams = new NPlugDyna_SKinematicConstraint
         {
@@ -225,6 +239,52 @@ public class MovingGroupConfig
             SubVersion = 3,
         };
         return instanceParams;
+    }
+    public static KinematicMovement FromKinematicConstraint(NPlugDyna_SKinematicConstraint kinematicConstraint)
+    {
+        var kinematicMovement = new KinematicMovement()
+        {
+            TransAxis = kinematicConstraint.TransAxis,
+            TransMin = kinematicConstraint.TransMin,
+            TransMax = kinematicConstraint.TransMax,
+            TranslationAnims = kinematicConstraint.TransAnimFunc?.SubFuncs?.Select(sf =>
+            {
+                return new SubAnimFunc
+                {
+                    Ease = sf.Ease,
+                    Reverse = sf.Reverse,
+                    Duration = (uint)sf.Duration.Milliseconds,
+                };
+            }).ToList() ?? new List<SubAnimFunc>(),
+
+            RotAxis = kinematicConstraint.RotAxis,
+            AngleMinDeg = kinematicConstraint.AngleMinDeg,
+            AngleMaxDeg = kinematicConstraint.AngleMaxDeg,
+            RotationAnims = kinematicConstraint.RotAnimFunc?.SubFuncs?.Select(sf =>
+            {
+                return new SubAnimFunc
+                {
+                    Ease = sf.Ease,
+                    Reverse = sf.Reverse,
+                    Duration = (uint)sf.Duration.Milliseconds,
+                };
+            }).ToList() ?? new List<SubAnimFunc>(),
+
+            MovingTexture = kinematicConstraint.ShaderTcType == NPlugDyna_SKinematicConstraint.EShaderTcType.TransSubTexture ? new MovingTextureConfig
+            {
+                SubTextures = kinematicConstraint.ShaderTcDataTransSub.NbSubTexture,
+                SubTexturePerLine = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerLine,
+                SubTexturePerColumn = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerColumn,
+                TopToBottom = kinematicConstraint.ShaderTcDataTransSub.TopToBottom,
+                TextureAnims = kinematicConstraint.ShaderTcAnimFunc?.Select(sf => new TextureAnim
+                {
+                    Duration = (uint)sf.Duration.Milliseconds,
+                    TextureID = sf.TextureId,
+                }).ToList() ?? new List<TextureAnim>(),
+            } : null,
+        };
+
+        return kinematicMovement;
     }
 }
 public class KinematicMovement
@@ -367,7 +427,7 @@ public class LightConfig
 public class PlacementConfig
 {
     public bool YawOnly { get; set; }
-    public bool NotOnObject {  get; set; }
+    public bool NotOnObject { get; set; }
     public bool AutoRotation
     {
         get; set;
@@ -415,7 +475,7 @@ public class PlacementConfig
     public List<Vec3>? PivotPositions { get; set; } = [];
     public List<Quat>? PivotRotations { get; set; } = [];
 
-    public PlacementClass? PlacementClass{ get; set; }
+    public PlacementClass? PlacementClass { get; set; }
 
     public static CGameItemPlacementParam ToPlacementParam(PlacementConfig? placementConfig)
     {
@@ -457,14 +517,16 @@ public class PlacementConfig
                 pClass.PatchLayouts = placementConfig.PlacementClass.PatchLayouts?.
                     Select(pl =>
                     {
-                        var plc = new NPlugItemPlacement_SClass.PatchLayout();
-                        plc.ItemCount = pl.ItemCount;
-                        plc.ItemSpacing = pl.ItemSpacing;
-                        plc.FillAlign = pl.FillAlign;
-                        plc.FillDir = pl.FillDir;
-                        plc.NormedPos = pl.NormedPos;
-                        plc.OnlyOnGroups = pl.OnlyOnGroups?.Select(gid => gid.ToString()).ToArray() ?? Array.Empty<string>();
-                        plc.Altitude = pl.Altitude;
+                        var plc = new NPlugItemPlacement_SClass.PatchLayout
+                        {
+                            ItemCount = pl.ItemCount,
+                            ItemSpacing = pl.ItemSpacing,
+                            FillAlign = pl.FillAlign,
+                            FillDir = pl.FillDir,
+                            NormedPos = pl.NormedPos,
+                            OnlyOnGroups = pl.OnlyOnGroups?.ToArray() ?? Array.Empty<string>(),
+                            Altitude = pl.Altitude
+                        };
                         return plc;
                     }).ToArray() ?? Array.Empty<NPlugItemPlacement_SClass.PatchLayout>();
 
@@ -472,12 +534,61 @@ public class PlacementConfig
         }
         return placementParamsTemplate;
     }
+    public static PlacementConfig FromPlacementParam(CGameItemPlacementParam placementParam)
+    {
+        var placementConfig = new PlacementConfig
+        {
+            YawOnly = placementParam.YawOnly,
+            NotOnObject = placementParam.NotOnObject,
+            AutoRotation = placementParam.AutoRotation,
+            SwitchPivotManually = placementParam.SwitchPivotManually,
+            CubeCenter = placementParam.CubeCenter,
+            CubeSize = placementParam.CubeSize,
+            GridSnapHStep = placementParam.GridSnapHStep,
+            GridSnapVStep = placementParam.GridSnapVStep,
+            GridSnapHOffset = placementParam.GridSnapHOffset,
+            GridSnapVOffset = placementParam.GridSnapVOffset,
+            FlyVStep = placementParam.FlyVStep,
+            FlyVOffset = placementParam.FlyVOffset,
+            PivotSnapDistance = placementParam.PivotSnapDistance,
+            PivotPositions = placementParam.PivotPositions?.ToList() ?? new List<Vec3>(),
+            PivotRotations = placementParam.PivotRotations?.ToList() ?? new List<Quat>(),
+        };
+        if (placementParam.PlacementClass != null)
+        {
+            var pClass = new PlacementClass
+            {
+                SizeGroup = placementParam.PlacementClass.SizeGroup,
+                CompatibleGroupsIds = placementParam.PlacementClass.CompatibleGroupsIds?.ToList() ?? new List<string>(),
+                AlwaysUp = placementParam.PlacementClass.AlwaysUp,
+                AlignToInterior = placementParam.PlacementClass.AlignToInterior,
+                AlignToWorldDir = placementParam.PlacementClass.AlignToWorldDir,
+                WorldDir = placementParam.PlacementClass.WorldDir,
+                GroupCurPatchLayouts = placementParam.PlacementClass.GroupCurPatchLayouts?.ToList() ?? new List<int>(),
+                PatchLayouts = placementParam.PlacementClass.PatchLayouts?.Select(pl =>
+                {
+                    return new PlacementPatchLayout
+                    {
+                        ItemCount = pl.ItemCount,
+                        ItemSpacing = pl.ItemSpacing,
+                        FillAlign = pl.FillAlign,
+                        FillDir = pl.FillDir,
+                        NormedPos = pl.NormedPos,
+                        OnlyOnGroups = pl.OnlyOnGroups?.ToList() ?? new List<string>()
+                    };
+                }).ToList() ?? new List<PlacementPatchLayout>(),
+            };
+            placementConfig.PlacementClass = pClass;
+        }
+        return placementConfig;
+    }
 }
+
 
 public class PlacementClass
 {
     public string? SizeGroup { get; set; } = null;
-    public List<ItemPlacementUtils.PlacementPatchGroups>? CompatibleGroupsIds { get; set; } = [];
+    public List<string>? CompatibleGroupsIds { get; set; } = [];
     public bool AlwaysUp { get; set; } = false;
     public bool AlignToInterior { get; set; } = false;
     public bool AlignToWorldDir { get; set; } = false;
@@ -505,7 +616,7 @@ public class PlacementPatchLayout
     /// <summary>
     /// For which patchgroups this config applies
     /// </summary>
-    public List<ItemPlacementUtils.PlacementPatchGroups>? OnlyOnGroups { get; set; } = [];
+    public List<string>? OnlyOnGroups { get; set; } = [];
     /// <summary>
     /// Height over patch
     /// </summary>
