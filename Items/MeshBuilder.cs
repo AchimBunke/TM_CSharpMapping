@@ -322,8 +322,8 @@ public class MeshBuilder
     public ToolResult<CPlugSurface> BuildDynaSurface(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var dynamicMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Collidable && ms.Movable).Select(ms=>ms.MeshIndex).ToArray();
-        if (dynamicMeshes.Length == 0)
-            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingDynaShape);
+        //if (dynamicMeshes.Length == 0)
+        //    return ToolResult.Success((CPlugSurface)null!, nameof(MeshBuilder));
         var visibles = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Visible).Select(ms => ms.MeshIndex).ToArray();
         var nonCollidables = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => !ms.Collidable).Select(ms => ms.MeshIndex).ToArray();
         return BuildSurface(item, visibles, nonCollidables, dynamicMeshes, buildSettings);
@@ -332,8 +332,8 @@ public class MeshBuilder
     {
         var staticMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Collidable && item.Meshes[ms.MeshIndex].Type != MeshType.Dyna_Shape)
             .Select(ms => ms.MeshIndex).ToArray();
-        if (staticMeshes.Length == 0)
-            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingStaticShape);
+        //if (staticMeshes.Length == 0)
+        //    return ToolResult.Success((CPlugSurface)null!, nameof(MeshBuilder));
         var visibles = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Visible).Select(ms => ms.MeshIndex).ToArray();
         var nonCollidables = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => !ms.Collidable).Select(ms => ms.MeshIndex).ToArray();
         return BuildSurface(item, visibles, nonCollidables, staticMeshes, buildSettings);
