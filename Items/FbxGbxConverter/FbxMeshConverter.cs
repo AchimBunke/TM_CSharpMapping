@@ -1,4 +1,4 @@
-﻿//#define FbxGbxDebugLod
+﻿#define FbxGbxDebugLod
 using Assimp;
 using EarcutDotNet;
 using GBX.NET;
@@ -202,9 +202,9 @@ internal class FbxMeshConverter
         var indices = MeshOperations.Triangulate(mesh).ToArray();
         //var indices = mesh.GetIndices();
 
-        //bool isMirrored = GetDeterminant3x3(globalTransform) < 0f;
-        //if (isMirrored)
-        //    indices = FlipWinding(indices);
+        bool isMirrored = GetDeterminant3x3(globalTransform) < 0f;
+        if (isMirrored)
+            indices = FlipWinding(indices);
         normalizedMesh.Indices = indices;
 
         normalizedMesh.Normals = TransformVectors(mesh.Normals, normalMatrix, Assimp.Matrix4x4.Identity, true).ToArray();
