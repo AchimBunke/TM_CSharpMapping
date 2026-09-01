@@ -2,26 +2,25 @@
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
-using System.Drawing.Drawing2D;
 using System.Numerics;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using TM_GenericMapping.Common;
-using TM_GenericMapping.IO;
 using TM_GenericMapping.Messaging;
-using static GBX.NET.Engines.Game.CGameCtnMediaClipGroup;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
-using static GBX.NET.Engines.Plug.NPlugTrigger_SWaypoint;
 
 namespace TM_GenericMapping.Items;
 
 public class MeshExtractor
 {
+    NodeRefTable _nodeRefTable = new NodeRefTable();
 
     public ToolResult<NormalizedItem> ExtractMesh(CGameItemModel item)
     {
+
+        _nodeRefTable.Clear();
+
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
         List<VariantGroup> variantGroups = [];
         if (ItemExtensions.TryGetCrystal(item, out var crystal))
@@ -86,6 +85,17 @@ public class MeshExtractor
             allLights.AddRange(lights);
         }
 
+        foreach (var mesh in allMeshes)
+        {
+            if (allMeshes.Count(g => g.MeshLink == mesh.MeshLink) <= 1)
+                mesh.MeshLink = null; // reset mesh link for when meshes are never reused
+        }
+        foreach (var group in allGroups)
+        {
+            if (allGroups.Count(g => g.GroupLink == group.GroupLink) <= 1)
+                group.GroupLink = null; // reset group link for when groups are never reused
+        }
+
         normalizedItem.Meshes = allMeshes.ToArray();
         normalizedItem.Groups = allGroups.ToArray();
         normalizedItem.Lights = allLights.ToArray();
@@ -93,6 +103,10 @@ public class MeshExtractor
 
         ExtractItemMetaData(item, normalizedItem);
 
+        if (normalizedItem.Meshes.Any(m => m.MeshLink.HasValue))
+        {
+            int i = 0;
+        }
         return ToolResult.Success(normalizedItem, nameof(MeshExtractor));
     }
     void ExtractItemMetaData(CGameItemModel item, NormalizedItem normalizedItem)
@@ -104,7 +118,7 @@ public class MeshExtractor
         normalizedItem.Description = item.Description;
     }
 
-    public ToolResult<(NormalizedMesh[] mesh, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromPrefab(CPlugPrefab prefab, Vector3? parentPosition = null, Quaternion? parentRotation = null, List<MeshGroup> dynaMeshGroups = null)
+    ToolResult<(NormalizedMesh[] mesh, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromPrefab(CPlugPrefab prefab, Vector3? parentPosition = null, Quaternion? parentRotation = null, List<MeshGroup> dynaMeshGroups = null)
     {
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> meshGroups = [];
         if (dynaMeshGroups is null)
@@ -121,6 +135,8 @@ public class MeshExtractor
                     var staticResult = ExtractMeshesFromStaticObjectModel(staticObjectModel);
                     if(staticResult.IsFailure)
                         return ToolResult.Fail(staticResult);
+                    staticResult.Value.group.Position = worldPosition;
+                    staticResult.Value.group.Rotation = worldRotation;
                     meshGroups.Add(staticResult.Value);
                     break;
                 case CPlugDynaObjectModel dynaObjectModel:
@@ -128,34 +144,26 @@ public class MeshExtractor
                     if(dynaResult.IsFailure)
                         return ToolResult.Fail(dynaResult);
                     dynaResult.Value.group.DynaObjectModelParams = ent.Params as NPlugDynaObjectModel_SInstanceParams;
+                    dynaResult.Value.group.Position = worldPosition;
+                    dynaResult.Value.group.Rotation = worldRotation;
                     meshGroups.Add(dynaResult.Value);
                     dynaMeshGroups.Add(dynaResult.Value.group);
                     break;
                 case NPlugTrigger_SSpecial triggerSpecial:
-                    var triggerResult = ExtractFromTriggerSpecial(triggerSpecial, out var triggerGameplayId, out var triggerGameplayDir);
+                    var triggerResult = ExtractFromTriggerSpecial(triggerSpecial);
                     if (triggerResult.IsFailure)
                         return ToolResult.Fail(triggerResult);
-                    meshGroups.Add(([triggerResult.Value], [], new MeshGroup() 
-                    { 
-                        Position = worldPosition, 
-                        Rotation = worldRotation, 
-                        GroupType = GroupType.Trigger_Special, 
-                        TriggerGameplayId = triggerGameplayId, 
-                        GameplayMainDir =  triggerGameplayDir,
-                        }));
+                    triggerResult.Value.group.Position = worldPosition;
+                    triggerResult.Value.group.Rotation = worldRotation;
+                    meshGroups.Add(([triggerResult.Value.mesh], [], triggerResult.Value.group));
                     break;
                 case NPlugTrigger_SWaypoint triggerWaypoint:
-                    var waypointResult = ExtractFromTriggerWaypoint(triggerWaypoint, out var waypointType, out var noRespawn, out var cpGameplayDir);
+                    var waypointResult = ExtractFromTriggerWaypoint(triggerWaypoint);
                     if (waypointResult.IsFailure)
                         return ToolResult.Fail(waypointResult);
-                    meshGroups.Add(([waypointResult.Value], [], new MeshGroup() 
-                    { 
-                        Position = worldPosition, 
-                        Rotation = worldRotation, 
-                        GroupType = GroupType.Trigger_Waypoint,
-                        WaypointType = (EWaypointType?)waypointType,
-                        GameplayMainDir = cpGameplayDir,
-                        WaypointNoRespawn =  noRespawn }));
+                    waypointResult.Value.group.Position = worldPosition;
+                    waypointResult.Value.group.Rotation = worldRotation;
+                    meshGroups.Add(([waypointResult.Value.mesh], [], waypointResult.Value.group));
                     break;
                 case CPlugPrefab nestedPrefab:
                     var nestedResult = ExtractFromPrefab(nestedPrefab, worldPosition, worldRotation, dynaMeshGroups);
@@ -177,10 +185,11 @@ public class MeshExtractor
                     return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.UnsupportedPrefabEntity, ent);
             }
         }
+
         return ToolResult.Success(meshGroups.ToArray(), nameof(MeshExtractor));
     }
 
-    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractMeshesFromStaticObjectModel(CPlugStaticObjectModel staticObjectModel)
+    ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractMeshesFromStaticObjectModel(CPlugStaticObjectModel staticObjectModel)
     {
         if (staticObjectModel.Mesh is null)
             return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingMesh);
@@ -188,8 +197,12 @@ public class MeshExtractor
         if(meshResult.IsFailure)
             return ToolResult.Fail(meshResult);
         meshResult.Value.group.GroupType = GroupType.StaticObject;
+        
+        var groupLink = meshResult.Value.group.GroupLink!.Value;
+        if(!_nodeRefTable.TryGetNode<CPlugStaticObjectModel>(groupLink, out var key))
+            _nodeRefTable.Register(groupLink, staticObjectModel);
 
-        if(staticObjectModel.Shape is null)
+        if (staticObjectModel.Shape is null)
             return meshResult;
         var shapeResult = ExtractFromSurface(staticObjectModel.Shape, out _);
         if(shapeResult.IsFailure)
@@ -199,7 +212,7 @@ public class MeshExtractor
 
         return ToolResult.Success(meshResult.Value with { meshes = [..meshResult.Value.meshes, shapeResult.Value] }, nameof(MeshExtractor));
     }
-    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractFromDynaObjectModel(CPlugDynaObjectModel dynaObjectModel)
+    ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractFromDynaObjectModel(CPlugDynaObjectModel dynaObjectModel)
     {
         (NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group) result;
         if (dynaObjectModel.Mesh is null)
@@ -210,6 +223,11 @@ public class MeshExtractor
             return ToolResult.Fail(meshResult);
         result = meshResult.Value;
         result.group.GroupType = GroupType.DynaObject;
+
+        var groupLink = meshResult.Value.group.GroupLink!.Value;
+        if (!_nodeRefTable.TryGetNode<CPlugDynaObjectModel>(groupLink, out var key))
+            _nodeRefTable.Register(groupLink, dynaObjectModel);
+
         if (dynaObjectModel.StaticShape is not null)
         {
             var staticShapeResult = ExtractFromSurface(dynaObjectModel.StaticShape, out _);
@@ -232,7 +250,7 @@ public class MeshExtractor
         return ToolResult.Success(result, nameof(MeshExtractor));
     }
 
-    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractFromSolid2Model(CPlugSolid2Model solid2Model, bool meshIsCollisionSource = false)
+    ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> ExtractFromSolid2Model(CPlugSolid2Model solid2Model, bool meshIsCollisionSource = false)
     {
         var meshes = new List<NormalizedMesh>();
         var lights = new List<NormalizedLight>();
@@ -258,6 +276,7 @@ public class MeshExtractor
                 subMeshResult.Value.LODMask = shaded.LodMask;
             }
             subMeshResult.Value.PreLightGenerator = solid2Model.PreLightGenerator;
+
             meshes.Add(subMeshResult.Value);
         }
 
@@ -274,7 +293,16 @@ public class MeshExtractor
             }
         }
 
-        return ToolResult.Success((meshes.ToArray(), lights.ToArray(), new MeshGroup { LODDistances = solid2Model.LodMaxDistAtFov90 ?? [] }), nameof(MeshExtractor));
+        var group = new MeshGroup
+        {
+            LODDistances = solid2Model.LodMaxDistAtFov90 ?? []
+        };
+        if (!_nodeRefTable.TryGetKey(solid2Model, out var key))
+            _nodeRefTable.Register(solid2Model, out key);
+        group.GroupLink = key;
+
+
+        return ToolResult.Success((meshes.ToArray(), lights.ToArray(), group), nameof(MeshExtractor));
     }
 
     (CPlugSkel skel, Socket[] sockets) ParseSkel(CPlugSkel skel)
@@ -303,7 +331,7 @@ public class MeshExtractor
         return normalizedLight;
     }
 
-    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromCrystal(CPlugCrystal crystal)
+    ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromCrystal(CPlugCrystal crystal)
     {
         List<NormalizedMesh> geometryGroup= [];
         List<NormalizedMesh> triggerGroups = [];
@@ -472,7 +500,7 @@ public class MeshExtractor
 
         return ToolResult.Success(groupedMeshes.ToArray(), nameof(MeshExtractor));
     }
-    public ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromCommonEntityModel(CGameCommonItemEntityModel commonEntityModel, bool isWaypoint)
+    ToolResult<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromCommonEntityModel(CGameCommonItemEntityModel commonEntityModel, bool isWaypoint)
     {
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> results = [];
 
@@ -492,11 +520,19 @@ public class MeshExtractor
             return ToolResult.Fail(shapeResult);
         shapeResult.Value.Type = isWaypoint ? MeshType.Trigger_Waypoint : MeshType.Trigger_Special;
 
-        results.Add(([shapeResult.Value], [], new MeshGroup() { GroupType = isWaypoint ? GroupType.Trigger_Waypoint : GroupType.Trigger_Special, GameplayMainDir = gameplayDir }));
+        var group = new MeshGroup() 
+        { 
+            GroupType = isWaypoint ? GroupType.Trigger_Waypoint : GroupType.Trigger_Special, 
+            GameplayMainDir = gameplayDir,
+            GroupLink = null, // no link possible with CGameCommonItem
+        };
+
+        results.Add(([shapeResult.Value], [], group));
+
         return ToolResult.Success(results.ToArray(), nameof(MeshExtractor));
     }
 
-    public ToolResult<((NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[], VariantGroup[])> ExtractFromVariantList(NPlugItem_SVariantList variantList)
+    ToolResult<((NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)[], VariantGroup[])> ExtractFromVariantList(NPlugItem_SVariantList variantList)
     {
         List<VariantGroup> variants = [];
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
@@ -542,7 +578,7 @@ public class MeshExtractor
         return ToolResult.Success((groupResults.ToArray(), variants.ToArray()), nameof(MeshExtractor));
     }
 
-    public ToolResult<NormalizedMesh> ExtractFromVisual(CPlugVisualIndexedTriangles visual, CPlugMaterialUserInst material)
+    ToolResult<NormalizedMesh> ExtractFromVisual(CPlugVisualIndexedTriangles visual, CPlugMaterialUserInst material)
     {
         var stream = visual.VertexStreams[0];
 
@@ -599,42 +635,69 @@ public class MeshExtractor
             Properties = properties,
             Name = MatToName(material)
         };
+
+        if (!_nodeRefTable.TryGetKey(visual, out var key))
+            _nodeRefTable.Register(visual, out key);
+        mesh.MeshLink = key;
+
         return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
 
 
-    public ToolResult<NormalizedMesh> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial, out LegacyGameplayId triggerGameplayId, out Vec3 gameplayMainDir)
+    ToolResult<(NormalizedMesh mesh, MeshGroup group)> ExtractFromTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial)
     {
         var triggerShape = triggerSpecial.GetTriggerShape();
-        triggerGameplayId = LegacyGameplayId.None;
-        gameplayMainDir = Vec3.Zero;
         if (triggerShape == null)
             return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
-        var result = ExtractFromSurface(triggerShape, out gameplayMainDir);
+        var result = ExtractFromSurface(triggerShape, out var gameplayMainDir);
         if(result.IsFailure)
             return ToolResult.Fail(result);
         result.Value.Type = MeshType.Trigger_Special;
         ushort gamplayIdShort = triggerShape.GetChunk<CPlugSurface.Chunk0900C003>()?.U02?.FirstOrDefault() ?? 0;
-        triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
-        return result;
+        var triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
+
+
+
+        var group = new MeshGroup()
+        {
+            GroupType = GroupType.Trigger_Special,
+            TriggerGameplayId = triggerGameplayId,
+            GameplayMainDir = gameplayMainDir,
+        };
+
+        if (!_nodeRefTable.TryGetKey(triggerSpecial, out var key))
+            _nodeRefTable.Register(triggerSpecial, out key);
+        group.GroupLink = key;
+
+        return ToolResult.Success((result.Value, group), nameof(MeshExtractor));
     }
-    public ToolResult<NormalizedMesh> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint, out EGameItemWaypointType waypointType, out bool noRespawn, out Vec3 gameplayMainDir)
+    ToolResult<(NormalizedMesh mesh, MeshGroup group)> ExtractFromTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint)
     {
         var triggerShape = triggerWaypoint.GetTriggerShape();
-        waypointType = EGameItemWaypointType.None;
-        noRespawn = false;
-        gameplayMainDir = Vec3.Zero;
+
         if (triggerShape == null)
             return ToolResult.Fail(nameof(MeshExtractor), ErrorCodes.MeshExtractor.MissingTriggerShape);
-        var result = ExtractFromSurface(triggerShape, out gameplayMainDir);
+        var result = ExtractFromSurface(triggerShape, out var gameplayMainDir);
         if (result.IsFailure)
             return ToolResult.Fail(result);
         result.Value.Type = MeshType.Trigger_Waypoint;
-        waypointType = triggerWaypoint.Type;
-        noRespawn = triggerWaypoint.NoRespawn;
-        return result;
+
+        var group = new MeshGroup()
+        {
+            GroupType = GroupType.Trigger_Waypoint,
+            WaypointType = (EWaypointType?)triggerWaypoint.Type,
+            GameplayMainDir = gameplayMainDir,
+            WaypointNoRespawn = triggerWaypoint.NoRespawn
+        };
+
+        if (!_nodeRefTable.TryGetKey(triggerWaypoint, out var key))
+            _nodeRefTable.Register(triggerWaypoint, out key);
+        group.GroupLink = key;
+
+
+        return ToolResult.Success((result.Value, group), nameof(MeshExtractor));
     }
-    public ToolResult<NormalizedMesh> ExtractFromSurface(CPlugSurface surface, out Vec3 gameplayMainDir)
+    ToolResult<NormalizedMesh> ExtractFromSurface(CPlugSurface surface, out Vec3 gameplayMainDir)
     {
         var mesh = new NormalizedMesh();
         var surf = surface.Surf as CPlugSurface.Mesh;
@@ -645,6 +708,11 @@ public class MeshExtractor
         mesh.SurfaceMaterialIds = surf?.Triangles.Select(t => (MaterialId)t.U02).ToArray();
         mesh.Name = MatToName(mesh.Material);
         mesh.Properties = MeshProperties.Enabled;
+
+        if (!_nodeRefTable.TryGetKey(surface, out var key))
+            _nodeRefTable.Register(surface, out key);
+        mesh.MeshLink = key;
+
         return ToolResult.Success(mesh, nameof(MeshExtractor));
     }
 

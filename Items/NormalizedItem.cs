@@ -57,6 +57,7 @@ public class NormalizedMesh
 
     public string Name { get; set; } = string.Empty;
     public int GroupIndex { get; set; } = -1;
+    public int? MeshLink { get; set; } = null; // ID of a mesh that this mesh is linked to (same mesh) (not index, just id that could match already created/extarcted mesh)
 
     public PreLightGen? PreLightGenerator { get; set; }
     public int? SmoothingGroup { get; set; } = 0;
@@ -94,6 +95,8 @@ public class MeshGroup
     public CPlugSpawnModel? WaypointSpawnModel { get; set; }
     public Vec3? GameplayMainDir { get; set; } = new Vec3(0, 0, 1);
     public int? RelativeMovingParentIndex { get; set; } = null;
+
+    public int? GroupLink { get; set; } = null;
 
     public int? VariantIndex { get; set; }
 }

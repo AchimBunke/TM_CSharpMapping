@@ -51,6 +51,7 @@ public class MeshBuilder
         public bool Collidable { get; set; }
         public bool Movable { get; set; }
         public bool Trigger { get; set; }
+        public int? MeshLink { get; set; }
 
         public int? LODMask { get; set; }
     }
@@ -80,6 +81,7 @@ public class MeshBuilder
         public CPlugSpawnModel? WaypointSpawnModel { get; set; }
         public Vec3? GameplayMainDir { get; set; }
         public int? RelativeMovingParentGroup { get; set; }
+        public int? GroupLink { get; set; }
     }
 
     public struct VariantSetting()
@@ -138,7 +140,8 @@ public class MeshBuilder
                     WaypointNoRespawn = g.WaypointNoRespawn,
                     WaypointType = (EGameItemWaypointType?)g.WaypointType,
                     GameplayMainDir = g.GameplayMainDir,
-                    RelativeMovingParentGroup = g.RelativeMovingParentIndex
+                    RelativeMovingParentGroup = g.RelativeMovingParentIndex,
+                    GroupLink = g.GroupLink,
                 };
                 groupSettings.Add(i, gSetting);
             }
@@ -150,9 +153,12 @@ public class MeshBuilder
                 var submeshGroup = item.Groups[submesh.GroupIndex];
                 if (!submesh.Properties.HasFlag(MeshProperties.Enabled))
                     continue;
-                var instanceSetting = new MeshInstanceSetting();
-                instanceSetting.MeshIndex = i;
-                instanceSetting.GroupId = submesh.GroupIndex;
+                var instanceSetting = new MeshInstanceSetting
+                {
+                    MeshIndex = i,
+                    GroupId = submesh.GroupIndex,
+                    MeshLink = submesh.MeshLink
+                };
                 switch (submesh.Type)
                 {
                     case MeshType.Mesh:
@@ -202,6 +208,28 @@ public class MeshBuilder
             // create groups
             return options;
         }
+
+        /// <summary>
+        /// Prevents the builder from reusing references. Use this whenever you want to build an item with custom build-settings not derived from the original item.
+        /// Otherwise, the builder will reuse references to meshes and groups from the original item, which may lead to unexpected behavior.
+        /// </summary>
+        public void ClearLinks()
+        {
+            for (int i = 0; i < MeshSettings.Count; ++i)
+            {
+                var s = MeshSettings[i];
+                s.MeshLink = null;
+                MeshSettings[i] = s;
+            }
+
+            for(int i = 0; i < GroupSettings.Count; ++i)
+            {
+                var g = GroupSettings[i];
+                g.GroupLink = null;
+                GroupSettings[i] = g;
+            }
+
+        }
  
     }
 
@@ -250,11 +278,13 @@ public class MeshBuilder
     Ident ident;
 
     MeshBuilderSettings _settings;
+    NodeRefTable _nodeRefTable = new();
     public MeshBuilder() : this(new()) { }
     public MeshBuilder(MeshBuilderSettings settings)
     {
         _settings = settings;
         ident = new Ident("", 26, _settings.Author ?? "TM_CSharpMapping");
+        _nodeRefTable = new();
     }
 
     
@@ -265,7 +295,7 @@ public class MeshBuilder
 
     // Easiest approach: raw triangle mesh for both static and dynamic
     // If dynamic needs a convex hull later, that's a separate concern
-    public ToolResult<CPlugSurface> BuildSurface(NormalizedItem item, ReadOnlySpan<int> visibles, ReadOnlySpan<int> nonCollidables, ReadOnlySpan<int> surfaces, BuildSettings buildOptions)
+    ToolResult<CPlugSurface> BuildSurface(NormalizedItem item, ReadOnlySpan<int> visibles, ReadOnlySpan<int> nonCollidables, ReadOnlySpan<int> surfaces, BuildSettings buildOptions)
     {
         var surface = GbxTemplateLibrary.CreateSurfaceTemplate().Value;
 
@@ -319,7 +349,7 @@ public class MeshBuilder
 
     // Same mesh for both — simplest valid approach for dynamic too
     // Replace with convex hull later if physics behavior needs it
-    public ToolResult<CPlugSurface> BuildDynaSurface(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<CPlugSurface> BuildDynaSurface(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var dynamicMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Collidable && ms.Movable).Select(ms=>ms.MeshIndex).ToArray();
         if (dynamicMeshes.Length == 0)
@@ -328,7 +358,7 @@ public class MeshBuilder
         var nonCollidables = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => !ms.Collidable).Select(ms => ms.MeshIndex).ToArray();
         return BuildSurface(item, visibles, nonCollidables, dynamicMeshes, buildSettings);
     }
-    public ToolResult<CPlugSurface> BuildStaticSurface(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<CPlugSurface> BuildStaticSurface(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var staticMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Collidable && item.Meshes[ms.MeshIndex].Type != MeshType.Dyna_Shape)
             .Select(ms => ms.MeshIndex).ToArray();
@@ -344,7 +374,7 @@ public class MeshBuilder
     // Solid2Model — Option A: mutate existing
     // ─────────────────────────────────────────────
 
-    public ToolResult<None> PopulateSolid2Model(CPlugSolid2Model target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSetting)
+    ToolResult<None> PopulateSolid2Model(CPlugSolid2Model target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSetting)
     {
         List<CPlugVisual> visuals = [];
         List<CPlugSolid2Model.ShadedGeom> shadedGeom = [];
@@ -363,7 +393,11 @@ public class MeshBuilder
         {
             var submesh = item.Meshes[meshSetting.MeshIndex];
 
-            var indexedTriangles = BuildIndexedTrianglesVisual(item, submesh);
+            if (!(meshSetting.MeshLink.HasValue && _nodeRefTable.TryGetNode<CPlugVisualIndexedTriangles>(meshSetting.MeshLink.Value, out var indexedTriangles)))
+                indexedTriangles = BuildIndexedTrianglesVisual(item, submesh);
+
+            if (meshSetting.MeshLink.HasValue)
+                _nodeRefTable.Register(meshSetting.MeshLink.Value, indexedTriangles);
 
             int visualIndex = visuals.Count;
 
@@ -684,16 +718,21 @@ public class MeshBuilder
     // Solid2Model — Option B: build from scratch
     // ─────────────────────────────────────────────
 
-    public ToolResult<CPlugSolid2Model> BuildSolid2Model(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<CPlugSolid2Model> BuildSolid2Model(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
+        if (groupSetting.GroupLink.HasValue && _nodeRefTable.TryGetNode<CPlugSolid2Model>(groupSetting.GroupLink.Value, out var solid))
+            return ToolResult.Success(solid, nameof(MeshBuilder));
+
         // grab source solid from SourceData if available as chunk donor
         // otherwise construct empty (may be missing required chunks)
-        CPlugSolid2Model solid = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
+        solid = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
 
         var result = PopulateSolid2Model(solid, item, groupSetting, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
 
+        if (groupSetting.GroupLink.HasValue)
+            _nodeRefTable.Register(groupSetting.GroupLink.Value, solid);
 
         return ToolResult.Success(solid, nameof(MeshBuilder));
     }
@@ -703,7 +742,7 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
 
     // Option A: mutate existing DynaObjectModel (preferred — avoids chunk issues)
-    public ToolResult<None> PopulateDynaObjectModel(CPlugDynaObjectModel target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<None> PopulateDynaObjectModel(CPlugDynaObjectModel target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var meshResult = BuildSolid2Model(item, groupSetting, buildSettings);
         if(meshResult.IsFailure)
@@ -723,15 +762,22 @@ public class MeshBuilder
     }
 
     // Option B: build new DynaObjectModel using target as chunk donor
-    public ToolResult<CPlugDynaObjectModel> BuildDynaObjectModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<CPlugDynaObjectModel> BuildDynaObjectModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
-        CPlugDynaObjectModel dyna = GbxTemplateLibrary.CreateDynaObjectModelTemplate().Value;
+        if (groupSetting.GroupLink.HasValue && _nodeRefTable.TryGetNode<CPlugDynaObjectModel>(groupSetting.GroupLink.Value, out var dyna))
+            return ToolResult.Success(dyna, nameof(MeshBuilder));
+
+        dyna = GbxTemplateLibrary.CreateDynaObjectModelTemplate().Value;
         var result = PopulateDynaObjectModel(dyna, item, groupSetting, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
+
+        if (groupSetting.GroupLink.HasValue)
+            _nodeRefTable.Register(groupSetting.GroupLink.Value, dyna);
+
         return ToolResult.Success(dyna, nameof(MeshBuilder));
     }
-    public ToolResult<EntRef> BuildDynaObjectModelEntRef(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<EntRef> BuildDynaObjectModelEntRef(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var dnyObjectResult = BuildDynaObjectModel(item, groupSetting, buildSettings);
         if (dnyObjectResult.IsFailure)
@@ -753,7 +799,7 @@ public class MeshBuilder
         entRef.Rotation = groupSetting.Rotation;
         return ToolResult.Success(entRef, nameof(MeshBuilder));
     }
-    public ToolResult<NPlugDyna_SKinematicConstraint> BuildKinematicConstraint(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<NPlugDyna_SKinematicConstraint> BuildKinematicConstraint(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         return ToolResult.Success(groupSetting.KinematicConstraint != null ? groupSetting.KinematicConstraint : GbxTemplateLibrary.CreateKinematicConstraintTemplate().Value, nameof(MeshBuilder));
     }
@@ -762,7 +808,7 @@ public class MeshBuilder
     // StaticObjectModel
     // ─────────────────────────────────────────────
 
-    public ToolResult<None> PopulateStaticObjectModel(CPlugStaticObjectModel target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings, bool forceStaticShape)
+    ToolResult<None> PopulateStaticObjectModel(CPlugStaticObjectModel target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings, bool forceStaticShape)
     {
         var meshResult = BuildSolid2Model(item, groupSetting, buildSettings);
         if (meshResult.IsFailure)
@@ -788,12 +834,19 @@ public class MeshBuilder
         return ToolResult.Success(nameof(MeshBuilder));
     }
 
-    public ToolResult<CPlugStaticObjectModel> BuildStaticObjectModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings, bool forceStaticShape)
+    ToolResult<CPlugStaticObjectModel> BuildStaticObjectModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings, bool forceStaticShape)
     {
-        CPlugStaticObjectModel staticObj = GbxTemplateLibrary.CreateStaticObjectModelTemplate().Value;
+        if(groupSetting.GroupLink.HasValue && _nodeRefTable.TryGetNode<CPlugStaticObjectModel>(groupSetting.GroupLink.Value, out var staticObj))
+            return ToolResult.Success(staticObj, nameof(MeshBuilder));
+
+        staticObj = GbxTemplateLibrary.CreateStaticObjectModelTemplate().Value;
         var result = PopulateStaticObjectModel(staticObj, item, groupSetting, buildSettings, forceStaticShape);
         if (result.IsFailure)
             return ToolResult.Fail(result);
+
+        if (groupSetting.GroupLink.HasValue)
+            _nodeRefTable.Register(groupSetting.GroupLink.Value, staticObj);
+
         return ToolResult.Success(staticObj, nameof(MeshBuilder));
     }
     bool IsMeshCollidable(GroupSetting groupSetting, BuildSettings buildSettings)
@@ -808,7 +861,7 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     // CommonItemEntityModelEdition (Crystal)
     // ─────────────────────────────────────────────
-    public ToolResult<CPlugCrystal> BuildCrystal(NormalizedItem item, BuildSettings buildSettings)
+    ToolResult<CPlugCrystal> BuildCrystal(NormalizedItem item, BuildSettings buildSettings)
     {
         CPlugCrystal crystal = GbxTemplateLibrary.CreateCPlugCrystalTemplate().Value;
 
@@ -818,7 +871,7 @@ public class MeshBuilder
         return ToolResult.Success(crystal, nameof(MeshBuilder));
     }
 
-    public ToolResult<None> PopulateMeshCrystal(CPlugCrystal target, NormalizedItem item, BuildSettings buildSettings)
+    ToolResult<None> PopulateMeshCrystal(CPlugCrystal target, NormalizedItem item, BuildSettings buildSettings)
     {
         List<CPlugCrystal.Layer> layers = [];
         List<CPlugCrystal.Material> materials = [];
@@ -1001,7 +1054,7 @@ public class MeshBuilder
             mesh.Triangles[i] = mesh.Triangles[i] with { U02 = 0 };
         }
     }
-    public ToolResult<None> PopulateTriggerSpecial(NPlugTrigger_SSpecial target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<None> PopulateTriggerSpecial(NPlugTrigger_SSpecial target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var triggerMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Trigger).Select(ms => ms.MeshIndex).ToArray();
         if (triggerMeshes.Length == 0)
@@ -1016,7 +1069,7 @@ public class MeshBuilder
         target.TriggerShape = surface;
         return ToolResult.Success(nameof(MeshBuilder));
     }
-    public ToolResult<NPlugTrigger_SSpecial> BuildTriggerSpecial(NormalizedItem item, LegacyGameplayId gameplayId, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<NPlugTrigger_SSpecial> BuildTriggerSpecial(NormalizedItem item, LegacyGameplayId gameplayId, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         NPlugTrigger_SSpecial triggerSpecial = new NPlugTrigger_SSpecial()
         {
@@ -1032,7 +1085,7 @@ public class MeshBuilder
         return ToolResult.Success(triggerSpecial, nameof(MeshBuilder));
     }
 
-    public ToolResult<None> PopulateTriggerWaypoint(NPlugTrigger_SWaypoint target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<None> PopulateTriggerWaypoint(NPlugTrigger_SWaypoint target, NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var triggerMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Trigger).Select(ms => ms.MeshIndex).ToArray();
         if (triggerMeshes.Length == 0)
@@ -1047,7 +1100,7 @@ public class MeshBuilder
         target.TriggerShape = surface;
         return ToolResult.Success(nameof(MeshBuilder));
     }
-    public ToolResult<NPlugTrigger_SWaypoint> BuildTriggerWaypoint(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<NPlugTrigger_SWaypoint> BuildTriggerWaypoint(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         NPlugTrigger_SWaypoint triggerWaypoint = new NPlugTrigger_SWaypoint()
         {
@@ -1063,7 +1116,7 @@ public class MeshBuilder
         return ToolResult.Success(triggerWaypoint, nameof(MeshBuilder));
     }
 
-    public ToolResult<CPlugSpawnModel> BuildSpawnModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
+    ToolResult<CPlugSpawnModel> BuildSpawnModel(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         CPlugSpawnModel spawnModel;
         if (groupSetting.WaypointSpawnModel is not null)
@@ -1142,7 +1195,7 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
     // Prefab
     // ─────────────────────────────────────────────
-    public ToolResult<CPlugPrefab> BuildMixedPrefab(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    ToolResult<CPlugPrefab> BuildMixedPrefab(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
         var item = GbxTemplateLibrary.CreateMovingItemTemplate().Value;
 
@@ -1275,7 +1328,7 @@ public class MeshBuilder
 
     }
 
-    public ToolResult<CMwNod> BuildMixedEntityModel(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    ToolResult<CMwNod> BuildMixedEntityModel(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
         var prefabResult = BuildMixedPrefab(normalizedItem, buildSettings);
         if (prefabResult.IsFailure)
@@ -1324,7 +1377,7 @@ public class MeshBuilder
     // ─────────────────────────────────────────────
 
 
-    public ToolResult<NPlugItem_SVariantList> BuildVariantList(NormalizedItem normalizedItem, BuildSettings buildSettings)
+    ToolResult<NPlugItem_SVariantList> BuildVariantList(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
 
         List<NPlugItem_SVariant> variants = [];
@@ -1618,6 +1671,8 @@ public class MeshBuilder
 
     public ToolResult<CGameItemModel> BuildCrystalItem(NormalizedItem normalizedItem, BuildSettings buildOptions)
     {
+        _nodeRefTable.Clear();
+
         var item = GbxTemplateLibrary.CreateCommonItemEntityModelEditionItemTemplate().Value;
         var crystalResult = BuildCrystal(normalizedItem, buildOptions);
         if (crystalResult.IsFailure)
@@ -1630,6 +1685,8 @@ public class MeshBuilder
     }
     public ToolResult<CGameItemModel> BuildCrystalWaypointItem(NormalizedItem normalizedItem, EWaypointType waypointType, BuildSettings buildOptions)
     {
+        _nodeRefTable.Clear();
+
         var item = BuildCrystalItem(normalizedItem, buildOptions);
         if (item.IsFailure)
             return ToolResult.Fail(item);
@@ -1680,6 +1737,8 @@ public class MeshBuilder
    
     public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
+        _nodeRefTable.Clear();
+
         var item = GbxTemplateLibrary.CreateMovingItemTemplate().Value;
 
         var mixedPrefabResult = BuildMixedEntityModel(normalizedItem, buildSettings);
@@ -1697,6 +1756,8 @@ public class MeshBuilder
 
     public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, EWaypointType overwriteWaypointType, BuildSettings buildSettings)
     {
+        _nodeRefTable.Clear();
+
         var result = BuildGeneralItem(normalizedItem, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
@@ -1705,6 +1766,8 @@ public class MeshBuilder
     }
     public ToolResult<CGameItemModel> BuildGeneralItem(NormalizedItem normalizedItem, LegacyGameplayId overwriteGameplayid, BuildSettings buildSettings)
     {
+        _nodeRefTable.Clear();
+
         var result = BuildGeneralItem(normalizedItem, buildSettings);
         if (result.IsFailure)
             return ToolResult.Fail(result);
@@ -1715,6 +1778,8 @@ public class MeshBuilder
 
     public ToolResult<CGameItemModel> BuildVariantItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
+        _nodeRefTable.Clear();
+
         var item = GbxTemplateLibrary.CreateVariantsItemTemplate().Value;
 
         var variantListResult = BuildVariantList(normalizedItem, buildSettings);
@@ -1732,7 +1797,9 @@ public class MeshBuilder
 
     public ToolResult<CGameItemModel> BuildItem(NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
-        switch(buildSettings.TargetModel)
+        _nodeRefTable.Clear();
+
+        switch (buildSettings.TargetModel)
         {
             case ItemModel.General:
                 return BuildGeneralItem(normalizedItem, buildSettings);
