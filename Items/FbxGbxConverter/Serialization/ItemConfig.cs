@@ -136,7 +136,7 @@ public class MovingGroupConfig
     public string MovingGroupId
     {
         get; set;
-    }
+    } = string.Empty;
     public string? ParentMovingGroupId { get; set; } = null;
     /// <summary>
     /// Trackmania space so blenderSpace => (X, Z, -Y)
@@ -145,11 +145,11 @@ public class MovingGroupConfig
     public KinematicMovement KinematicMovement
     {
         get; set;
-    }
+    } = new KinematicMovement();
     public KinematicModelConfig KinematicModelConfig
     {
         get; set;
-    }
+    } = new KinematicModelConfig();
 
     public static NPlugDynaObjectModel_SInstanceParams ToInstanceParams(KinematicModelConfig kinematicModelConfig)
     {
@@ -383,7 +383,7 @@ public class LightConfig
     public string Name
     {
         get; set;
-    }
+    } = string.Empty;
     public LightType Type
     {
         get; set;

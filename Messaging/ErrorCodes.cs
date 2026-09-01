@@ -2,6 +2,8 @@
 
 public static class ErrorCodes
 {
+    public const string MissingErrorCode = "ErrorCodes.MissingErrorCode";
+
     public static class MeshExtractor
     {
         public const string UnsupportedMesh = "MeshExtractor.UnsupportedMesh";

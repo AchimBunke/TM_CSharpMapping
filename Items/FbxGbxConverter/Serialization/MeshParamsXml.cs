@@ -75,7 +75,7 @@ public sealed class LightXml
 {
 
     [XmlAttribute("Name")]
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     [XmlAttribute("Type")]
     public LightType Type { get; set; }

@@ -342,7 +342,7 @@ public class MeshBuilder
         //    .Select(idx => (idx, item.Meshes[idx]))
         //    .Select(d => nonCollidableLookup.Contains(d.idx) ? (ushort)MaterialId.NotCollidable : (ushort)d.Item2.Material.SurfacePhysicId) // non-collidables get different material
         //    .ToArray();
-        if (chunk.U02.Length == 0)
+        if (chunk!.U02!.Length == 0)
             chunk.U02 = [0];
         return ToolResult.Success(surface, nameof(MeshBuilder));
     }
@@ -352,8 +352,8 @@ public class MeshBuilder
     ToolResult<CPlugSurface> BuildDynaSurface(NormalizedItem item, GroupSetting groupSetting, BuildSettings buildSettings)
     {
         var dynamicMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Collidable && ms.Movable).Select(ms=>ms.MeshIndex).ToArray();
-        if (dynamicMeshes.Length == 0)
-            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingDynaShape);
+        //if (dynamicMeshes.Length == 0)
+        //    return ToolResult.Success((CPlugSurface)null!, nameof(MeshBuilder));
         var visibles = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Visible).Select(ms => ms.MeshIndex).ToArray();
         var nonCollidables = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => !ms.Collidable).Select(ms => ms.MeshIndex).ToArray();
         return BuildSurface(item, visibles, nonCollidables, dynamicMeshes, buildSettings);
@@ -362,8 +362,8 @@ public class MeshBuilder
     {
         var staticMeshes = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Collidable && item.Meshes[ms.MeshIndex].Type != MeshType.Dyna_Shape)
             .Select(ms => ms.MeshIndex).ToArray();
-        if (staticMeshes.Length == 0)
-            return ToolResult.Fail(nameof(MeshBuilder), ErrorCodes.MeshBuilder.MissingStaticShape);
+        //if (staticMeshes.Length == 0)
+        //    return ToolResult.Success((CPlugSurface)null!, nameof(MeshBuilder));
         var visibles = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => ms.Visible).Select(ms => ms.MeshIndex).ToArray();
         var nonCollidables = buildSettings.MeshSettings.Where(ms => ms.GroupId == groupSetting.GroupId).Where(ms => !ms.Collidable).Select(ms => ms.MeshIndex).ToArray();
         return BuildSurface(item, visibles, nonCollidables, staticMeshes, buildSettings);
@@ -410,7 +410,7 @@ public class MeshBuilder
                 materialIndex = materialInstances.Count;
                 materialInstances.Add(submesh.Material, materialIndex);
             }
-            submesh.Material.GetChunk<CPlugMaterialUserInst.Chunk090FD001>().U02 = 0;
+            submesh.Material.GetChunk<CPlugMaterialUserInst.Chunk090FD001>()!.U02 = 0;
 
             shadedGeom.Add(new CPlugSolid2Model.ShadedGeom
             {
@@ -455,7 +455,7 @@ public class MeshBuilder
 
 
         var c = target.GetChunk<CPlugSolid2Model.Chunk090BB000>();
-        c.U06 = $"CSharpMapping MeshBuilder Solid2Model: {item.Name}";
+        c!.U06 = $"CSharpMapping MeshBuilder Solid2Model: {item.Name}";
         c.U18 = 0;
         return ToolResult.Success(nameof(MeshBuilder));
     }
@@ -489,8 +489,8 @@ public class MeshBuilder
     }
     CPlugLightUserModel CreateLightUserModel(NormalizedLight light, LightInstanceSetting lightSetting)
     {
-        var lightModel = ObjectCloner.DeepCloneObject(light.LightModel);
-        var c = lightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>();
+        var lightModel = ObjectCloner.DeepCloneObject(light.LightModel)!;
+        var c = lightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>()!;
         c.U01 = (int)lightSetting.Type;
         return lightModel;
     }
@@ -598,7 +598,7 @@ public class MeshBuilder
         var dataDeclField = typeof(CPlugVertexStream).GetField("dataDecls",
             BindingFlags.NonPublic | BindingFlags.Instance);
 
-        var dataDecls = (dataDeclField.GetValue(vertexStream) as CPlugVertexStream.DataDecl[]).ToList();
+        var dataDecls = (dataDeclField!.GetValue(vertexStream) as CPlugVertexStream.DataDecl[])!.ToList();
 
         // clear tex coords if rex or light is not available
         if (uvs.Count <= 0)
@@ -885,7 +885,7 @@ public class MeshBuilder
             var submesh = item.Meshes[meshSetting.MeshIndex];
             var groupSetting = buildSettings.GroupSettings[submesh.GroupIndex];
             if (!materialMap.TryGetValue(submesh.Material, out var materialInstance))
-                materialMap[submesh.Material] = materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
+                materialMap[submesh.Material] = materialInstance = ObjectCloner.DeepCloneObject(submesh.Material)!;
             var material = new CPlugCrystal.Material
             {
                 MaterialUserInst = materialInstance,
@@ -893,7 +893,7 @@ public class MeshBuilder
             };
             materials.Add(material);
             var layer = BuildGeometryLayer(submesh, material, meshSetting,groupSetting, buildSettings);
-            smoothingGroups.AddRange(layer.Crystal.Faces.Select(_ => submesh.SmoothingGroup.HasValue ? submesh.SmoothingGroup.Value : 0));
+            smoothingGroups.AddRange(layer.Crystal!.Faces.Select(_ => submesh.SmoothingGroup.HasValue ? submesh.SmoothingGroup.Value : 0));
             layer.Crystal.U02 = layerIdx;
             layer.LayerId = $"Layer{layerIdx}";
             layer.IsVisible = meshSetting.Visible;
@@ -906,7 +906,7 @@ public class MeshBuilder
         {
             var submesh = item.Meshes[meshSetting.MeshIndex];
             if (!materialMap.TryGetValue(submesh.Material, out var materialInstance))
-                materialMap[submesh.Material] = materialInstance = ObjectCloner.DeepCloneObject(submesh.Material);
+                materialMap[submesh.Material] = materialInstance = ObjectCloner.DeepCloneObject(submesh.Material)!;
             var material = new CPlugCrystal.Material
             {
                 MaterialUserInst = materialInstance,
@@ -914,7 +914,7 @@ public class MeshBuilder
             };
             materials.Add(material);
             var layer = BuildTriggerLayer(submesh, material);
-            layer.Crystal.U02 = layerIdx;
+            layer.Crystal!.U02 = layerIdx;
             layer.LayerId = $"Layer{layerIdx}";
             layer.LayerName = $"Trigger {submesh.Name}";
             
@@ -925,7 +925,7 @@ public class MeshBuilder
         foreach(var group in buildSettings.GroupSettings
             .Where(g=>g.WaypointSpawnModel != null))
         {
-            var layer = BuildSpawnLayer(group.WaypointSpawnModel);
+            var layer = BuildSpawnLayer(group.WaypointSpawnModel!);
 
             List<CPlugCrystal.PartInLayer> parts = [];
             for (int i = 0; i < normalLayerCount; ++i)
@@ -942,7 +942,7 @@ public class MeshBuilder
         }
         target.Layers = layers;
         target.Materials = materials;
-        var chunk = target.Chunks.Get<CPlugCrystal.Chunk09003007>();
+        var chunk = target.Chunks.Get<CPlugCrystal.Chunk09003007>()!;
         chunk.U01 = smoothingGroups.ToArray();
         return ToolResult.Success(nameof(MeshBuilder));
     }
@@ -1027,7 +1027,7 @@ public class MeshBuilder
         layer.Crystal = crystal;
         return layer;
     }
-    CPlugCrystal.SpawnPositionLayer BuildSpawnLayer(CPlugSpawnModel? model)
+    CPlugCrystal.SpawnPositionLayer BuildSpawnLayer(CPlugSpawnModel model)
     {
         var layer = new CPlugCrystal.SpawnPositionLayer();
         layer.Ver = 2;
@@ -1120,7 +1120,7 @@ public class MeshBuilder
     {
         CPlugSpawnModel spawnModel;
         if (groupSetting.WaypointSpawnModel is not null)
-            spawnModel = ObjectCloner.DeepCloneObject(groupSetting.WaypointSpawnModel);
+            spawnModel = ObjectCloner.DeepCloneObject(groupSetting.WaypointSpawnModel)!;
         else
         {
             spawnModel = CreateSpawnModel();
@@ -1291,9 +1291,6 @@ public class MeshBuilder
                 var spawnModelResult = BuildSpawnModel(normalizedItem, groupSetting, buildSettings);
                 if (spawnModelResult.IsFailure)
                     return ToolResult.Fail(spawnModelResult);
-                spawnModelResult.Value.DefaultGravitySpawn = new Vec3(0, 0, 50);
-                spawnModelResult.Value.TorqueDuration = TimeInt32.FromMilliseconds(500);
-                spawnModelResult.Value.TorqueX = 0.5f;
                 var spawnEnt = CreateEntRef();
                 spawnEnt.Model = spawnModelResult.Value;
                 var pos = spawnModelResult.Value.Loc.GetPosition();
@@ -1320,7 +1317,7 @@ public class MeshBuilder
             }
         }
         */
-        var prefab = (item.EntityModel as CPlugPrefab);
+        var prefab = (item.EntityModel as CPlugPrefab)!;
         prefab.FileWriteTime = DateTime.Now;
         prefab.Ents = ents.ToArray();
 
@@ -1351,16 +1348,16 @@ public class MeshBuilder
                     var commonEntityModel = GbxTemplateLibrary.CreateCommonItemEntityModelTemplate().Value;
 
                     commonEntityModel.StaticObject = prefab.Ents.First(e => e.Model is CPlugStaticObjectModel).Model as CPlugStaticObjectModel;
-                    commonEntityModel.StaticObject.Shape = null;
+                    commonEntityModel.StaticObject!.Shape = null;
                     commonEntityModel.StaticObject.IsMeshCollidable = true;
 
                     if (prefab.Ents.Any(t => t.Model is NPlugTrigger_SSpecial))
                     {
-                        commonEntityModel.TriggerShape = (prefab.Ents.First(t=>t.Model is NPlugTrigger_SSpecial).Model as NPlugTrigger_SSpecial).TriggerShape;
+                        commonEntityModel.TriggerShape = (prefab.Ents.First(t=>t.Model is NPlugTrigger_SSpecial).Model as NPlugTrigger_SSpecial)!.TriggerShape;
                     }
                     if (prefab.Ents.Any(t => t.Model is NPlugTrigger_SWaypoint))
                     {
-                        commonEntityModel.TriggerShape = (prefab.Ents.First(t => t.Model is NPlugTrigger_SWaypoint).Model as NPlugTrigger_SWaypoint).TriggerShape;
+                        commonEntityModel.TriggerShape = (prefab.Ents.First(t => t.Model is NPlugTrigger_SWaypoint).Model as NPlugTrigger_SWaypoint)!.TriggerShape;
                     }
 
                     return ToolResult.Success(commonEntityModel as CMwNod, nameof(MeshBuilder));
@@ -1548,9 +1545,9 @@ public class MeshBuilder
         boundingBox = default;
         if (mesh.SourceData is CPlugSolid2Model solid2Model)
         {
-            if (solid2Model.Visuals.Count() == 1)
+            if (solid2Model.Visuals!.Count() == 1)
             {
-                boundingBox = solid2Model.Visuals[0].BoundingBox;
+                boundingBox = solid2Model.Visuals![0].BoundingBox;
                 return true;
             }
         }
@@ -1677,7 +1674,7 @@ public class MeshBuilder
         var crystalResult = BuildCrystal(normalizedItem, buildOptions);
         if (crystalResult.IsFailure)
             return ToolResult.Fail(crystalResult);
-        (item.EntityModelEdition as CGameCommonItemEntityModelEdition).MeshCrystal = crystalResult.Value;
+        (item.EntityModelEdition as CGameCommonItemEntityModelEdition)!.MeshCrystal = crystalResult.Value;
         SetItemWaypointIfWaypointSetting(item, buildOptions);
         FillItemDataFromMesh(item, normalizedItem);
         FixItemChunks(item, normalizedItem);

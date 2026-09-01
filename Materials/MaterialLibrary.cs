@@ -1,6 +1,4 @@
-﻿using System.Diagnostics;
-using System.IO.Compression;
-using TM_GenericMapping.Common;
+﻿using System.IO.Compression;
 using TM_GenericMapping.Common;
 using Path = System.IO.Path;
 
@@ -29,14 +27,14 @@ public class MaterialLibrary : IDisposable
 {
     private class MaterialEntry
     {
-        public string EntryName;
+        public required string EntryName;
         public long Offset;
         public long Length;
     }
 
     private Dictionary<string, Material> loadedMaterials = new();
     private Dictionary<string, MaterialEntry> materialEntries = new();
-    private string zipPath;
+    private string zipPath = string.Empty;
 
     public bool LazyLoading { get; init; } = true;
 
@@ -134,7 +132,7 @@ public class MaterialLibrary : IDisposable
         return material;
     }
 
-    private DDSTexture LoadTexture(string materialName, string suffix, ZipArchive archive)
+    private DDSTexture? LoadTexture(string materialName, string suffix, ZipArchive archive)
     {
         string key = GetMaterialTextureKey(materialName, suffix);
 
@@ -207,7 +205,7 @@ public class MaterialLibrary : IDisposable
         UnloadAll();
     }
 
-    public bool TryGetMaterial(string name, out Material material)
+    public bool TryGetMaterial(string name, out Material? material)
     {
         material = GetMaterial(name);
         return material != null;

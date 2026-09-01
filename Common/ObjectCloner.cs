@@ -87,15 +87,15 @@ public static class ObjectCloner
             var clone = (CMwNod)RuntimeHelpers.GetUninitializedObject(type);
             visited[value] = clone;
             DeepCloneAllFields(nod, clone, visited);
-
             // CopyAllFields already copied the Chunks backing fields (source refs),
             // so wipe it clean before adding the deep-cloned versions
+
             clone.Chunks?.Clear();
 
             foreach (var chunk in nod.Chunks)
             {
                 var chunkClone = (IChunk)DeepCloneValue(chunk, visited)!;
-                clone.Chunks.Add(chunkClone);
+                clone.Chunks?.Add(chunkClone);
             }
             return clone;
         }
@@ -107,9 +107,12 @@ public static class ObjectCloner
         return obj;
     }
 
-    public static T DeepCloneObject<T>(T template) where T : class
+    public static T? DeepCloneObject<T>(T? template) where T : class
+        => DeepCloneObject(template, new Dictionary<object, object>(ReferenceEqualityComparer.Instance));
+    
+    public static T? DeepCloneObject<T>(T? template, Dictionary<object,object> visited) where T : class
     {
-        var visited = new Dictionary<object, object>(ReferenceEqualityComparer.Instance);
-        return (T)DeepCloneValue(template, visited)!;
+        if (template == null) return null;
+        return (T?)DeepCloneValue(template, visited);
     }
 }

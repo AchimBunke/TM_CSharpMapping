@@ -128,9 +128,9 @@ public class KeyFrameAnimationOptimizer
     {
         var triangleBlocks = track.Blocks.OfType<CGameCtnMediaBlockTriangles>();
         if (triangleBlocks.Count() == 0)
-            return default;
+            return new();
         var trackOptimizationInfo = new TrackOptimizationInfo();
-        trackOptimizationInfo.TrackName = track.Name;
+        trackOptimizationInfo.TrackName = track.Name ?? string.Empty;
         var optimizer = new KeyFrameAnimationOptimizer
         {
             TrianglesBlock = triangleBlocks.First(),

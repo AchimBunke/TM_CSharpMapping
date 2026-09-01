@@ -20,7 +20,7 @@ public class EmbeddedItemExtractor
                 ErrorCodes.EmbeddedItemExtractor.MissingEmbeddedData);
         
         return ToolResult.Success<Stream>(
-            new MemoryStream(challenge.EmbeddedZipData, writable: false),
+            new MemoryStream(challenge.EmbeddedZipData!, writable: false),
             nameof(EmbeddedItemExtractor));
     }
 

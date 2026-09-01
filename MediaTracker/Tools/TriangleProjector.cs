@@ -79,7 +79,7 @@ public class TriangleProjector
             scene.Add(projectedObj2D);
         }), clip, sceneAnimationSettings);
         var triangleBlock = clip.MediaClip.Tracks[0].Blocks[0] as CGameCtnMediaBlockTriangles2D;
-        triangleBlock.Keys[0].Time = TimeSingle.FromMilliseconds(timeMillis);
+        triangleBlock!.Keys[0].Time = TimeSingle.FromMilliseconds(timeMillis);
         triangleBlock.Keys[1].Time = TimeSingle.FromMilliseconds(timeMillis + 1000);
         return ToolResult.Success(clip.MediaClip.Tracks.First(), nameof(TriangleProjector));
     }

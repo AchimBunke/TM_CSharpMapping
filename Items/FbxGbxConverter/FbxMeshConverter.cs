@@ -19,9 +19,9 @@ namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 internal class NodeDef
 {
-    public Assimp.Node Node { get; set; }
+    public required Assimp.Node Node { get; set; }
     public Assimp.Matrix4x4 GlobalTransform { get; set; }
-    public MeshConfig NodeConfig { get; set; }
+    public required MeshConfig NodeConfig { get; set; }
 
     public int GroupIndex { get; set; } = -1;
     public int LodMask { get; set; } = 1;
@@ -163,7 +163,7 @@ internal class FbxMeshConverter
         }
         if(nodes.Any(n=>n.NodeConfig.LightmapSize.HasValue))
         {
-            float maxLightmapSize = nodes.Where(n => n.NodeConfig.LightmapSize.HasValue).Max(n => n.NodeConfig.LightmapSize.Value);
+            float maxLightmapSize = nodes.Where(n => n.NodeConfig.LightmapSize.HasValue).Max(n => n.NodeConfig.LightmapSize!.Value);
             foreach(var mesh in normalizedMeshes)
             {
                 if(mesh.PreLightGenerator != null)
@@ -231,7 +231,7 @@ internal class FbxMeshConverter
                 normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[lightmapChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
                 normalizedMesh.PreLightGenerator = MeshBuilder.CreatePreLightGeneratorFromMeshData(normalizedMesh);
                 if(meshConfig.LightmapSize.HasValue)
-                    normalizedMesh.PreLightGenerator.U02 = meshConfig.LightmapSize.Value;
+                    normalizedMesh.PreLightGenerator!.U02 = meshConfig.LightmapSize.Value;
             }
         }
 
@@ -271,7 +271,11 @@ internal class FbxMeshConverter
         var pos = TransformVectors([translation], globalTransform, scaleMatrix, false).First();
 
         spawnModel.Loc = MeshBuilder.IsoFromTransform(pos, new System.Numerics.Quaternion(nodeRotation.X, nodeRotation.Y, nodeRotation.Z, nodeRotation.W));
-        if(config.ItemConfig.Waypoint.TorqueX.HasValue)
+
+        if(config.ItemConfig.Waypoint is null)
+            return spawnModel;
+
+        if (config.ItemConfig.Waypoint.TorqueX.HasValue)
             spawnModel.TorqueX = config.ItemConfig.Waypoint.TorqueX.Value;
         if (config.ItemConfig.Waypoint.DefaultGravitySpawn.HasValue)
             spawnModel.DefaultGravitySpawn = config.ItemConfig.Waypoint.DefaultGravitySpawn.Value;
@@ -316,7 +320,7 @@ internal class FbxMeshConverter
 
     static ToolResult<MeshConfig> FindMeshConfigForMesh(string meshName, FbxGbxConversionInput config)
     {
-        var meshConfig = config.ItemConfig.MeshConfiguration.FirstOrDefault(m => m.Name == meshName, null);
+        var meshConfig = config.ItemConfig.MeshConfiguration.FirstOrDefault(m => m!.Name == meshName, null);
         bool configFromMeshName = config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames);
         if (meshConfig is null && !configFromMeshName)
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig, meshName);

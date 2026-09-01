@@ -100,5 +100,12 @@ public static class QuaternionUtils
                 Matrix4x4.CreateLookAt(Vector3.Zero, forward, Vector3.UnitY)
             );
         }
+
+        public Quat ToQuat()
+        {
+            return new Quat(quaternion.X, quaternion.Y, quaternion.Z, quaternion.W);
+        }
     }
+
+    
 }

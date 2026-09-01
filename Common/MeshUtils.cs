@@ -58,7 +58,7 @@ internal class QEMSimplifier
 
         public Edge ExtractMin()
         {
-            if (heap.Count == 0) return null;
+            if (heap.Count == 0) return null!;
             var min = heap[0];
             heap[0] = heap[heap.Count - 1];
             heap[0].HeapIndex = 0;
@@ -118,14 +118,14 @@ internal class QEMSimplifier
     }
 
     TriangleObjectData mesh;
-    Quadric[] Q;
-    Dictionary<(int, int), Edge> edgeMap;
-    List<HashSet<int>> vertexEdges; // Which edges use each vertex
-    List<HashSet<int>> vertexTriangles; // Which triangles use each vertex
-    List<int> vertices; // Indirection layer for vertex removal
-    Vector3[] positions;
-    System.Drawing.Color[] colors;
-    bool[] isBoundary; // Track boundary vertices
+    Quadric[] Q = [];
+    Dictionary<(int, int), Edge> edgeMap = [];
+    List<HashSet<int>> vertexEdges = []; // Which edges use each vertex
+    List<HashSet<int>> vertexTriangles = []; // Which triangles use each vertex
+    List<int> vertices = []; // Indirection layer for vertex removal
+    Vector3[] positions = [];
+    System.Drawing.Color[] colors = [];
+    bool[] isBoundary = []; // Track boundary vertices
 
     public QEMSimplifier(TriangleObjectData data)
     {
@@ -192,7 +192,7 @@ internal class QEMSimplifier
     void Initialize()
     {
         positions = mesh.Vertices.ToArray();
-        colors = mesh.Colors?.ToArray();
+        colors = mesh.Colors?.ToArray() ?? [];
         vertices = Enumerable.Range(0, positions.Length).ToList();
         vertexEdges = new List<HashSet<int>>();
         vertexTriangles = new List<HashSet<int>>();

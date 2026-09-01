@@ -9,8 +9,8 @@ namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 internal class LightDef
 {
-    public NormalizedLight Light { get; set; }
-    public LightConfig LightConfig { get; set; }
+    public required NormalizedLight Light { get; set; }
+    public required LightConfig LightConfig { get; set; }
 }
 internal class FbxLightConverter
 {
@@ -90,7 +90,7 @@ internal class FbxLightConverter
 
     static bool TryFindConfigForLight(string lightName, FbxGbxConversionInput config, out LightConfig? lightConfig)
     {
-        lightConfig = config.ItemConfig.Lights.FirstOrDefault(l => l.Name == lightName, null);
+        lightConfig = config.ItemConfig.Lights.FirstOrDefault(l => l!.Name == lightName, null);
         return lightConfig is not null;
     }
 

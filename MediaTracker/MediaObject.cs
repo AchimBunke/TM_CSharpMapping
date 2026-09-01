@@ -62,7 +62,7 @@ public abstract class MediaObject : ICloneable<MediaObject>
     }
 
     public List<MediaObject> SubObjects { get; } = [];
-    public MediaObject Parent { get; private set; } = null!;
+    public MediaObject? Parent { get; private set; } = null;
     /// <summary>
     /// TODO: Change (only use for composite which should implement custom logic for shape creation!!)
     /// </summary>

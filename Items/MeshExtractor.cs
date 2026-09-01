@@ -114,8 +114,8 @@ public class MeshExtractor
         normalizedItem.PlacementParam = item.DefaultPlacement;
         normalizedItem.IconWebP = item.IconWebP;
         normalizedItem.Icon = item.Icon;
-        normalizedItem.Name = item.Name;
-        normalizedItem.Description = item.Description;
+        normalizedItem.Name = item.Name ?? string.Empty;
+        normalizedItem.Description = item.Description ?? string.Empty;
     }
 
     ToolResult<(NormalizedMesh[] mesh, NormalizedLight[] lights, MeshGroup group)[]> ExtractFromPrefab(CPlugPrefab prefab, Vector3? parentPosition = null, Quaternion? parentRotation = null, List<MeshGroup> dynaMeshGroups = null)
@@ -172,7 +172,7 @@ public class MeshExtractor
                     meshGroups.AddRange(nestedResult.Value);
                     break;
                 case NPlugDyna_SKinematicConstraint kinematicConstraint:
-                    var constraintParams = ent.Params as NPlugDyna_SPrefabConstraintParams;
+                    var constraintParams = (ent.Params as NPlugDyna_SPrefabConstraintParams)!;
                     var targetEnt = constraintParams.Ent2;
 
                     if(targetEnt >= dynaMeshGroups.Count)
@@ -256,13 +256,13 @@ public class MeshExtractor
         var lights = new List<NormalizedLight>();
 
         bool hasLods = solid2Model.LodMaxDistAtFov90?.Length > 0;
-        foreach (var shaded in solid2Model.ShadedGeoms)
+        foreach (var shaded in solid2Model.ShadedGeoms ?? [])
         {
-            var visual = solid2Model.Visuals[shaded.VisualIndex];
+            var visual = solid2Model.Visuals![shaded.VisualIndex];
             if (visual is not CPlugVisualIndexedTriangles vit)
                 continue;
 
-            var subMeshResult = ExtractFromVisual(vit, solid2Model.CustomMaterials[shaded.MaterialIndex].MaterialUserInst);
+            var subMeshResult = ExtractFromVisual(vit, solid2Model.CustomMaterials![shaded.MaterialIndex].MaterialUserInst!);
             if (subMeshResult.IsFailure)
                 return ToolResult.Fail(subMeshResult);
             if (!meshIsCollisionSource)
@@ -282,10 +282,10 @@ public class MeshExtractor
 
         if (solid2Model.LightInsts?.Length > 0) 
         {
-            var (skel, sockets) = ParseSkel(solid2Model.Skel);
+            var (skel, sockets) = ParseSkel(solid2Model.Skel!);
             foreach (var light in solid2Model.LightInsts)
             {
-                var model = solid2Model.LightUserModels[light.ModelIndex];
+                var model = solid2Model.LightUserModels![light.ModelIndex];
                 var socket = sockets[light.SocketIndex];
 
                 var normalizedLight = ExtractFromLight(model, socket, $"Light_{light.ModelIndex}");
@@ -309,7 +309,7 @@ public class MeshExtractor
     {
         var socketField = typeof(CPlugSkel).GetField("sockets",
          BindingFlags.NonPublic | BindingFlags.Instance);
-        var sockets = (Socket[])socketField?.GetValue(skel);
+        var sockets = (Socket[])socketField!.GetValue(skel)!;
 
         return (skel, sockets);
     }
@@ -325,7 +325,7 @@ public class MeshExtractor
         {
             Position = xyz,
             Rotation = Quaternion.CreateFromRotationMatrix(m),
-            LightModel = ObjectCloner.DeepCloneObject(model),
+            LightModel = ObjectCloner.DeepCloneObject(model)!,
             Name = name
         };
         return normalizedLight;
@@ -363,7 +363,7 @@ public class MeshExtractor
             {
                 case CPlugCrystal.GeometryLayer geo:
                     {
-                        var sourcePositions = geo.Crystal.Positions;
+                        var sourcePositions = geo.Crystal!.Positions;
                         if(geo.IsEnabled)
                             properties |= MeshProperties.Enabled;
                         if(geo.IsVisible)
@@ -372,7 +372,7 @@ public class MeshExtractor
                             properties |= MeshProperties.Collidable;
                         foreach (var face in geo.Crystal.Faces)
                         {
-                            var mat = face.Material.MaterialUserInst;
+                            var mat = face.Material!.MaterialUserInst!;
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
                                 bucket = (new(), new(), new(), new(), new(), MeshType.Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, [], 0);
@@ -406,12 +406,12 @@ public class MeshExtractor
                     break;
                 case CPlugCrystal.TriggerLayer trigger:
                     {
-                        var sourcePositions = trigger.Crystal.Positions;
+                        var sourcePositions = trigger.Crystal!.Positions;
                         if (trigger.IsEnabled)
                             properties |= MeshProperties.Enabled;
                         foreach (var face in trigger.Crystal.Faces)
                         {
-                            var mat = face.Material.MaterialUserInst;
+                            var mat = face.Material!.MaterialUserInst!;
 
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
@@ -536,7 +536,7 @@ public class MeshExtractor
     {
         List<VariantGroup> variants = [];
         List<(NormalizedMesh[] meshes, NormalizedLight[] lights, MeshGroup group)> groupResults = [];
-        foreach(var variant in variantList.Variants)
+        foreach(var variant in variantList.Variants ?? [])
         {
             var variantGroup = new VariantGroup()
             {
@@ -584,11 +584,11 @@ public class MeshExtractor
 
         var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
           BindingFlags.NonPublic | BindingFlags.Instance);
-        var tangentsUs = (Vec3[])tangentUsField?.GetValue(stream);
+        var tangentsUs = (Vec3[])tangentUsField?.GetValue(stream)!;
 
         var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
           BindingFlags.NonPublic | BindingFlags.Instance);
-        var tangentVs = (Vec3[])tangentVsField?.GetValue(stream);
+        var tangentVs = (Vec3[])tangentVsField?.GetValue(stream)!;
 
         var properties = MeshProperties.Enabled | MeshProperties.Visible;
         if(material.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable)
@@ -622,12 +622,12 @@ public class MeshExtractor
         }
         var mesh = new NormalizedMesh
         {
-            Positions = stream.Positions,
-            Normals = stream.Normals,
+            Positions = stream.Positions!,
+            Normals = stream.Normals!,
             TexCoords = texCoords,
             LightmapCoords = lightmapCoords,
             Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
-            Indices = visual.IndexBuffer.Indices,
+            Indices = visual.IndexBuffer!.Indices,
             Material = material,
             TangentUs = tangentsUs,
             TangentVs = tangentVs,
@@ -702,10 +702,10 @@ public class MeshExtractor
         var mesh = new NormalizedMesh();
         var surf = surface.Surf as CPlugSurface.Mesh;
         gameplayMainDir = surf?.GameplayMainDir ?? new Vec3(0, 0, 1);
-        mesh.Positions = surf?.Vertices.ToArray();
-        mesh.Indices = surf?.Triangles.SelectMany(t => new[] { t.Indices.X, t.Indices.Y, t.Indices.Z }).ToArray();
+        mesh.Positions = surf?.Vertices.ToArray() ?? [];
+        mesh.Indices = surf?.Triangles!.SelectMany(t => new[] { t.Indices.X, t.Indices.Y, t.Indices.Z }).ToArray() ?? [];
         mesh.Material = CreateErrorMat();
-        mesh.SurfaceMaterialIds = surf?.Triangles.Select(t => (MaterialId)t.U02).ToArray();
+        mesh.SurfaceMaterialIds = surf?.Triangles!.Select(t => (MaterialId)t.U02).ToArray() ?? [];
         mesh.Name = MatToName(mesh.Material);
         mesh.Properties = MeshProperties.Enabled;
 

@@ -9,8 +9,8 @@ namespace TM_GenericMapping.Items.FbxGbxConversion;
 
 internal class MovingParameter
 {
-    public NPlugDyna_SKinematicConstraint KinematicConstraint { get; set; }
-    public NPlugDynaObjectModel_SInstanceParams InstanceParams { get; set; }
+    public required NPlugDyna_SKinematicConstraint KinematicConstraint { get; set; }
+    public required NPlugDynaObjectModel_SInstanceParams InstanceParams { get; set; }
     public string? ParentMovingGroupId { get; set; } = null;
     public Vec3? AnchorPosition { get; set; } = null;
 }
@@ -22,7 +22,7 @@ internal class MovingParameter
 /// </summary>
 internal class NodeLodAssignment
 {
-    public NodeDef NodeDef { get; set; }
+    public required NodeDef NodeDef { get; set; }
 
     /// <summary>Subset of Mesh.Lods used by this particular group, ascending.</summary>
     public List<int> LodIndices { get; set; } = new();
@@ -30,9 +30,9 @@ internal class NodeLodAssignment
 
 internal class NodeDefGroup
 {
-    public string GroupKey { get; set; }
+    public required string GroupKey { get; set; }
 
-    public MeshGroup MeshGroup { get; set; }
+    public required MeshGroup MeshGroup { get; set; }
 
     /// <summary>
     /// Finite distance thresholds for this group (max 3). Slot count =
@@ -41,16 +41,16 @@ internal class NodeDefGroup
     /// </summary>
     public List<float> LodDistances { get; set; } = new();
     public string? RelativeMovingParentGroupId { get; set; } = null;
-    public string OriginalGroupId { get; set; } = null;
+    public string? OriginalGroupId { get; set; } = null;
 
     public List<NodeLodAssignment> Nodes { get; set; } = new();
 }
 
 internal class BucketInfo
 {
-    public string Key;
-    public GroupType Type;
-    public string MovingGroup;
+    public required string Key;
+    public required GroupType Type;
+    public string? MovingGroup;
     public LegacyGameplayId? TriggerEffectId;
     public EWaypointType? WaypointType;
 }
@@ -145,9 +145,9 @@ internal class NodeGrouper
 
     private List<NodeDefGroup> SplitByLod(BucketInfo bucket, List<NodeDef> nodes)
     {
-        MovingParameter movingParams = null;
+        MovingParameter movingParams = null!;
         if (bucket.Type == GroupType.DynaObject && !string.IsNullOrEmpty(bucket.MovingGroup))
-            _movingConfig.TryGetValue(bucket.MovingGroup, out movingParams);
+            _movingConfig.TryGetValue(bucket.MovingGroup, out movingParams!);
 
         var groups = new List<NodeDefGroup>();
         NodeDefGroup NewGroup(string key) => new NodeDefGroup

@@ -28,7 +28,7 @@ public static class ChunkSafeItemOperations
                 iconChunk = item.GetChunk<CGameCtnCollector.HeaderChunk2E001004>();
             }
             // not sure why but every item has this
-            iconChunk.U01 = 1;
+            iconChunk!.U01 = 1;
             // idk
             iconChunk.IsHeavy = true;
             // this flag seems to be required for the game to load the icon

@@ -99,7 +99,7 @@ internal class FbxMaterialConverter
     }
     CPlugMaterialUserInst CreateEmptyMaterialInstance()
     {
-        var mat = ObjectCloner.DeepCloneObject(_materialTemplate);
+        var mat = ObjectCloner.DeepCloneObject(_materialTemplate)!;
         mat.Link = "";
         mat.IsUsingGameMaterial = true;
         mat.SurfaceGameplayId = CPlugMaterialUserInst.GameplayId.None;
@@ -109,7 +109,7 @@ internal class FbxMaterialConverter
 
     bool TryFindMaterialConfig(string matName, FbxGbxConversionInput config, out MaterialConfig materialConfig)
     {
-        materialConfig = config.ItemConfig.MaterialConfiguration.FirstOrDefault(i => i.Name == matName, null)!;
+        materialConfig = config.ItemConfig.MaterialConfiguration.FirstOrDefault(i => i!.Name == matName, null)!;
         return materialConfig is not null;
     }
 

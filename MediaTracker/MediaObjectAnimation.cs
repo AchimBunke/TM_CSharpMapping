@@ -410,8 +410,8 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
 
     public static MediaObjectAnimation<T, P, D> CreateCustomAnimation<P, D>(
         Func<T, float, P, D, bool> update,
-        P animationParameter = default,
-        D animationData = default)
+        P? animationParameter = default,
+        D? animationData = default)
         where P : IAnimationParameter, new()
         where D : AnimationData, new()
     {
@@ -426,7 +426,7 @@ public class MediaObjectAnimator<T> : IMediaObjectAnimator where T : MediaObject
         Func<T, float, AnimationParameter, D, bool> update,
         float time = 50f,
         bool continuousKeyFrames = false,
-        D animationData = default)
+        D? animationData = default)
         where D : AnimationData, new()
         => CreateCustomAnimation(update, new AnimationParameter() { TimeMillis = Time.Millis(time), continuousKeyFrames = continuousKeyFrames }, animationData);
 

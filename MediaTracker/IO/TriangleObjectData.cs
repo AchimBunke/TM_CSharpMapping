@@ -17,15 +17,15 @@ namespace TM_GenericMapping.Common.IO
     public class TriangleObjectData : IBinarySerializable
     {
         private const uint MagicNumber = 0x4D455348; // "MESH"
-        private const byte Version = 4;
+        private static byte Version = 4;
 
-        public Vector3[] Vertices;
-        public Color[] Colors;
-        public int[] Triangles;
+        public Vector3[] Vertices = Array.Empty<Vector3>();
+        public Color[] Colors = Array.Empty<Color>();
+        public int[] Triangles = Array.Empty<int>();
         public Vector3 LocalPosition;
         public Quaternion LocalRotation;
         public Vector3 LocalScale;
-        public string Name;
+        public string Name = string.Empty;
         public int FillVertexCount;
         public int FillTrianglesCount;
         public bool HasOutline;
@@ -38,8 +38,8 @@ namespace TM_GenericMapping.Common.IO
         public int? BlockShareId;
         public bool HasBlockShareId;
 
-        public TriangleObjectData[] SubObjects;
-        public ISerializableComponent[] SerializableComponents;
+        public TriangleObjectData[] SubObjects = Array.Empty<TriangleObjectData>();
+        public ISerializableComponent[] SerializableComponents = Array.Empty<ISerializableComponent>();
 
         public void Write(BinaryWriter w) 
         {

@@ -60,10 +60,10 @@ public class ItemEffectVariantCreator
         {
             if (entRef.Model is not CPlugStaticObjectModel staticModel)
                 continue;
-            foreach (var matContainer in staticModel.Mesh.CustomMaterials)
+            foreach (var matContainer in staticModel.Mesh!.CustomMaterials ?? [])
             {
-                var mat = matContainer.MaterialUserInst;
-                var newLink = ConvertLink(mat.Link, gameplayId);
+                var mat = matContainer.MaterialUserInst!;
+                var newLink = ConvertLink(mat.Link!, gameplayId);
                 if (string.IsNullOrEmpty(newLink))
                     continue;
 

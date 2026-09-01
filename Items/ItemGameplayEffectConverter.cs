@@ -178,9 +178,9 @@ public class ItemGameplayEffectConverter
     public void SwitchGameplayEffectOnSolid2Model(CPlugSolid2Model solid)
     {
         
-        foreach (var mat in solid.CustomMaterials)
+        foreach (var mat in solid.CustomMaterials ?? [])
         {
-            var matInst = mat.MaterialUserInst;
+            var matInst = mat.MaterialUserInst!;
             ApplyConversionRules(matInst);
         }
 
@@ -194,7 +194,7 @@ public class ItemGameplayEffectConverter
     {
         foreach(var mat in crystal.Materials)
         {
-            var matInst = mat.MaterialUserInst;
+            var matInst = mat.MaterialUserInst!;
             ApplyConversionRules(matInst);
         }
     }

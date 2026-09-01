@@ -30,7 +30,7 @@ public static class GbxTemplateInjectorRegistry
             var attribute = (GbxTemplateDataInjectorAttribute)injectorType.GetCustomAttributes(typeof(GbxTemplateDataInjectorAttribute), false).First();
             var targetType = attribute.TargetType;
             var injectorInstance = Activator.CreateInstance(injectorType);
-            RegisterInjectorInternal(targetType, injectorInstance);
+            RegisterInjectorInternal(targetType, injectorInstance!);
         }
         _initialized = true;
     }

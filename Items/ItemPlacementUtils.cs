@@ -21,8 +21,28 @@ public static class ItemPlacementUtils
         BorderPlatformWater,
         BorderDecoWall,
         BorderTrackWall,
+        Road,
+        RoadDirt,
+        RoadIce,
+        RoadOpen,
+        RoadWater,
+        RoadSlopeSoft,
+        RoadSlopeHard,
+        RoadBump,
+        RoadTilt,
+        RoadWarp,
+        RoadDirtTilt,
+        RoadDirtWarp,
+        RoadIceWarp,
+        RoadIceTilt,
+        RoadOpenTilt,
+        RoadOpenWarp,
+        RoadNarrowCenter,
+        RoadNarrowLeft,
+        RoadNarrowRight,
         BorderRallyRoadDirt,
-        BorderMultiSize
+        BorderMultiSize,
+
     }
 
     public static void SetItemPlacementClass(CGameItemPlacementParam placementParam, NPlugItemPlacement_SClass placementClass)
@@ -30,7 +50,7 @@ public static class ItemPlacementUtils
         placementParam.PlacementClass = placementClass;
         placementParam.TryCreateChunk<CGameItemPlacementParam.Chunk2E020005>(out _);
     }
-    public static void RemoveItemPlacementClass(CGameItemPlacementParam placementParam, NPlugItemPlacement_SClass placementClass)
+    public static void RemoveItemPlacementClass(CGameItemPlacementParam placementParam)
     {
         placementParam.PlacementClass = null;
         placementParam.RemoveChunk<CGameItemPlacementParam.Chunk2E020005>();
