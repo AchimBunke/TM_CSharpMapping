@@ -5,6 +5,7 @@ using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using SixLabors.ImageSharp;
+using System.IO.Compression;
 using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Messaging;
@@ -242,9 +243,35 @@ public class FbxGbxConverter
             return ToolResult.Fail(result);
 
         using var context = new AssimpContext();
-        ExportDataBlob blob = context.ExportToBlob(scene, "glb");
+        foreach (var desc in context.GetSupportedExportFormats())
+        {
+            Console.WriteLine($"{desc.FormatId} - {desc.Description} (.{desc.FileExtension})");
+        }
 
-        var fbxStream = new MemoryStream(blob.Data);
+        ExportDataBlob blob = context.ExportToBlob(scene, "gltf2");
+
+        var fbxStream = new MemoryStream();
+        using (var archive = new ZipArchive(fbxStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var current = blob;
+            while (current != null)
+            {
+                var fileName = current.Name switch
+                {
+                    string s when string.IsNullOrEmpty(current.Name) => $"{itemModel.Name ?? "item."}.gltf",
+                    string s when current.Name.EndsWith("bin") => $"$blobfile.bin",
+                    _ => current.Name
+                };
+                var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
+                using var entryStream = entry.Open();
+                entryStream.Write(current.Data, 0, current.Data.Length);
+                current = current.NextBlob;
+            }
+        }
+        fbxStream.Position = 0;
+
+
+        //var fbxStream = new MemoryStream(blob.Data);
 
         return ToolResult.Success(((Stream)fbxStream, result.Value.config, result.Value.icon), nameof(FbxGbxConverter));
     }

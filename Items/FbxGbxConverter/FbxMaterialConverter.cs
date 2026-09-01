@@ -134,13 +134,13 @@ internal class FbxMaterialConverter
     (Assimp.Material Material, MaterialConfig MaterialConfig) RebuildMaterial(CPlugMaterialUserInst materialUserInst)
     {
         var mat = new Assimp.Material();
-        mat.Name = materialUserInst.MaterialName;
+        mat.Name = string.IsNullOrWhiteSpace(materialUserInst.MaterialName) ? "UnnamedMaterial" : materialUserInst.MaterialName;
 
         var matConfig = new MaterialConfig()
         {
             GameplayId = materialUserInst.SurfaceGameplayId,
             PhysicsId = materialUserInst.SurfacePhysicId,
-            Name = materialUserInst.MaterialName,
+            Name = string.IsNullOrWhiteSpace(materialUserInst.MaterialName) ? "UnnamedMaterial" : materialUserInst.MaterialName,
             //not reliable!
             Link = _materialLibrary.Materials.FirstOrDefault(m => m.Value.LinkFull == materialUserInst.Link, new KeyValuePair<string, DMaterial>("",null!)).Key 
         };

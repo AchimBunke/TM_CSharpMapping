@@ -756,7 +756,7 @@ internal class FbxMeshConverter
         invCoordinate.Inverse();
 
         var scaleMatrix = Assimp.Matrix4x4.FromScaling(
-            new Vector3D(100, 100, 100));
+            new Vector3D(1f, 1f, 1f));
 
         var invScale = scaleMatrix;
         invScale.Inverse();
