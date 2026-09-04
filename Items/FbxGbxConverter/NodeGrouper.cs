@@ -138,7 +138,13 @@ internal class NodeGrouper
         // none of the classifying flags set (kept as Static since there's
         // no better bucket for them).
         {
-            string key = isSingle ? $"single_{isolatedCounter++}" : "static";
+            string key;
+            if (isSingle)
+                key = $"single_{isolatedCounter++}";
+            else if(_itemConfig.ConversionOptions.HasFlag(ItemConversionOptions.SkipStaticItemGrouping))
+                key = $"static_{isolatedCounter++}";
+            else
+                key = $"static";
             return new BucketInfo { Key = key, Type = GroupType.StaticObject };
         }
     }
