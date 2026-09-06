@@ -1,0 +1,210 @@
+﻿using GBX.NET;
+using GBX.NET.Engines.Meta;
+using GBX.NET.Engines.MetaNotPersistent;
+using GBX.NET.Engines.Plug;
+using System.Numerics;
+using System.Reflection;
+using TM_GenericMapping.Common;
+using TmEssentials;
+using static GBX.NET.Engines.Plug.CPlugPrefab;
+using static GBX.NET.Engines.Plug.CPlugSkel;
+using static GBX.NET.Engines.Plug.CPlugSolid2Model;
+
+namespace TM_GenericMapping.Items.MeshCompilation;
+
+public static class GbxItemUtils
+{
+    public static CPlugSpawnModel CreateSpawnModel()
+    {
+        var spawnModel = new CPlugSpawnModel()
+        {
+            DefaultGravitySpawn = new Vec3(0, -1, 0),
+            TorqueX = 0,
+            TorqueDuration = TimeInt32.Zero,
+            Loc = IsoFromTransform(Vec3.Zero, Quaternion.Identity),
+        };
+        var c = spawnModel.CreateChunk<CPlugSpawnModel.Chunk0917A000>();
+        c.Version = 3;
+        return spawnModel;
+    }
+    public static Iso4 IsoFromTransform(Vec3 location, Quaternion rotation)
+    {
+        var m = Matrix4x4.CreateFromQuaternion(rotation);
+
+        return new Iso4(
+            m.M11, m.M12, m.M13,
+            m.M21, m.M22, m.M23,
+            m.M31, m.M32, m.M33,
+            location.X, location.Y, location.Z
+        );
+    }
+    public static Iso4 IsoFromPitchYawRoll(Vec3 location, float pitchDeg, float yawDeg, float rollDeg)
+    {
+        float p = pitchDeg * MathUtils.Deg2Rad;
+        float y = yawDeg * MathUtils.Deg2Rad;
+        float r = rollDeg * MathUtils.Deg2Rad;
+
+        float cp = MathF.Cos(p), sp = MathF.Sin(p);
+        float cy = MathF.Cos(y), sy = MathF.Sin(y);
+        float cr = MathF.Cos(r), sr = MathF.Sin(r);
+
+        // M = Rz(roll) * Ry(yaw) * Rx(pitch)
+        float XX = cr * cy;
+        float XY = sp * sy * cr + sr * cp;
+        float XZ = sp * sr - sy * cp * cr;
+
+        float YX = -sr * cy;
+        float YY = -sp * sr * sy + cp * cr;
+        float YZ = sp * cr + sr * sy * cp;
+
+        float ZX = sy;
+        float ZY = -sp * cy;
+        float ZZ = cp * cy;
+
+        return new Iso4(
+            XX, XY, XZ,
+            YX, YY, YZ,
+            ZX, ZY, ZZ,
+            location.X, location.Y, location.Z
+        );
+    }
+
+
+    public static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices)
+    {
+        var normals = new Vec3[positions.Length];
+
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            var a = positions[indices[i]];
+            var b = positions[indices[i + 1]];
+            var c = positions[indices[i + 2]];
+
+            // weighted by triangle area (cross product magnitude = 2x area)
+            var faceNormal = Vec3.GetCrossProduct(b - a, c - a);
+
+            normals[indices[i]] += faceNormal;
+            normals[indices[i + 1]] += faceNormal;
+            normals[indices[i + 2]] += faceNormal;
+        }
+
+        for (int i = 0; i < normals.Length; i++)
+            if (normals[i] != Vec3.Zero)
+                normals[i] = normals[i].GetNormalized();
+
+        return normals;
+    }
+
+
+    public static string MaterialToName(CPlugMaterialUserInst mat)
+    {
+        if (!string.IsNullOrWhiteSpace(mat.MaterialName))
+            return mat.MaterialName;
+        if (!string.IsNullOrWhiteSpace(mat.Link))
+            return string.Join("\\", mat.Link.Split('\\').TakeLast(2));
+        return "Unknown Material";
+    }
+
+
+    public static PreLightGen CreateEmtpyPreLightGen()
+    {
+        return new PreLightGen()
+        {
+            Version = 1,
+            U01 = 1,
+            U03 = true,
+            U12 = [],
+            UvGroups = [],
+        };
+    }
+    public static PreLightGen? ComputePreLightGeneratorFromMeshData(NormalizedMeshV3 mesh)
+    {
+        if (mesh.LightmapCoords == null)
+            return null;
+        var preLightGen = CreateEmtpyPreLightGen();
+        preLightGen.U08 = float.MaxValue;
+        preLightGen.U09 = float.MaxValue;
+        preLightGen.U10 = float.MinValue;
+        preLightGen.U11 = float.MinValue;
+        preLightGen.U02 = ComputeLightMapSizeLengthMeters(mesh.Positions, mesh.LightmapCoords, mesh.Indices);
+        preLightGen.U04 = mesh.LightmapCoords.Min(uv => uv.X);
+        preLightGen.U05 = mesh.LightmapCoords.Min(uv => uv.Y);
+        preLightGen.U06 = mesh.LightmapCoords.Max(uv => uv.X);
+        preLightGen.U07 = mesh.LightmapCoords.Max(uv => uv.Y);
+        return preLightGen;
+    }
+    public static float ComputeLightMapSizeLengthMeters(
+        IReadOnlyList<Vec3> positions,
+        IReadOnlyList<Vec2> lightmapUVs,
+        IReadOnlyList<int> triangleIndices)
+    {
+        double sumWorldLen = 0.0;
+        double sumUvLen = 0.0;
+
+        for (int i = 0; i < triangleIndices.Count; i += 3)
+        {
+            int i0 = triangleIndices[i], i1 = triangleIndices[i + 1], i2 = triangleIndices[i + 2];
+            int[] tri = { i0, i1, i2 };
+
+            for (int e = 0; e < 3; e++)
+            {
+                int a = tri[e];
+                int b = tri[(e + 1) % 3];
+
+                sumWorldLen += Vector3.Distance(positions[a], positions[b]);
+                sumUvLen += Vector2.Distance(lightmapUVs[a], lightmapUVs[b]);
+            }
+        }
+
+        return sumUvLen < 1e-9 ? 0f : (float)(sumWorldLen / sumUvLen);
+    }
+
+
+    public static (CPlugSkel skel, Socket[] sockets) ParseSkel(CPlugSkel skel)
+    {
+        var socketField = typeof(CPlugSkel).GetField("sockets",
+         BindingFlags.NonPublic | BindingFlags.Instance);
+        var sockets = (Socket[])socketField!.GetValue(skel)!;
+
+        return (skel, sockets);
+    }
+
+    public static EntRef CreateEntRef()
+    {
+        var entRef = new EntRef
+        {
+            Model = null,
+            Position = Vec3.Zero,
+            Rotation = Quat.Identity,
+            Params = null,
+            ModelFile = null,
+            U01 = "",
+        };
+        return entRef;
+    }
+    public static CPlugPrefab CreateCPlugPrefab()
+    {
+        var prefab = new CPlugPrefab()
+        {
+            Ents = [],
+            FileWriteTime = DateTime.Now,
+            Version = 11,
+        };
+        return prefab;
+    }
+    public static NPlugItem_SVariantList CreateVariantList()
+    {
+        var variantList = new NPlugItem_SVariantList()
+        {
+            Version = 1,
+        };
+        return variantList;
+    }
+    public static NPlugItem_SVariant CreateVariant()
+    {
+        return new NPlugItem_SVariant()
+        {
+          
+        };
+    }
+}

@@ -62,5 +62,20 @@ public static class ErrorCodes
     {
         public const string MissingVariantInputs = "VariantItemBuilder.MissingVariantInputs";
     }
+    public static class NormalizedItemValidator
+    {
+        public const string ValidationError = "NormalizedItemValidator.ValidationError";
+    }
+
+    public static class MeshParser
+    {
+        public const string UnsupportedMesh = "MeshCompiler.UnsupportedMesh";
+        public const string MissingDynamicConstraintTarget = "MeshCompiler.MissingDynamicConstraintTarget";
+        public const string MissingDynamicConstraintParent = "MeshCompiler.MissingDynamicConstraintParent";
+        public const string MissingMesh = "MeshCompiler.MissingMesh";
+        public const string UnsupportedSurfaceType = "MeshCompiler.UnsupportedSurfaceType";
+        public const string MissingTriggerShape = "MeshCompiler.MissingTriggerShape";
+        public const string UnsupportedVariantType = "MeshCompiler.UnsupportedVariantType";
+    }
 }
 
