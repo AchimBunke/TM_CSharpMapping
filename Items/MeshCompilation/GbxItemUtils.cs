@@ -9,6 +9,7 @@ using TmEssentials;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
+using static TM_GenericMapping.Items.MeshBuilder;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
 
@@ -104,7 +105,21 @@ public static class GbxItemUtils
             return string.Join("\\", mat.Link.Split('\\').TakeLast(2));
         return "Unknown Material";
     }
+    public static CPlugMaterialUserInst CreateErrorMat()
+    {
+        var mat = new CPlugMaterialUserInst()
+        {
+            MaterialName = "",
+            Model = "",
+            BaseTexture = "",
 
+        };
+        mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD000>(out var c1);
+        mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD001>(out var c2);
+        c2.U02 = 0;
+        mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD002>(out var c3);
+        return mat;
+    }
 
     public static PreLightGen CreateEmtpyPreLightGen()
     {
@@ -117,7 +132,7 @@ public static class GbxItemUtils
             UvGroups = [],
         };
     }
-    public static PreLightGen? ComputePreLightGeneratorFromMeshData(NormalizedMeshV3 mesh)
+    public static PreLightGen? ComputePreLightGenFromMeshData(NormalizedMeshV3 mesh)
     {
         if (mesh.LightmapCoords == null)
             return null;
@@ -158,6 +173,7 @@ public static class GbxItemUtils
 
         return sumUvLen < 1e-9 ? 0f : (float)(sumWorldLen / sumUvLen);
     }
+
 
 
     public static (CPlugSkel skel, Socket[] sockets) ParseSkel(CPlugSkel skel)
@@ -207,4 +223,103 @@ public static class GbxItemUtils
           
         };
     }
+
+    public static BoxAligned BuildBoxAligned(NormalizedMeshV3 mesh)
+    {
+        Vec3 min = mesh.Positions[0];
+        Vec3 max = mesh.Positions[0];
+
+        foreach (var p in mesh.Positions)
+        {
+            min = Vector3.Min(min, p);
+            max = Vector3.Max(max, p);
+        }
+        var center = (min + max) * 0.5f;
+        var extent = (max - min) * 0.5f;
+
+        var box = new BoxAligned(
+            center.X, center.Y, center.Z,
+            extent.X, extent.Y, extent.Z
+        );
+        return box;
+    }
+
+
+    public static List<Socket> ParseSockets(CPlugSkel skel)
+    {
+        var socketField = typeof(CPlugSkel).GetField("sockets",
+         BindingFlags.NonPublic | BindingFlags.Instance);
+        var sockets = (Socket[])socketField!.GetValue(skel)!;
+        return sockets.ToList();
+    }
+    public static CPlugSkel CreateSkel(List<Socket> sockets)
+    {
+        var skel = new CPlugSkel()
+        {
+            Name = "",
+            U04 = [],
+            U05 = 1,
+            U06 = 0,
+            U07 = [],
+            U08 = [],
+        };
+        var c = skel.CreateChunk<CPlugSkel.Chunk090BA000>();
+        c.Version = 20;
+
+        var socketField = typeof(CPlugSkel).GetField("sockets",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        socketField?.SetValue(skel, sockets.ToArray());
+
+        var jointExprsField = typeof(CPlugSkel).GetField("jointExprs",
+           BindingFlags.NonPublic | BindingFlags.Instance);
+        jointExprsField?.SetValue(skel, new JointExpr[0]);
+
+        var jointsField = typeof(CPlugSkel).GetField("joints",
+           BindingFlags.NonPublic | BindingFlags.Instance);
+        jointsField?.SetValue(skel, new Joint[0]);
+
+        return skel;
+    }
+    public static CPlugLightUserModel CreateLightUserModel(NormalizedLightV3 light, InstanceSettings instanceSetting)
+    {
+        var lightModel = ObjectCloner.DeepCloneObject(light.LightModel)!;
+        var c = lightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>()!;
+        c.U01 = (int)instanceSetting.LightType;
+        return lightModel;
+    }
+
+
+    public static Vec3[]? GetTangentUs(CPlugVertexStream vertexStream)
+    {
+        var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
+        BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        return (Vec3[]?)tangentUsField.GetValue(vertexStream);
+
+    }
+   
+    public static void SetTangentUs(CPlugVertexStream vertexStream, Vec3[]? tangentUs)
+    {
+        var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
+        BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        tangentUsField.SetValue(vertexStream, tangentUs);
+    }
+
+    public static Vec3[]? GetTangentVs(CPlugVertexStream vertexStream)
+    {
+        var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
+        BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        return (Vec3[]?)tangentVsField.GetValue(vertexStream);
+
+    }
+    public static void SetTangentVs(CPlugVertexStream vertexStream, Vec3[]? tangentVs)
+    {
+        var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
+        BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        tangentVsField.SetValue(vertexStream, tangentVs);
+    }
+
 }

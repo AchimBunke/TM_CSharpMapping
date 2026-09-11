@@ -77,5 +77,10 @@ public static class ErrorCodes
         public const string MissingTriggerShape = "MeshCompiler.MissingTriggerShape";
         public const string UnsupportedVariantType = "MeshCompiler.UnsupportedVariantType";
     }
+    public static class ItemCompiler
+    {
+        public const string MissingDynaCollisionShape = "ItemCompiler.MissingDynaCollisionShape";
+        public const string UnsupportedSurfaceType = "ItemCompiler.UnsupportedSurfaceType";
+    }
 }
 

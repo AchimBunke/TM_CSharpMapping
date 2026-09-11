@@ -87,6 +87,7 @@ public enum ShapeRoleV3
 
 
 
+
 public class NormalizedModelV3
 {
     public ModelTypeV3 Type { get; set; }
@@ -141,8 +142,8 @@ public class EntityRef : EntityRefBase
     public int? RelativeMovingParentKey { get; set; } = null;
 
     // SpawnModel properties (here so spawnmodel can be reused)
-    public Vector3? SpawnPosition { get; set; }
-    public Quaternion? SpawnRotation { get; set; }
+    public Vector3? WaypointSpawnPosition { get; set; }
+    public Quaternion? WaypointSpawnRotation { get; set; }
 }
 public class MeshRef : RefBase
 {

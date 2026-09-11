@@ -99,6 +99,8 @@ public class ItemParser
         CPlugSpawnModel? spawnModel = null;
         List<int> smoothingGroups = crystal.GetChunk<CPlugCrystal.Chunk09003007>()?.U01?.ToList() ?? new List<int>();
         int firstSmoothingGroupIdx = 0;
+        Vector3? waypointSpawnPos = null;
+        Quaternion? waypointSpawnRot = null;
 
         foreach (var layer in crystal.Layers)
         {
@@ -212,6 +214,10 @@ public class ItemParser
                         if (!spawn.IsEnabled)
                             continue;
                         spawnModel = GbxItemUtils.CreateSpawnModel();
+                        waypointSpawnPos = spawn.SpawnPosition;
+                        waypointSpawnRot = Quaternion.CreateFromYawPitchRoll(spawn.HorizontalAngle * MathUtils.Deg2Rad, spawn.VerticalAngle * MathUtils.Deg2Rad, spawn.RollAngle * MathUtils.Deg2Rad);
+                        
+                        //unused
                         var position = spawn.SpawnPosition.ToVector3();
                         spawnModel.Loc = GbxItemUtils.IsoFromPitchYawRoll(position, spawn.VerticalAngle, spawn.HorizontalAngle, spawn.RollAngle);
                     }
@@ -281,6 +287,7 @@ public class ItemParser
         {
             Type = ModelTypeV3.Container,
         };
+        normalizedItem.ModelPool.Add(normalizedItem.ModelPool.Count, root);
         if (meshes.Count > 0)
         {
             var model = new NormalizedModelV3()
@@ -312,9 +319,12 @@ public class ItemParser
             var modelRef = new EntityRef()
             {
                 ModelKey = key,
+                WaypointSpawnPosition = waypointSpawnPos,
+                WaypointSpawnRotation = waypointSpawnRot,
             };
             root.Children.Add(modelRef);
         }
+        
         normalizedItem.Model = root;
     }
 
@@ -640,11 +650,11 @@ public class ItemParser
     {
         foreach(var waypointTrigger in parseContext.waypointIndexToEntityRef.Values)
         {
-            if (waypointTrigger.SpawnPosition.HasValue)
+            if (waypointTrigger.WaypointSpawnPosition.HasValue)
                 continue; // only first waypoint model can register spawn position
             // it is assumed that all waypoint triggers that are targeted are under the same prefab parent so position is relative to that.
-            waypointTrigger.SpawnPosition = entRef.Position; 
-            waypointTrigger.SpawnRotation = entRef.Rotation;
+            waypointTrigger.WaypointSpawnPosition = entRef.Position; 
+            waypointTrigger.WaypointSpawnRotation = entRef.Rotation;
         }
     }
     void ParseSolid2Model(
@@ -787,7 +797,7 @@ public class ItemParser
             meshRef.MeshKey = key.GetHashCode();
         }
         var mesh = normalizedItem.MeshPool[meshRef.MeshKey];
-        meshRef.PreLightGenerator = GbxItemUtils.ComputePreLightGeneratorFromMeshData(mesh);
+        meshRef.PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh);
     }
 
     void ParseLightModel(CPlugLightUserModel lightModel, Socket socket, LightRef lightRef, NormalizedItemV3 normalizedItem)
@@ -813,6 +823,9 @@ public class ItemParser
             return ToolResult.Success(nameof(ItemParser));
         }
 
+        key = normalizedItem.ShapePool.Count.ToString();
+
+        parseContext.nodeRefTable.Register(key, surface);
 
         var shape = new NormalizedShapeV3()
         {
@@ -830,9 +843,9 @@ public class ItemParser
         }
 
 
-        key = normalizedItem.ShapePool.Count.ToString();
         normalizedItem.ShapePool.Add(key.GetHashCode(), shape);
         shapeRef.ShapeKey = key.GetHashCode();
+      
 
         return ToolResult.Success(nameof(ItemParser));
     }
@@ -920,8 +933,8 @@ public class ItemParser
             triggerModel.WaypointType = normalizedItem.WaypointType;
             triggerModel.WaypointNoRespawn = false;
 
-            triggerShapeEntityRef.SpawnPosition = triggerShapeEntityRef.Position;
-            triggerShapeEntityRef.SpawnRotation = triggerShapeEntityRef.Rotation;
+            triggerShapeEntityRef.WaypointSpawnPosition = triggerShapeEntityRef.Position;
+            triggerShapeEntityRef.WaypointSpawnRotation = triggerShapeEntityRef.Rotation;
         }
         else
         {
