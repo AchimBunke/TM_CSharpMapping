@@ -1,4 +1,5 @@
-﻿using Assimp;
+﻿/*
+ using Assimp;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
@@ -129,3 +130,4 @@ internal class FbxLightConverter
         return Quaternion.CreateFromAxisAngle(axis, angle);
     }
 }
+*/

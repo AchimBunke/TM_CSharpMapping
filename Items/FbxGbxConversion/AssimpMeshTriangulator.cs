@@ -1,11 +1,12 @@
-﻿using System;
+﻿/*
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Assimp;
 
 namespace TM_GenericMapping.Items.FbxGbxConverter;
 
-/*
+
 /// <summary>
 /// Modifies an AssimpNet Assimp.Mesh in place:
 ///   1. Rebuilds mesh.Faces, triangulating quads by choosing the diagonal

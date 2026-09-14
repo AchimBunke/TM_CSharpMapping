@@ -51,7 +51,7 @@ public class NormalizedShapeV3
     public Vec3[] Positions { get; set; } = [];
     public int[] Indices { get; set; } = [];
     public MaterialId[] SurfaceMaterialIds { get; set; } = [];
-    public Vec3 GameplayMainDir { get; set; } = new Vec3(0, 0, 1);
+
 }
 public class NormalizedLightV3
 {
@@ -107,6 +107,7 @@ public class NormalizedModelV3
 
     // trigger special properties
     public LegacyGameplayId? TriggerGameplayId { get; set; }
+    public Vec3? GameplayMainDir { get; set; }
 
     // prefab properties
     public List<EntityRef> Children { get; set; } = [];

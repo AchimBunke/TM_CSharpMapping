@@ -1,4 +1,4 @@
-﻿using Assimp;
+﻿/*using Assimp;
 using EarcutDotNet;
 using System;
 using System.Collections.Generic;
@@ -99,3 +99,4 @@ public static class FaceTriangulator
         return localIndices;
     }
 }
+*/

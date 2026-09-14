@@ -1,4 +1,4 @@
-﻿using Assimp;
+﻿/*using Assimp;
 using Assimp.Unmanaged;
 using DirectXTexNet;
 using GBX.NET;
@@ -326,3 +326,4 @@ public class FbxGbxConverter
         return ToolResult.Success(None.Value, nameof(FbxGbxConverter));
     }
 }
+*/

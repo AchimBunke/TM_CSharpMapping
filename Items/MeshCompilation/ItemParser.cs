@@ -268,7 +268,6 @@ public class ItemParser
                     {
                         Positions = posArr,
                         Indices = idxArr,
-                        GameplayMainDir = new Vec3(0, 0, 1),
                         SurfaceMaterialIds = Enumerable.Repeat(mat.SurfacePhysicId, idxArr.Length / 3).ToArray()
                     };
                     int key = normalizedItem.ShapePool.Count;
@@ -580,6 +579,7 @@ public class ItemParser
         {
             Type = ModelTypeV3.Trigger_Special,
             TriggerGameplayId = triggerGameplayId,
+            GameplayMainDir = triggerShape.Surf?.GameplayMainDir ?? new Vector3(0,0,1),
         };
 
         // add the model to the pool so it can be referenced by other entities
@@ -829,7 +829,6 @@ public class ItemParser
 
         var shape = new NormalizedShapeV3()
         {
-            GameplayMainDir = surface.Surf?.GameplayMainDir ?? new Vec3(0, 0, 1),
         };
 
         // handle different surface types (only mesh was seen before)

@@ -9,7 +9,6 @@ using TmEssentials;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
-using static TM_GenericMapping.Items.MeshBuilder;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
 
@@ -174,6 +173,26 @@ public static class GbxItemUtils
         return sumUvLen < 1e-9 ? 0f : (float)(sumWorldLen / sumUvLen);
     }
 
+    public static PreLightGen? MergePreLightGenerator(PreLightGen? preLightGen1, PreLightGen? preLightGen2)
+    {
+        if (preLightGen1 is null) return preLightGen2;
+        if (preLightGen2 is null) return preLightGen1;
+
+        var preLightGen = CreateEmtpyPreLightGen();
+
+        preLightGen.U02 = Math.Max(preLightGen1.U02, preLightGen2.U02); // LMSizeLengthMeters
+        preLightGen.U04 = Math.Min(preLightGen1.U04, preLightGen2.U04); // Min UV-X
+        preLightGen.U05 = Math.Min(preLightGen1.U05, preLightGen2.U05); // Min UV-Y
+        preLightGen.U06 = Math.Max(preLightGen1.U06, preLightGen2.U06); // Max UV-X
+        preLightGen.U07 = Math.Max(preLightGen1.U07, preLightGen2.U07); // Max UV-Y
+
+        preLightGen.U08 = Math.Max(preLightGen1.U08, preLightGen2.U08); // Max (float.Max i think almost always)
+        preLightGen.U09 = Math.Max(preLightGen1.U09, preLightGen2.U09); // Max (float.Max i think almost always)
+        preLightGen.U10 = Math.Min(preLightGen1.U10, preLightGen2.U10); // Min (float.Max i think almost always)
+        preLightGen.U11 = Math.Min(preLightGen1.U11, preLightGen2.U11); // Min (float.Max i think almost always)
+        return preLightGen;
+
+    }
 
 
     public static (CPlugSkel skel, Socket[] sockets) ParseSkel(CPlugSkel skel)
@@ -243,6 +262,31 @@ public static class GbxItemUtils
         );
         return box;
     }
+    public static BoxAligned BuildBoxAligned(CPlugVisual visual)
+    {
+        if(visual.VertexStreams.Count == 0 || visual.VertexStreams[0]!.Positions!.Length == 0)
+            return new BoxAligned(0, 0, 0, 0, 0, 0);
+
+        Vec3 min = visual.VertexStreams![0].Positions![0];
+        Vec3 max = visual.VertexStreams![0].Positions![0];
+        foreach (var vertexStream in visual.VertexStreams)
+        {
+            foreach (var p in vertexStream.Positions ?? [])
+            {
+                min = Vector3.Min(min, p);
+                max = Vector3.Max(max, p);
+            }
+        }
+
+        var center = (min + max) * 0.5f;
+        var extent = (max - min) * 0.5f;
+
+        var box = new BoxAligned(
+            center.X, center.Y, center.Z,
+            extent.X, extent.Y, extent.Z
+        );
+        return box;
+    }
 
 
     public static List<Socket> ParseSockets(CPlugSkel skel)
@@ -284,7 +328,8 @@ public static class GbxItemUtils
     {
         var lightModel = ObjectCloner.DeepCloneObject(light.LightModel)!;
         var c = lightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>()!;
-        c.U01 = (int)instanceSetting.LightType;
+        if(instanceSetting.LightTypeOverride.HasValue)
+            c.U01 = (int)instanceSetting.LightTypeOverride.Value;
         return lightModel;
     }
 

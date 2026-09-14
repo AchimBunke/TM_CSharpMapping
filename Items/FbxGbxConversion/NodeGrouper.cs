@@ -1,4 +1,5 @@
-﻿using GBX.NET;
+﻿/*
+using GBX.NET;
 using GBX.NET.Engines.Meta;
 using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
@@ -311,3 +312,4 @@ internal class NodeGrouper
     }
 }
 
+*/

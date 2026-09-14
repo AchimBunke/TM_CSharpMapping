@@ -57,6 +57,7 @@ public static class ErrorCodes
         public const string MissingLightConfig = "FbxGbxConverter.MissingLightConfig";
         public const string MultipleSocketsNotSupported = "FbxGbxConverter.MultipleSocketsNotSupported";
         public const string MissingStaticMeshGroup = "FbxGbxConverter.MissingStaticMeshGroup";
+        public const string MissingLodDistanceConfig = "FbxGbxConverter.MissingLodDistanceConfig";
     }
     public static class VariantItemBuilder
     {

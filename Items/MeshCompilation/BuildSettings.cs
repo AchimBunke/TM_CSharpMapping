@@ -1,4 +1,5 @@
 ﻿using GBX.NET.Engines.Meta;
+using GBX.NET.Engines.Plug;
 using System.Numerics;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static TM_GenericMapping.Items.MeshBuilder;
@@ -27,7 +28,7 @@ public sealed class InstanceSettings
 
     // shape only
     public ShapeRoleV3? ShapeRoleOverride { get; set; }
-    public Vector3? GameplayMainDirOverride { get; set; }
+ 
 
     // mesh only
     public int? LODMaskOverride { get; set; }
@@ -35,7 +36,7 @@ public sealed class InstanceSettings
     public int? SmoothingGroupOverride { get; set; }
 
     // ligth only
-    public LightType LightType { get; set; }
+    public LightType? LightTypeOverride { get; set; }
 }
 
 public sealed class ClusterSettings
@@ -48,6 +49,7 @@ public sealed class ClusterSettings
     public EWaypointType? WaypointType { get; set; }
     public bool? WaypointNoRespawn { get; set; }
     public LegacyGameplayId? TriggerGameplayId { get; set; }
+    public Vector3? GameplayMainDir { get; set; }
 
     public NPlugDyna_SKinematicConstraint? KinematicConstraint { get; set; }
     public NPlugDynaObjectModel_SInstanceParams? DynaObjectModelParams { get; set; }
@@ -104,6 +106,7 @@ public sealed class BuildSettings
                     RelativeMovingParentCluster = entRef != null && entRef.RelativeMovingParentKey.HasValue && clusterByModelKey.TryGetValue(entRef.RelativeMovingParentKey.Value, out var parentCluster) ? parentCluster : null,
                     WaypointSpawnPosition = entRef?.WaypointSpawnPosition,
                     WaypointSpawnRotation = entRef?.WaypointSpawnRotation,
+                    GameplayMainDir = model.GameplayMainDir,
 
                 };
 
@@ -123,7 +126,15 @@ public sealed class BuildSettings
                     settings.Instances[s.Id] = new InstanceSettings { Kind = RefKind.Shape, ClusterKey = clusterKey, Collidable = true, ShapeRoleOverride = s.Role, };
 
                 foreach (var l in model.Lights)
-                    settings.Instances[l.Id] = new InstanceSettings { Kind = RefKind.Light, ClusterKey = clusterKey };
+                {
+                    LightType type = item.LightPool[l.LightKey].LightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>().U01 switch
+                    {
+                        0 => LightType.Point,
+                        1 => LightType.Spot,
+                        _ => LightType.Point,
+                    };
+                    settings.Instances[l.Id] = new InstanceSettings { Kind = RefKind.Light, ClusterKey = clusterKey, LightTypeOverride = type };
+                }
 
                 foreach (var child in model.Children)
                     Visit(item.ModelPool[child.ModelKey], child, child.ModelKey);

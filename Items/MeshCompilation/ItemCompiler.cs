@@ -1,11 +1,9 @@
-﻿using Assimp.Configs;
-using GBX.NET;
+﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
-using GBX.NET.Inputs;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
@@ -13,14 +11,11 @@ using TM_GenericMapping.Common;
 using TM_GenericMapping.Messaging;
 using TM_GenericMapping.Templating;
 using static GBX.NET.Engines.GameData.CGameItemModel;
-using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
-using static GBX.NET.Engines.Plug.CPlugSurface.Mesh;
 using static GBX.NET.Engines.Plug.CPlugVertexStream;
-using static TM_GenericMapping.Items.MeshBuilder;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
 
@@ -129,14 +124,16 @@ public class ItemCompiler
         if (compileOptions.Optimization.HasFlag(ItemCompilerOptimization.PreferNadeoImporterStructure) &&
             CanConvertToCommonEntityModel(item, buildSettings, compileOptions))
         {
-            var itemTemplateResult = ConvertToCommonEntityModel(rootEntResult.Value as CPlugPrefab, buildSettings);
+            var itemTemplateResult = ConvertToCommonEntityModel(item, rootEntResult.Value as CPlugPrefab, buildSettings);
             if(itemTemplateResult.IsFailure)
                 return ToolResult.Fail(itemTemplateResult);
             itemTemplate = itemTemplateResult.Value;
         }
         else
         {
-            itemTemplate = GbxTemplateLibrary.CreateMovingItemTemplate().Value;
+            itemTemplate = CreateItemTemplate().Value;
+
+
             itemTemplate.EntityModel = rootEntResult.Value;
 
             FinalizeKinematicConstraints(itemTemplate);
@@ -163,6 +160,14 @@ public class ItemCompiler
         return ToolResult.Success(itemTemplate, nameof(ItemCompiler));
     }
 
+
+    GbxTemplate<CGameItemModel> CreateItemTemplate() 
+    {
+        var itemTemplate = GbxTemplateLibrary.CreateMovingItemTemplate();
+        //itemTemplate.Value.GetChunk<CGameItemModel.Chunk2E00201F>().U08 = 1;
+        //itemTemplate.Value.GetChunk<CGameItemModel.Chunk2E002020>().U03 = false;
+        return itemTemplate;
+    }
     private ToolResult<CMwNod> BuildEntity(NormalizedItemV3 item, EntityRefBase entity, BuildSettings settings, out SMetaPtr? modelParams)
     {
         var model = item.ModelPool[entity.ModelKey];
@@ -422,7 +427,7 @@ public class ItemCompiler
     ToolResult<CPlugSolid2Model> GetOrCreateSolid2Model(NormalizedItemV3 item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         if (instances.Count == 0)
-            return ToolResult.Success(CreateEmptySolid2Model(), nameof(ItemCompiler));
+            return ToolResult.Success(CreateEmptySolid2Model(item), nameof(ItemCompiler));
 
         var key = ComputeSolidMeshKey(instances);
         if (compileContext.nodeRefTable.TryGetNode<CPlugSolid2Model>(key, out var cached))
@@ -440,7 +445,7 @@ public class ItemCompiler
         ClusterSettings cluster,
         BuildSettings buildSettings)
     {
-        var solid = CreateEmptySolid2Model();
+        var solid = CreateEmptySolid2Model(item);
 
         Dictionary<CPlugMaterialUserInst, int> materialInstances = [];
         Dictionary<CPlugVisual, int> visualIndexInThisSolid = [];
@@ -535,17 +540,11 @@ public class ItemCompiler
         solid.LodMaxDistAtFov90 = cluster.LODDistances;
         solid.PreLightGenerator = preLightGen;
 
-        solid.FileWriteTime = DateTime.Now;
-
-        var c = solid.GetChunk<CPlugSolid2Model.Chunk090BB000>();
-        c!.U06 = $"CSharpMapping MeshCompiler Solid2Model: {item.Name}";
-        c.U18 = 0;
-
         return solid;
     }
 
 
-    CPlugSolid2Model CreateEmptySolid2Model()
+    CPlugSolid2Model CreateEmptySolid2Model(NormalizedItemV3 item)
     {
         var solid = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
 
@@ -557,6 +556,15 @@ public class ItemCompiler
         solid.LightInsts = [];
         solid.LightUserModels = [];
         solid.Materials = [];
+
+        var c = solid.GetChunk<CPlugSolid2Model.Chunk090BB000>();
+        c!.U06 = $"CSharpMapping ItemCompiler Solid2Model: {item.Name}";
+        c.U18 = 0;
+        c.U19 = [];
+        c.Version = 34;
+
+        solid.FileWriteTime = DateTime.Now;
+
 
         return solid;
     }
@@ -633,16 +641,16 @@ public class ItemCompiler
 
         if (colors.Count > 0)
         {
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Position)?.Flags1 = 9438208;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Position)?.Flags1 = 7341056; // 9438208;
 
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Normal)?.Flags1 = 277879813;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Normal)?.Flags1 = 275782661;// 277879813;
 
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Color0)?.Flags1 = 546310152;
+            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Color0)?.Flags1 = 544213000; //546310152;
 
             var tex0Decl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
             if (tex0Decl != null)
             {
-                tex0Decl.Flags1 = 546308618;
+                tex0Decl.Flags1 = 544211466; // 546308618;
                 tex0Decl.Flags2 = 80;
                 tex0Decl.Offset = 20;
             }
@@ -745,6 +753,7 @@ public class ItemCompiler
     }
 
 
+
     CPlugSurface? GetOrCreateSurface(NormalizedItemV3 item, List<(Guid Id, InstanceSettings Instance)> collidableInstances, BuildSettings buildSettings)
         => GetOrCreateSurface(item, collidableInstances, LegacyGameplayId.None, new Vec3(0, 0, 1), false, buildSettings);
     CPlugSurface? GetOrCreateSurface(
@@ -834,7 +843,7 @@ public class ItemCompiler
         };
         var gameplayMainDirDef = instances.FirstOrDefault(i =>
         {
-            if (i.Instance.GameplayMainDirOverride.HasValue)
+            if (cluster.GameplayMainDir.HasValue)
                 return true;
             if (i.Instance.Kind == RefKind.Shape)
                 return true;
@@ -842,10 +851,8 @@ public class ItemCompiler
         });
 
         Vec3 gameplayMainDir;
-        if (gameplayMainDirDef.Instance?.GameplayMainDirOverride.HasValue ?? false)
-            gameplayMainDir = gameplayMainDirDef.Instance.GameplayMainDirOverride.Value;
-        else if (gameplayMainDirDef.Instance?.Kind == RefKind.Shape)
-            gameplayMainDir = item.ShapePool[(compileContext.GuidToRef[gameplayMainDirDef.Id] as ShapeRef)!.ShapeKey].GameplayMainDir;
+        if (cluster.GameplayMainDir.HasValue)
+            gameplayMainDir = cluster.GameplayMainDir.Value;
         else
             gameplayMainDir = new Vec3(0, 0, 1);
 
@@ -877,19 +884,9 @@ public class ItemCompiler
             Version = 3
         };
 
-        var gameplayMainDirDef = instances.FirstOrDefault(i =>
-        {
-            if (i.Instance.GameplayMainDirOverride.HasValue)
-                return true;
-            if (i.Instance.Kind == RefKind.Shape)
-                return true;
-            return false;
-        });
         Vec3 gameplayMainDir;
-        if (gameplayMainDirDef.Instance?.GameplayMainDirOverride.HasValue ?? false)
-            gameplayMainDir = gameplayMainDirDef.Instance.GameplayMainDirOverride.Value;
-        else if (gameplayMainDirDef.Instance?.Kind == RefKind.Shape)
-            gameplayMainDir = item.ShapePool[(compileContext.GuidToRef[gameplayMainDirDef.Id] as ShapeRef)!.ShapeKey].GameplayMainDir;
+        if (cluster.GameplayMainDir.HasValue)
+            gameplayMainDir = cluster.GameplayMainDir.Value;
         else
             gameplayMainDir = new Vec3(0, 0, 1);
 
@@ -1181,7 +1178,7 @@ public class ItemCompiler
         {
             MeshRef mr => $"mesh:{mr.MeshKey}:lod={lodMask}:lm={FormatNullableFloat(instance.Instance.LightmapSizeOverride)}",
             ShapeRef sr => $"shape:{sr.ShapeKey}:lod={lodMask}",
-            LightRef lr => $"light:{lr.LightKey}:type={instance.Instance.LightType}:pos={FormatVector3(lr.Position)}:rot={FormatQuaternion(lr.Rotation)}",
+            LightRef lr => $"light:{lr.LightKey}:type={instance.Instance.LightTypeOverride}:pos={FormatVector3(lr.Position)}:rot={FormatQuaternion(lr.Rotation)}",
             _ => throw new InvalidOperationException($"Unknown RefBase type: {refBase.GetType().Name}")
         };
     }
@@ -1683,6 +1680,7 @@ public class ItemCompiler
         HashSet<float> lodDistances = [];
 
         HashSet<Guid> checkedClusters = [];
+        
         foreach(var instance in buildSettings.Instances)
         {
             if (!instance.Value.Enabled)
@@ -1707,6 +1705,9 @@ public class ItemCompiler
                 lodDistances = cluster.LODDistances.ToHashSet();
             else if (!lodDistances.SequenceEqual(cluster.LODDistances))
                 return false;
+
+            if (cluster.WaypointNoRespawn.HasValue && cluster.WaypointNoRespawn.Value)
+                return false; // no respawn not possible with simple item
         }
 
         if (staticClusterCount > 1 && !compileOptions.Optimization.HasFlag(ItemCompilerOptimization.AllowMerging))
@@ -1717,12 +1718,12 @@ public class ItemCompiler
         return true;
     }
 
-    ToolResult<CGameItemModel> ConvertToCommonEntityModel(CPlugPrefab prefab, BuildSettings buildSettings)
+    ToolResult<CGameItemModel> ConvertToCommonEntityModel(NormalizedItemV3 item, CPlugPrefab prefab, BuildSettings buildSettings)
     {
         var entities = ExtractEntities(prefab, Vector3.Zero, Quaternion.Identity).ToList();
         var commonEntityModel = GbxTemplateLibrary.CreateCommonItemEntityModelTemplate().Value;
 
-        commonEntityModel.StaticObject.Mesh = CreateEmptySolid2Model();
+        commonEntityModel.StaticObject.Mesh = CreateEmptySolid2Model(item);
 
         var surface = GbxTemplateLibrary.CreateSurfaceTemplate().Value;
         var surfMesh = GbxTemplateLibrary.CreateSurfaceMeshTemplate().Value;
@@ -1763,12 +1764,22 @@ public class ItemCompiler
             commonEntityModel.StaticObject.IsMeshCollidable = false;
         }
 
-        if(hasTriggerShape)
+        Iso4 waypointSpawn = Iso4.Identity;
+        if (hasTriggerShape)
+        {
             commonEntityModel.TriggerShape = surface;
+            if(compileContext.PendingWaypoints.Count(pw=>pw.Value.SpawnPosition.HasValue) > 0)
+            {
+                var pendingWaypoint = compileContext.PendingWaypoints.First(pw=>pw.Value.SpawnPosition.HasValue);
+                waypointSpawn = GbxItemUtils.IsoFromTransform(pendingWaypoint.Value.SpawnPosition.Value!, pendingWaypoint.Value.SpawnRotation.Value!);
+            }
+        }
+        commonEntityModel.GetChunk<CGameCommonItemEntityModel.Chunk2E027000>().U03 = waypointSpawn;
 
 
+        var itemModel = CreateItemTemplate();
+       
 
-        var itemModel = GbxTemplateLibrary.CreateCommonItemEntityModelItemTemplate();
         itemModel.Value.EntityModel = commonEntityModel;
 
         return ToolResult.Success(itemModel.Value, nameof(ItemCompiler));
@@ -1845,6 +1856,7 @@ public class ItemCompiler
                 if (tangentVs != null)
                     GbxItemUtils.SetTangentVs(vertexStream, tangentVs.Select(t => Vector3.Transform(t, rotation).ToVec3()).ToArray());
             }
+            visual.BoundingBox = GbxItemUtils.BuildBoxAligned(visual);
         }
         if(staticObject.Mesh?.LightUserModels?.Length > 0)
         {
@@ -1923,6 +1935,7 @@ public class ItemCompiler
             sockets.AddRange(solid2Model.Skel != null ? GbxItemUtils.ParseSockets(solid2Model.Skel) : []);
             target.Skel = GbxItemUtils.CreateSkel(sockets);
         }
+        target.PreLightGenerator = GbxItemUtils.MergePreLightGenerator(target.PreLightGenerator, solid2Model.PreLightGenerator);
         target.FileWriteTime = DateTime.Now;
 
     }

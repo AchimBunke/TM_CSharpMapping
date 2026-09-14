@@ -1,4 +1,5 @@
-﻿using Assimp;
+﻿/*
+using Assimp;
 using GBX.NET.Engines.Plug;
 using System.Drawing;
 using TM_GenericMapping.Common;
@@ -157,3 +158,4 @@ internal class FbxMaterialConverter
 
 
 }
+*/

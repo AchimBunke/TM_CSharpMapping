@@ -1,4 +1,5 @@
-﻿#define FbxGbxDebugLod
+﻿/*
+#define FbxGbxDebugLod
 using Assimp;
 using EarcutDotNet;
 using GBX.NET;
@@ -1019,4 +1020,7 @@ internal static class MeshOperations
         }
         return globalIndices;
     }
+
+   
 }
+*/

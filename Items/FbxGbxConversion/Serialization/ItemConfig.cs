@@ -13,6 +13,7 @@ using TM_GenericMapping.Templating;
 using TmEssentials;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Meta.NPlugDyna_SKinematicConstraint;
+using static TM_GenericMapping.Items.ItemPlacementUtils;
 
 [Flags]
 public enum ItemConversionOptions
@@ -522,8 +523,8 @@ public class PlacementConfig
                         {
                             ItemCount = pl.ItemCount,
                             ItemSpacing = pl.ItemSpacing,
-                            FillAlign = pl.FillAlign,
-                            FillDir = pl.FillDir,
+                            FillAlign = (int)pl.FillAlign,
+                            FillDir = pl.UseFillDir ? 1 : 0,
                             NormedPos = pl.NormedPos,
                             OnlyOnGroups = pl.OnlyOnGroups?.ToArray() ?? Array.Empty<string>(),
                             Altitude = pl.Altitude
@@ -572,8 +573,8 @@ public class PlacementConfig
                     {
                         ItemCount = pl.ItemCount,
                         ItemSpacing = pl.ItemSpacing,
-                        FillAlign = pl.FillAlign,
-                        FillDir = pl.FillDir,
+                        FillAlign = (FillAlign)pl.FillAlign,
+                        UseFillDir = pl.FillDir == 1 ? true : false,
                         NormedPos = pl.NormedPos,
                         OnlyOnGroups = pl.OnlyOnGroups?.ToList() ?? new List<string>()
                     };
@@ -608,8 +609,8 @@ public class PlacementPatchLayout
     /// Space between items
     /// </summary>
     public float ItemSpacing { get; set; }
-    public int FillAlign { get; set; }
-    public int FillDir { get; set; } = 1;
+    public FillAlign FillAlign { get; set; } = FillAlign.Center;
+    public bool UseFillDir { get; set; } = true;
     /// <summary>
     /// Horizontal Position along patch width
     /// </summary>

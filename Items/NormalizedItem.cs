@@ -132,6 +132,10 @@ public static class LODUtils
     }
     public static int LodMaskFromLods(params int[] lods)
     {
+        // Empty lods implies no LOD switching -> a single always-visible slot (lod mask 1).
+        if (lods.Length == 0)
+            return 1;
+
         int mask = 0;
 
         foreach (int lod in lods)

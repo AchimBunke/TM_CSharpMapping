@@ -1,4 +1,5 @@
-﻿using Assimp;
+﻿/*
+using Assimp;
 using Assimp.Configs;
 using TM_GenericMapping.Items.FbxGbxConverter;
 using TM_GenericMapping.Messaging;
@@ -110,3 +111,5 @@ internal static class FbxSceneReader
         return result;
     }
 }
+
+*/
