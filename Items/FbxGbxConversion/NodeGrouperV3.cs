@@ -1,5 +1,7 @@
 using GBX.NET;
 using GBX.NET.Engines.Meta;
+using GBX.NET.Serialization.Chunking;
+using Silk.NET.Assimp;
 using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
@@ -23,9 +25,12 @@ internal class MovingParameterV3
 internal class NodeLodAssignmentV3
 {
     public required NodeDefV3 NodeDef { get; set; }
+    public int GroupIndexOverride { get; set; }
+    public int LODMask { get; set; }
 
     /// <summary>Subset of Mesh.Lods used by this particular group, ascending.</summary>
     public List<int> LodIndices { get; set; } = new();
+
 }
 
 internal class NodeDefGroupV3
@@ -63,7 +68,7 @@ internal class CPlugSpawnModelHolderV3
 
 internal class NodeGrouperV3
 {
-    private const int MaxSlotsPerGroup = 4; // 3 finite thresholds + implicit infinity
+    private const int MaxLodDistancesSlots = 3; // 3 finite thresholds + implicit infinity
 
     /// <summary>table[i] = max distance for global lod index i</summary>
     private readonly IReadOnlyList<float> _globalLodDistances;
@@ -98,12 +103,63 @@ internal class NodeGrouperV3
             entry.nodes.Add(nodeDef);
         }
 
+        SplitDuplicateShapesForInstancing(buckets, ref isolatedCounter);
+
         var result = new List<NodeDefGroupV3>();
         foreach (var entry in buckets.Values)
             result.AddRange(SplitByLod(entry.info, entry.nodes));
 
         return result;
     }
+
+    /// <summary>
+    /// A group's meshes are baked relative to a single shared anchor transform, so two nodes only end up
+    /// with equal (anchor-relative) local geometry - and therefore only get to share the same
+    /// <c>NormalizedMeshV3</c> pool entry in <see cref="FbxMeshConverterV3.ExtractMeshes"/> - if they belong
+    /// to a group anchored at their own transform. Nodes merged into the default combined "static" bucket
+    /// all share one anchor, so any node not sitting exactly at that anchor bakes to a unique transform and
+    /// can never reuse a mesh already added to the pool.
+    /// To allow reuse of the same source mesh at different world positions/rotations, any node whose
+    /// underlying mesh data (its set of scene mesh indices) is duplicated by another node in the merged
+    /// static bucket is pulled out into its own isolated group. Each occurrence then gets its own anchor
+    /// (its own transform), so its local-to-anchor geometry normalizes to the same value for every
+    /// occurrence of that shape, letting the mesh converter recognize and reuse the shared mesh - while
+    /// non-duplicated static nodes remain merged as before.
+    /// </summary>
+    private void SplitDuplicateShapesForInstancing(Dictionary<string, (BucketInfo info, List<NodeDefV3> nodes)> buckets, ref int isolatedCounter)
+    {
+        foreach (var bucketKey in buckets.Keys.ToList())
+        {
+            var (info, nodes) = buckets[bucketKey];
+            if (nodes.Count <= 1)
+                continue;
+
+            var shapeCounts = nodes
+                .GroupBy(GetShapeSignature)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var duplicateNodes = nodes.Where(n => shapeCounts[GetShapeSignature(n)] > 1).ToList();
+            if (duplicateNodes.Count == 0)
+                continue;
+
+            var remainingNodes = nodes.Except(duplicateNodes).ToList();
+            if (remainingNodes.Count > 0)
+                buckets[bucketKey] = (info, remainingNodes);
+            else
+                buckets.Remove(bucketKey);
+
+            foreach (var node in duplicateNodes)
+            {
+                var instanceKey = $"{bucketKey}_instance_{isolatedCounter++}";
+                buckets[instanceKey] = (new BucketInfo { Key = instanceKey, Type = info.Type, MovingGroup = info.MovingGroup, TriggerEffectId = info.TriggerEffectId, GameplayMainDir = info.GameplayMainDir, WaypointType = info.WaypointType}, new List<NodeDefV3> { node });
+            }
+        }
+    }
+
+    /// <summary>Shape signature identifying nodes that reference the exact same underlying source mesh(es),
+    /// making them eligible for instancing/mesh reuse regardless of their individual world transform.</summary>
+    private static string GetShapeSignature(NodeDefV3 node) =>
+        string.Join(",", node.Node.MeshIndices.OrderBy(i => i));
 
     private BucketInfo Classify(NodeDefV3 node, ref int isolatedCounter)
     {
@@ -165,58 +221,106 @@ internal class NodeGrouperV3
             RelativeMovingParentGroupId = movingParams?.ParentMovingGroupId,
         };
 
+        int K = _globalLodDistances.Count; // valid node lod indices are 0..K inclusive; K itself is the implicit "last -> infinity" bucket, never a real distance entry
+
+        foreach (var node in nodes)
+            if (node.NodeConfig.Lods != null)
+                foreach (var lod in node.NodeConfig.Lods)
+                    if (lod < 0 || lod > K)
+                        throw new InvalidOperationException(
+                            $"Mesh config references LOD index {lod}, but only indices 0..{K} are valid " +
+                            $"(ItemConfig.LodParameters.MaxLodDistances defines {K} distance(s), plus the implicit last-to-infinity bucket).");
+
         var nodesWithLods = nodes.Where(m => m.NodeConfig.Lods is { Count: > 0 }).ToList();
         var nodesWithoutLod = nodes.Where(m => m.NodeConfig.Lods == null || m.NodeConfig.Lods.Count == 0).ToList();
 
-        var distinctLods = nodesWithLods
+        // only indices < K ever need a slot in LodDistances; index == K rides for free on whichever group ends up last
+        var realLods = nodesWithLods
             .SelectMany(m => m.NodeConfig.Lods)
+            .Where(v => v < K)
             .Distinct()
             .OrderBy(x => x)
             .ToList();
 
-        if (distinctLods.Count == 0)
+        //var distinctLods = nodesWithLods
+        //    .SelectMany(m => m.NodeConfig.Lods)
+        //    .Distinct()
+        //    .OrderBy(x => x)
+        //    .ToList();
+
+        //if (distinctLods.Count == 0)
+        //{
+        //    var single = NewGroup(bucket.Key);
+        //    single.Nodes.AddRange(nodesWithoutLod.Select(m => new NodeLodAssignmentV3 { NodeDef = m }));
+        //    return new List<NodeDefGroupV3> { single };
+        //}
+
+        if (realLods.Count == 0)
         {
+            // no group split is needed at all: zero real thresholds means one bucket, "0 -> infinity" (local index 0),
+            // which covers always-visible nodes and any node that only wanted the terminal index.
             var single = NewGroup(bucket.Key);
-            single.Nodes.AddRange(nodesWithoutLod.Select(m => new NodeLodAssignmentV3 { NodeDef = m }));
+            foreach (var node in nodesWithLods)
+                single.Nodes.Add(new NodeLodAssignmentV3 { NodeDef = node, LodIndices = new List<int> { 0 } });
+            single.Nodes.AddRange(nodesWithoutLod.Select(m => new NodeLodAssignmentV3 { NodeDef = m, LodIndices = new List<int> { 0 } }));
             return new List<NodeDefGroupV3> { single };
         }
 
-        var chunks = ChooseChunksMinimizingDuplication(nodesWithLods, distinctLods);
+        var chunks = ChooseChunksMinimizingDuplication(nodesWithLods, realLods);
 
         for (int c = 0; c < chunks.Count; c++)
         {
             var chunk = chunks[c];
+            bool isLastChunk = c == chunks.Count - 1;
+            bool hasPad = c > 0;
+            int shift = hasPad ? 1 : 0;
+
             var group = NewGroup($"{bucket.Key}_lod{c}");
 
-            // Every slot but the last gets a finite threshold;
-            // the last slot of any chunk always means "to infinity" in that group.
-            for (int i = 0; i < chunk.Count - 1; i++)
+            if (hasPad)
+            {
+                int boundaryGlobalIndex = chunks[c - 1][^1]; // last real value of the previous group, reused as this group's leading boundary
+                group.LodDistances.Add(_globalLodDistances[boundaryGlobalIndex]);
+            }
+
+            var localIndex = new Dictionary<int, int>();
+            for (int i = 0; i < chunk.Count; i++)
             {
                 int globalLodIndex = chunk[i];
-                if (globalLodIndex >= _globalLodDistances.Count)
-                    throw new InvalidOperationException(
-                        $"Mesh config references LOD index {globalLodIndex}, but ItemConfig.LodParameters.MaxLodDistances only defines {_globalLodDistances.Count} distance(s). " +
-                        "Add a matching entry to MaxLodDistances for every LOD level referenced by a mesh's Lods.");
-
                 group.LodDistances.Add(_globalLodDistances[globalLodIndex]);
+                localIndex[globalLodIndex] = i + shift;
             }
+
+            int terminalLocalIndex = group.LodDistances.Count; // the free implicit "last -> infinity" bucket for THIS group
 
             foreach (var node in nodesWithLods)
             {
-                var overlap = node.NodeConfig.Lods
-                    .Where(chunk.Contains)
-                    .OrderBy(x => x)
-                    .ToList();
+                var overlap = new List<int>();
+                foreach (var lod in node.NodeConfig.Lods.OrderBy(x => x))
+                {
+                    if (lod == K)
+                    {
+                        if (isLastChunk)
+                            overlap.Add(terminalLocalIndex); // only the truly last group owns the real infinity range
+                    }
+                    else if (chunk.Contains(lod))
+                    {
+                        overlap.Add(localIndex[lod]);
+                    }
+                }
 
                 if (overlap.Count > 0)
                     group.Nodes.Add(new NodeLodAssignmentV3 { NodeDef = node, LodIndices = overlap });
             }
 
-            foreach (var node in nodesWithoutLod)
-                group.Nodes.Add(new NodeLodAssignmentV3 { NodeDef = node, LodIndices = new List<int>(chunk) });
-
             groups.Add(group);
         }
+        foreach (var node in nodesWithoutLod)
+            groups[0].Nodes.Add(new NodeLodAssignmentV3
+            {
+                NodeDef = node,
+                LodIndices = Enumerable.Range(0, groups[0].LodDistances.Count + 1).ToList()
+            });
 
         return groups;
     }
@@ -224,11 +328,25 @@ internal class NodeGrouperV3
     private List<List<int>> ChooseChunksMinimizingDuplication(List<NodeDefV3> nodesWithLods, List<int> distinctLods)
     {
         int n = distinctLods.Count;
-        int requiredBlocks = (n + MaxSlotsPerGroup - 1) / MaxSlotsPerGroup;
+
+        // first block: 3 new thresholds. every later block: 2 new thresholds
+        // (1 of its 3 slots is spent reusing the previous block's last value as a boundary)
+        static int CapacityForBlock(bool isFirst) => isFirst ? MaxLodDistancesSlots : MaxLodDistancesSlots - 1;
+
+        int requiredBlocks;
+        {
+            int covered = 0, blocks = 0;
+            while (covered < n)
+            {
+                covered += CapacityForBlock(isFirst: blocks == 0);
+                blocks++;
+            }
+            requiredBlocks = blocks;
+        }
 
         var positionIndex = distinctLods
             .Select((val, idx) => (val, idx))
-            .ToDictionary(t => t.val, t => t.idx, comparer: null);
+            .ToDictionary(t => t.val, t => t.idx);
 
         var meshesAtPosition = new List<HashSet<NodeDefV3>>(n);
         for (int i = 0; i < n; i++) meshesAtPosition.Add(new HashSet<NodeDefV3>());
@@ -237,11 +355,11 @@ internal class NodeGrouperV3
                 if (positionIndex.TryGetValue(lod, out int pos))
                     meshesAtPosition[pos].Add(node);
 
-        var touches = new int[n, MaxSlotsPerGroup];
+        var touches = new int[n, MaxLodDistancesSlots];
         for (int l = 0; l < n; l++)
         {
             var running = new HashSet<NodeDefV3>();
-            for (int len = 1; len <= MaxSlotsPerGroup && l + len - 1 < n; len++)
+            for (int len = 1; len <= MaxLodDistancesSlots && l + len - 1 < n; len++)
             {
                 running.UnionWith(meshesAtPosition[l + len - 1]);
                 touches[l, len - 1] = running.Count;
@@ -260,10 +378,12 @@ internal class NodeGrouperV3
         {
             for (int b = 1; b <= requiredBlocks; b++)
             {
-                int maxLen = Math.Min(MaxSlotsPerGroup, i);
+                int maxLen = Math.Min(MaxLodDistancesSlots, i);
                 for (int len = 1; len <= maxLen; len++)
                 {
                     int l = i - len;
+                    int cap = CapacityForBlock(isFirst: l == 0);
+                    if (len > cap) continue;
                     if (dp[l, b - 1] >= Inf) continue;
 
                     int cand = dp[l, b - 1] + touches[l, len - 1];

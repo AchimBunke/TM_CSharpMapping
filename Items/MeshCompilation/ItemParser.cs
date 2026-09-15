@@ -87,6 +87,18 @@ public class ItemParser
         normalizedItem.WaypointType = item.WaypointType;
     }
 
+    class MaterialBucket
+    {
+        public List<Vec3> Positions = new();
+        public List<Vec3> Normals = new();
+        public List<Vec2> TexCoords = new();
+        public List<Vec2> LightmapCoords = new();
+        public List<int> Indices = new();
+        public int Type;
+        public bool Collidable;
+        public Dictionary<(Vec3, Vec2, Vec2), int> WeldMap = new();
+        public int SmoothingGroup;
+    }
     void ParseCPlugCrystal(CPlugCrystal crystal, NormalizedItemV3 normalizedItem)
     {
         const int Mesh = 0;
@@ -108,16 +120,8 @@ public class ItemParser
             // so each material produces a contiguous index range (NormalizedMesh)
 
             // per-material buckets of indices (into the shared vertex buffer)
-            var buckets = new Dictionary<CPlugMaterialUserInst, (
-                List<Vec3> positions,
-                List<Vec3> normals,
-                List<Vec2> texCoords,
-                List<Vec2> lightmapCoords,
-                List<int> indices,
-                int type,
-                bool collidable,
-                Dictionary<(Vec3, Vec2, Vec2), int> weldMap,
-                int smoothingGroup)>();
+
+            var buckets = new Dictionary<CPlugMaterialUserInst, MaterialBucket>();
 
             MeshPropertiesV3 properties = MeshPropertiesV3.None;
 
@@ -137,7 +141,18 @@ public class ItemParser
                             var mat = face.Material!.MaterialUserInst!;
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), Mesh, mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable, [], 0);
+                                bucket = new MaterialBucket()
+                                {
+                                    Positions = new List<Vec3>(),
+                                    Normals = new List<Vec3>(),
+                                    TexCoords = new List<Vec2>(),
+                                    LightmapCoords = new List<Vec2>(),
+                                    Indices = new List<int>(),
+                                    Type = Mesh,
+                                    Collidable = mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable,
+                                    WeldMap = new Dictionary<(Vec3, Vec2, Vec2), int>(),
+                                    SmoothingGroup = geo.IsVisible ? smoothingGroups[firstSmoothingGroupIdx] : 0
+                                };
                                 buckets[mat] = bucket;
                             }
 
@@ -149,21 +164,22 @@ public class ItemParser
                                 foreach (var corner in corners)
                                 {
                                     var key = (sourcePositions[corner.Index], corner.TexCoord, corner.LightmapCoord);
-                                    if (!bucket.weldMap.TryGetValue(key, out int dst))
+                                    if (!bucket.WeldMap.TryGetValue(key, out int dst))
                                     {
-                                        dst = bucket.positions.Count;
-                                        bucket.weldMap[key] = dst;
-                                        bucket.positions.Add(sourcePositions[corner.Index]);
-                                        bucket.texCoords.Add(corner.TexCoord);
-                                        bucket.lightmapCoords.Add(corner.LightmapCoord);
-                                        bucket.normals.Add(Vec3.Zero);
-                                        bucket.smoothingGroup = smoothingGroups[firstSmoothingGroupIdx];
+                                        dst = bucket.Positions.Count;
+                                        bucket.WeldMap[key] = dst;
+                                        bucket.Positions.Add(sourcePositions[corner.Index]);
+                                        bucket.TexCoords.Add(corner.TexCoord);
+                                        bucket.LightmapCoords.Add(corner.LightmapCoord);
+                                        bucket.Normals.Add(Vec3.Zero);
+                                        bucket.SmoothingGroup = geo.IsVisible ? smoothingGroups[firstSmoothingGroupIdx] : 0;
                                     }
-                                    bucket.indices.Add(dst);
+                                    bucket.Indices.Add(dst);
                                 }
                             }
                         }
-                        firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
+                        if(geo.IsVisible)
+                            firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
                     }
                     break;
                 case CPlugCrystal.TriggerLayer trigger:
@@ -174,10 +190,20 @@ public class ItemParser
                         foreach (var face in trigger.Crystal.Faces)
                         {
                             var mat = face.Material!.MaterialUserInst!;
-
                             if (!buckets.TryGetValue(mat, out var bucket))
                             {
-                                bucket = (new(), new(), new(), new(), new(), Trigger, false, [], -1);
+                                bucket = new MaterialBucket()
+                                {
+                                    Positions = new List<Vec3>(),
+                                    Normals = new List<Vec3>(),
+                                    TexCoords = new List<Vec2>(),
+                                    LightmapCoords = new List<Vec2>(),
+                                    Indices = new List<int>(),
+                                    Type = Trigger,
+                                    Collidable = false,
+                                    WeldMap = new Dictionary<(Vec3, Vec2, Vec2), int>(),
+                                    SmoothingGroup = -1
+                                };
                                 buckets[mat] = bucket;
                             }
 
@@ -194,16 +220,16 @@ public class ItemParser
                                 foreach (var corner in corners)
                                 {
                                     var key = (sourcePositions[corner.Index], corner.TexCoord, corner.LightmapCoord);
-                                    if (!bucket.weldMap.TryGetValue(key, out int dst))
+                                    if (!bucket.WeldMap.TryGetValue(key, out int dst))
                                     {
-                                        dst = bucket.positions.Count;
-                                        bucket.weldMap[key] = dst;
-                                        bucket.positions.Add(sourcePositions[corner.Index]);
-                                        bucket.texCoords.Add(corner.TexCoord);
-                                        bucket.lightmapCoords.Add(corner.LightmapCoord);
-                                        bucket.normals.Add(Vec3.Zero);
+                                        dst = bucket.Positions.Count;
+                                        bucket.WeldMap[key] = dst;
+                                        bucket.Positions.Add(sourcePositions[corner.Index]);
+                                        bucket.TexCoords.Add(corner.TexCoord);
+                                        bucket.LightmapCoords.Add(corner.LightmapCoord);
+                                        bucket.Normals.Add(Vec3.Zero);
                                     }
-                                    bucket.indices.Add(dst);
+                                    bucket.Indices.Add(dst);
                                 }
                             }
                         }
@@ -231,12 +257,12 @@ public class ItemParser
 
             foreach (var (mat, bucket) in buckets)
             {
-                var posArr = bucket.positions.ToArray();
-                var idxArr = bucket.indices.ToArray();
+                var posArr = bucket.Positions.ToArray();
+                var idxArr = bucket.Indices.ToArray();
                 var nrmArr = GbxItemUtils.ComputeSmoothNormals(posArr, idxArr);
 
                 var normalizedModel = new NormalizedModelV3();
-                if(bucket.type == Mesh)
+                if(bucket.Type == Mesh)
                 {
                     normalizedModel.Type = ModelTypeV3.Static;
 
@@ -244,8 +270,8 @@ public class ItemParser
                     {
                         Positions = posArr,
                         Normals = nrmArr,
-                        TexCoords = bucket.texCoords.Count > 0 ? bucket.texCoords.ToArray() : null,
-                        LightmapCoords = bucket.lightmapCoords.Count > 0 ? bucket.lightmapCoords.ToArray() : null,
+                        TexCoords = bucket.TexCoords.Count > 0 ? bucket.TexCoords.ToArray() : null,
+                        LightmapCoords = bucket.LightmapCoords.Count > 0 ? bucket.LightmapCoords.ToArray() : null,
                         Colors = null, // crystal has no vertex colors
                         Indices = idxArr,
                         Material = mat,
@@ -258,11 +284,11 @@ public class ItemParser
                     {
                         MeshKey = key,
                         Properties = properties,
-                        SmoothingGroup = bucket.smoothingGroup
+                        SmoothingGroup = bucket.SmoothingGroup
                     };
                     meshes.Add(meshRef);
                 }
-                else if( bucket.type == Trigger)
+                else if( bucket.Type == Trigger)
                 {
                     var shape = new NormalizedShapeV3()
                     {

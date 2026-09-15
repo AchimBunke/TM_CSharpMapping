@@ -33,6 +33,11 @@ public enum ItemCompilerOptimization
     /// Might increase file-size if there are reuses parts.
     /// </summary>
     AllowMerging = 1 << 1,
+
+    /// <summary>
+    /// Prevents sharing of mesh/object/shape instances.
+    /// </summary>
+    ProhibitInstanceSharing = 1 << 2,
 }
 
 public struct CompileOptions()
@@ -65,6 +70,7 @@ public class ItemCompiler
         public Dictionary<NPlugTrigger_SWaypoint, PendingWaypoint> PendingWaypoints { get; } = new();
 
         public Dictionary<Guid, RefBase> GuidToRef { get; private set; } = new();
+        public CompileOptions CompileOptions { get; set; }
         public void Reset()
         {
             nodeRefTable.Clear();
@@ -72,10 +78,12 @@ public class ItemCompiler
             PendingWaypoints.Clear();
             GuidToRef.Clear();
             BuildDynaObjectClusters.Clear();
+            CompileOptions = new();
         }
-        public void Rebuild(NormalizedItemV3 item)
+        public void Rebuild(NormalizedItemV3 item, CompileOptions compileOptions)
         {
             Reset();
+            CompileOptions = compileOptions;
             GuidToRef = item.ModelPool.SelectMany(m => m.Value.Meshes.OfType<RefBase>().Concat(m.Value.Shapes).Concat(m.Value.Lights))
                 .ToDictionary(i => i.Id, i => i);
         }
@@ -112,7 +120,7 @@ public class ItemCompiler
 
     public ToolResult<CGameItemModel> CompilePrefabItem(NormalizedItemV3 item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
-        compileContext.Rebuild(item);
+        compileContext.Rebuild(item, compileOptions);
 
         var rootKey = item.ModelPool.First(kv => ReferenceEquals(kv.Value, item.Model)).Key;
         var rootEntResult = BuildEntity(item, new EntityRef { Id = Guid.Empty, ModelKey = rootKey }, buildSettings, out _);
@@ -146,7 +154,7 @@ public class ItemCompiler
     }
     public ToolResult<CGameItemModel> CompileMeshModelerItem(NormalizedItemV3 item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
-        compileContext.Rebuild(item);
+        compileContext.Rebuild(item, compileOptions);
 
 
         var rootKey = item.ModelPool.First(kv => ReferenceEquals(kv.Value, item.Model)).Key;
@@ -176,7 +184,8 @@ public class ItemCompiler
         if (model.Type is ModelTypeV3.Container or ModelTypeV3.Variant_List)
         {
             var contentKey = ComputeContentKey(item, entity.ModelKey, entity.Id, settings);
-            if (compileContext.nodeRefTable.TryGetNode<CMwNod>(contentKey, out var cached))
+            if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+                compileContext.nodeRefTable.TryGetNode<CMwNod>(contentKey, out var cached))
                 return ToolResult.Success(cached, nameof(ItemCompiler));
 
             ToolResult<CMwNod> builtResult;
@@ -319,7 +328,8 @@ public class ItemCompiler
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
-        if (compileContext.nodeRefTable.TryGetNode<CPlugStaticObjectModel>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) && 
+            compileContext.nodeRefTable.TryGetNode<CPlugStaticObjectModel>(key, out var cached))
             return ToolResult.Success(cached, nameof(ItemCompiler));
 
         // build
@@ -366,7 +376,8 @@ public class ItemCompiler
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
-        if (compileContext.nodeRefTable.TryGetNode<CPlugDynaObjectModel>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<CPlugDynaObjectModel>(key, out var cached))
         {
             compileContext.BuildDynaObjectClusters.Add(clusterKey);
             return ToolResult.Success(cached, nameof(ItemCompiler));
@@ -430,7 +441,8 @@ public class ItemCompiler
             return ToolResult.Success(CreateEmptySolid2Model(item), nameof(ItemCompiler));
 
         var key = ComputeSolidMeshKey(instances);
-        if (compileContext.nodeRefTable.TryGetNode<CPlugSolid2Model>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<CPlugSolid2Model>(key, out var cached))
             return ToolResult.Success(cached, nameof(ItemCompiler));
 
         var solid = CreateSolid2Model(item, instances, cluster, buildSettings);
@@ -586,13 +598,20 @@ public class ItemCompiler
 
         var key = ComputeIndexedTrianglesKey(refBase);
 
-        if (compileContext.nodeRefTable.TryGetNode<CPlugVisualIndexedTriangles>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<CPlugVisualIndexedTriangles>(key, out var cached))
             return cached;
 
+        CPlugVisualIndexedTriangles? indexedTriangles = null;
         if (mesh != null)
-            return CreateIndexedTrianglesFromMesh(mesh, buildSettings);
+            indexedTriangles = CreateIndexedTrianglesFromMesh(mesh, buildSettings);
         if (shape != null)
-            return CreateIndexedTrianglesFromShape(shape, buildSettings);
+            indexedTriangles = CreateIndexedTrianglesFromShape(shape, buildSettings);
+        if(indexedTriangles != null)
+        {
+            compileContext.nodeRefTable.Register(key, indexedTriangles);
+            return indexedTriangles;
+        }
 
         throw new InvalidOperationException($"Unknown RefBase type: {refBase.GetType().Name}");
     }
@@ -767,7 +786,8 @@ public class ItemCompiler
 
         var key = ComputeSurfaceKey(triggerInstances, gameplayMainDir, trigger);
 
-        if (compileContext.nodeRefTable.TryGetNode<CPlugSurface>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<CPlugSurface>(key, out var cached))
             return cached;
 
         var surface = CreateSurface(item, triggerInstances, gameplayId, gameplayMainDir, trigger, buildSettings);
@@ -811,7 +831,8 @@ public class ItemCompiler
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
-        if (compileContext.nodeRefTable.TryGetNode<NPlugTrigger_SWaypoint>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<NPlugTrigger_SWaypoint>(key, out var cached))
             return ToolResult.Success(cached, nameof(ItemCompiler));
 
         var waypointResult = CreateTriggerWaypoint(item, clusterKey, instances, cluster, buildSettings);
@@ -840,6 +861,7 @@ public class ItemCompiler
         {
             Version = 1,
             NoRespawn = cluster.WaypointNoRespawn ?? false,
+            Type = (NPlugTrigger_SWaypoint.EGameItemWaypointType)(cluster.WaypointType.HasValue ? cluster.WaypointType.Value : EWaypointType.Checkpoint)
         };
         var gameplayMainDirDef = instances.FirstOrDefault(i =>
         {
@@ -866,7 +888,8 @@ public class ItemCompiler
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
-        if (compileContext.nodeRefTable.TryGetNode<NPlugTrigger_SSpecial>(key, out var cached))
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<NPlugTrigger_SSpecial>(key, out var cached))
             return ToolResult.Success(cached, nameof(ItemCompiler));
 
         var specialResult = CreateTriggerSpecial(item, clusterKey, instances, cluster, buildSettings);

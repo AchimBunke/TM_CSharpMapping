@@ -87,7 +87,7 @@ internal class FbxMeshConverterV3
             .DefaultIfEmpty(-1)
             .Max();
 
-        if (maxReferencedLod >= lods.Count)
+        if (maxReferencedLod > lods.Count)
             return ToolResult.Fail(nameof(FbxGbxConverterV3), ErrorCodes.FbxGbxConverter.MissingLodDistanceConfig,
                 $"Mesh config references LOD index {maxReferencedLod}, but ItemConfig.LodParameters.MaxLodDistances only defines {lods.Count} distance(s).");
 
@@ -100,8 +100,8 @@ internal class FbxMeshConverterV3
             foreach (var nodeAssignment in group.Nodes)
             {
                 var nodeDef = nodeAssignment.NodeDef;
-                nodeDef.GroupIndex = i;
-                nodeDef.LodMask = LODUtils.LodMaskFromLods(nodeAssignment.LodIndices.ToArray());
+                nodeAssignment.GroupIndexOverride = i;
+                nodeAssignment.LODMask = LODUtils.LodMaskFromLods(nodeAssignment.LodIndices.ToArray());
             }
         }
 
@@ -165,60 +165,72 @@ internal class FbxMeshConverterV3
         Dictionary<int, System.Numerics.Vector3> groupIndexToAnchorPosition,
         Dictionary<int, System.Numerics.Quaternion> groupIndexToAnchorRotation)
     {
-        Dictionary<int, List<(NormalizedMeshV3 Mesh, NodeDefV3 Node)>> meshesByGroup = new Dictionary<int, List<(NormalizedMeshV3 Mesh, NodeDefV3 Node)>>();
+        // Maps a source mesh (by scene mesh index + resulting local transform + material) to an already
+        // created MeshPool entry, so that meshes shared between multiple nodes (or multiple mesh slots of
+        // the same node) are only converted/stored once. We intentionally do NOT merge submeshes by
+        // material here (unlike the old converter), since merging would combine otherwise-shareable meshes
+        // into a single unique blob and break reuse detection.
+        // The local transform is quantized before being used as a key: it is derived via Matrix4x4.Decompose
+        // and Matrix4x4.Invert, so two occurrences of the same shape that only differ by their node's world
+        // position/rotation (and therefore should produce mathematically identical local geometry once
+        // anchor-relative) can still differ by floating-point rounding noise. Comparing raw bits would make
+        // the cache miss in that case and defeat mesh reuse/instancing.
+        Dictionary<(int SourceMeshIndex, QuantizedMatrix LocalTransform, CPlugMaterialUserInst? Material), int> meshCache = new();
+        Dictionary<int, List<(int MeshKey, NodeLodAssignmentV3 NodeAssignment)>> meshRefsByGroup = new();
 
-
-        foreach (var node in nodes)
+        foreach(var group in groups)
         {
-            if (!node.NodeConfig.MeshFlags.HasMeshData())
-                continue;
-            if (node.Node.MeshIndices.Count == 0)
-                continue;
-            if (node.GroupIndex < 0)
-                continue;
-
-            var anchorMatrix = AnchorToMatrix(groupIndexToAnchorPosition[node.GroupIndex], groupIndexToAnchorRotation[node.GroupIndex]);
-            Matrix4x4.Invert(anchorMatrix, out var invAnchor);
-            var localTransform = node.GlobalTransform * invAnchor;
-
-            List<NormalizedMeshV3> normalizedSubmeshes = [];
-            foreach (int meshIndex in node.Node.MeshIndices)
+            foreach (var nodeAssignment in group.Nodes)
             {
-                var mesh = scene.Meshes[meshIndex];
-                var normMesh = ConvertMesh(mesh, materials[mesh.MaterialIndex], localTransform, node.NodeConfig, config.ItemConfig.Scale);
-                normalizedSubmeshes.Add(normMesh);
+                var node = nodeAssignment.NodeDef;
+
+                if (!node.NodeConfig.MeshFlags.HasMeshData())
+                    continue;
+                if (node.Node.MeshIndices.Count == 0)
+                    continue;
+                if (nodeAssignment.GroupIndexOverride < 0)
+                    continue;
+
+                var anchorMatrix = AnchorToMatrix(groupIndexToAnchorPosition[nodeAssignment.GroupIndexOverride], groupIndexToAnchorRotation[nodeAssignment.GroupIndexOverride]);
+                Matrix4x4.Invert(anchorMatrix, out var invAnchor);
+                var localTransform = node.GlobalTransform * invAnchor;
+
+                if (!meshRefsByGroup.TryGetValue(nodeAssignment.GroupIndexOverride, out var groupList))
+                    meshRefsByGroup[nodeAssignment.GroupIndexOverride] = groupList = new();
+
+                foreach (int meshIndex in node.Node.MeshIndices)
+                {
+                    var mesh = scene.Meshes[meshIndex];
+                    var material = materials[mesh.MaterialIndex];
+                    var cacheKey = (meshIndex, QuantizedMatrix.From(localTransform), material.MaterialInstance);
+
+                    if (!meshCache.TryGetValue(cacheKey, out var meshKey))
+                    {
+                        var normMesh = ConvertMesh(mesh, material, localTransform, node.NodeConfig, config.ItemConfig.Scale);
+                        meshKey = item.MeshPool.Count == 0 ? 0 : item.MeshPool.Keys.Max() + 1;
+                        item.MeshPool[meshKey] = normMesh;
+                        meshCache[cacheKey] = meshKey;
+                    }
+
+                    groupList.Add((meshKey, nodeAssignment));
+                }
             }
-
-            var mergedMeshes = normalizedSubmeshes.GroupBy(m => m.Material).Select(g => MergeMeshes(g)).ToList();
-
-            if (!meshesByGroup.TryGetValue(node.GroupIndex, out var list))
-                meshesByGroup[node.GroupIndex] = list = new ();
-            list.AddRange(mergedMeshes.Select(m => (m, node)));
         }
+       
 
-        if (nodes.Any(n => n.NodeConfig.LightmapSize.HasValue))
-        {
-            float maxLightmapSize = nodes.Where(n => n.NodeConfig.LightmapSize.HasValue).Max(n => n.NodeConfig.LightmapSize!.Value);
-            foreach (var meshList in meshesByGroup.Values)
-                foreach (var mesh in meshList)
-                    // lightmap size is embedded via BuildSettings later; nothing to set on NormalizedMeshV3 directly.
-                    _ = maxLightmapSize;
-        }
-
-        foreach (var (groupIndex, meshList) in meshesByGroup)
+        foreach (var (groupIndex, meshRefs) in meshRefsByGroup)
         {
             var modelKey = groupIndexToModelKey[groupIndex];
             var model = item.ModelPool[modelKey];
-            foreach (var (mesh, node) in meshList)
+            foreach (var (meshKey, nodeAssignment) in meshRefs)
             {
-                int meshKey = item.MeshPool.Count == 0 ? 0 : item.MeshPool.Keys.Max() + 1;
-                item.MeshPool[meshKey] = mesh;
+                var mesh = item.MeshPool[meshKey];
                 model.Meshes.Add(new MeshRef
                 {
                     MeshKey = meshKey,
-                    LODMask = nodes.Where(n => n.GroupIndex == groupIndex).Select(n => n.LodMask).FirstOrDefault(1),
-                    Properties = ComputeMeshProperties(node.NodeConfig),
-                    PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh), 
+                    LODMask = nodeAssignment.LODMask,
+                    Properties = ComputeMeshProperties(nodeAssignment.NodeDef.NodeConfig),
+                    PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh),
                 });
             }
         }
@@ -511,6 +523,29 @@ internal class FbxMeshConverterV3
         Vec3? TangentU,
         Vec3? TangentV,
         int? Color);
+
+    /// <summary>
+    /// A <see cref="Matrix4x4"/> quantized to a fixed decimal precision so it can be used as a reliable
+    /// dictionary key. Transforms derived via decomposition/inversion (as used for anchor-relative local
+    /// transforms) are mathematically equal for repeated instances of the same shape but can differ by tiny
+    /// floating-point rounding noise, which would otherwise defeat exact-equality-based mesh reuse.
+    /// </summary>
+    private readonly record struct QuantizedMatrix(
+        long M11, long M12, long M13, long M14,
+        long M21, long M22, long M23, long M24,
+        long M31, long M32, long M33, long M34,
+        long M41, long M42, long M43, long M44)
+    {
+        private const float Precision = 100000f; // 1e-5 tolerance
+
+        public static QuantizedMatrix From(Matrix4x4 m) => new(
+            Quantize(m.M11), Quantize(m.M12), Quantize(m.M13), Quantize(m.M14),
+            Quantize(m.M21), Quantize(m.M22), Quantize(m.M23), Quantize(m.M24),
+            Quantize(m.M31), Quantize(m.M32), Quantize(m.M33), Quantize(m.M34),
+            Quantize(m.M41), Quantize(m.M42), Quantize(m.M43), Quantize(m.M44));
+
+        private static long Quantize(float value) => (long)MathF.Round(value * Precision);
+    }
 
     static float GetDeterminant3x3(Matrix4x4 m)
     {
