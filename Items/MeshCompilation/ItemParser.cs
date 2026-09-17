@@ -245,7 +245,7 @@ public class ItemParser
                         
                         //unused
                         var position = spawn.SpawnPosition.ToVector3();
-                        spawnModel.Loc = GbxItemUtils.IsoFromPitchYawRoll(position, spawn.VerticalAngle, spawn.HorizontalAngle, spawn.RollAngle);
+                        spawnModel.Loc = Iso4Utils.IsoFromPitchYawRoll(position, spawn.VerticalAngle, spawn.HorizontalAngle, spawn.RollAngle);
                     }
                     break;
                 default:

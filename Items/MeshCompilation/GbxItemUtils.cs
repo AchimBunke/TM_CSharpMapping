@@ -21,53 +21,13 @@ public static class GbxItemUtils
             DefaultGravitySpawn = new Vec3(0, -1, 0),
             TorqueX = 0,
             TorqueDuration = TimeInt32.Zero,
-            Loc = IsoFromTransform(Vec3.Zero, Quaternion.Identity),
+            Loc = Iso4Utils.IsoFromTransform(Vec3.Zero, Quaternion.Identity),
         };
         var c = spawnModel.CreateChunk<CPlugSpawnModel.Chunk0917A000>();
         c.Version = 3;
         return spawnModel;
     }
-    public static Iso4 IsoFromTransform(Vec3 location, Quaternion rotation)
-    {
-        var m = Matrix4x4.CreateFromQuaternion(rotation);
 
-        return new Iso4(
-            m.M11, m.M12, m.M13,
-            m.M21, m.M22, m.M23,
-            m.M31, m.M32, m.M33,
-            location.X, location.Y, location.Z
-        );
-    }
-    public static Iso4 IsoFromPitchYawRoll(Vec3 location, float pitchDeg, float yawDeg, float rollDeg)
-    {
-        float p = pitchDeg * MathUtils.Deg2Rad;
-        float y = yawDeg * MathUtils.Deg2Rad;
-        float r = rollDeg * MathUtils.Deg2Rad;
-
-        float cp = MathF.Cos(p), sp = MathF.Sin(p);
-        float cy = MathF.Cos(y), sy = MathF.Sin(y);
-        float cr = MathF.Cos(r), sr = MathF.Sin(r);
-
-        // M = Rz(roll) * Ry(yaw) * Rx(pitch)
-        float XX = cr * cy;
-        float XY = sp * sy * cr + sr * cp;
-        float XZ = sp * sr - sy * cp * cr;
-
-        float YX = -sr * cy;
-        float YY = -sp * sr * sy + cp * cr;
-        float YZ = sp * cr + sr * sy * cp;
-
-        float ZX = sy;
-        float ZY = -sp * cy;
-        float ZZ = cp * cy;
-
-        return new Iso4(
-            XX, XY, XZ,
-            YX, YY, YZ,
-            ZX, ZY, ZZ,
-            location.X, location.Y, location.Z
-        );
-    }
 
 
     public static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices)
@@ -173,6 +133,10 @@ public static class GbxItemUtils
         return sumUvLen < 1e-9 ? 0f : (float)(sumWorldLen / sumUvLen);
     }
 
+    public static void SetLightmapSizeLengthMeters(PreLightGen preLightGen, float sizeLengthMeters)
+    {
+        preLightGen.U02 = sizeLengthMeters;
+    }
     public static PreLightGen? MergePreLightGenerator(PreLightGen? preLightGen1, PreLightGen? preLightGen2)
     {
         if (preLightGen1 is null) return preLightGen2;
@@ -367,4 +331,16 @@ public static class GbxItemUtils
         tangentVsField.SetValue(vertexStream, tangentVs);
     }
 
+
+    public static void PrintEulerDebug(string label, Iso4 iso)
+    {
+        Console.WriteLine(
+            $"{label}: Pitch={iso.GetPitch(true):F4} Yaw={iso.GetYaw(true):F4} Roll={iso.GetRoll(true):F4}"
+        );
+    }
+    public static void PrintForward(string label, Iso4 iso)
+    {
+        // Z-row is "forward" in this Iso4 convention (see GetYaw/GetPitch formulas)
+        Console.WriteLine($"{label}: Forward=({iso.ZX:F4}, {iso.ZY:F4}, {iso.ZZ:F4})");
+    }
 }

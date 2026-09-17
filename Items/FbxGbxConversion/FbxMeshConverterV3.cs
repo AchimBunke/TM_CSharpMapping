@@ -1,6 +1,7 @@
 using GBX.NET;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
+using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
@@ -63,7 +64,7 @@ internal class FbxMeshConverterV3
             var meshConfig = meshConfigResult.Value;
             if (!meshConfig.MeshFlags.HasFlag(MeshFlags.Socket))
                 continue;
-            var spawnModel = ConvertSocket(node, node.GlobalTransform, meshConfig, config.ItemConfig.Scale, config);
+            var spawnModel = ConvertSocket(node, node.GlobalTransform, meshConfig, config);
             socketDefs.Add(new SocketDefV3() { GlobalTransform = node.GlobalTransform, WaypointSpawnModel = spawnModel });
         }
         return ToolResult.Success(socketDefs, nameof(FbxGbxConverterV3));
@@ -206,7 +207,7 @@ internal class FbxMeshConverterV3
 
                     if (!meshCache.TryGetValue(cacheKey, out var meshKey))
                     {
-                        var normMesh = ConvertMesh(mesh, material, localTransform, node.NodeConfig, config.ItemConfig.Scale);
+                        var normMesh = ConvertMesh(mesh, material, localTransform, node.NodeConfig);
                         meshKey = item.MeshPool.Count == 0 ? 0 : item.MeshPool.Keys.Max() + 1;
                         item.MeshPool[meshKey] = normMesh;
                         meshCache[cacheKey] = meshKey;
@@ -225,13 +226,16 @@ internal class FbxMeshConverterV3
             foreach (var (meshKey, nodeAssignment) in meshRefs)
             {
                 var mesh = item.MeshPool[meshKey];
-                model.Meshes.Add(new MeshRef
+                var meshRef = new MeshRef
                 {
                     MeshKey = meshKey,
                     LODMask = nodeAssignment.LODMask,
                     Properties = ComputeMeshProperties(nodeAssignment.NodeDef.NodeConfig),
                     PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh),
-                });
+                };
+                if(nodeAssignment.NodeDef.NodeConfig.LightmapSize.HasValue)
+                    GbxItemUtils.SetLightmapSizeLengthMeters(meshRef.PreLightGenerator!, nodeAssignment.NodeDef.NodeConfig.LightmapSize.Value);
+                model.Meshes.Add(meshRef);
             }
         }
 
@@ -252,11 +256,11 @@ internal class FbxMeshConverterV3
 
     public static Matrix4x4 CoordinateConversionMatrix = Matrix4x4.Identity;
 
-    static NormalizedMeshV3 ConvertMesh(ImportedMesh mesh, MaterialDef material, Matrix4x4 localTransform, MeshConfig meshConfig, float meshScale)
+    static NormalizedMeshV3 ConvertMesh(ImportedMesh mesh, MaterialDef material, Matrix4x4 localTransform, MeshConfig meshConfig)
     {
         var normalizedMesh = new NormalizedMeshV3();
 
-        var scaleMatrix = Matrix4x4.CreateScale(meshScale);
+        var scaleMatrix = Matrix4x4.CreateScale(1);
 
         var normalMatrix = ComputeNormalMatrix(localTransform);
 
@@ -307,15 +311,16 @@ internal class FbxMeshConverterV3
         return normalizedMesh;
     }
 
-    static CPlugSpawnModel ConvertSocket(ImportedNode node, Matrix4x4 globalTransform, MeshConfig meshConfig, float meshScale, FbxGbxConversionInput config)
+    static CPlugSpawnModel ConvertSocket(ImportedNode node, Matrix4x4 globalTransform, MeshConfig meshConfig, FbxGbxConversionInput config)
     {
         var spawnModel = GbxItemUtils.CreateSpawnModel();
 
-        var scaleMatrix = Matrix4x4.CreateScale(meshScale);
+        var scaleMatrix = Matrix4x4.CreateScale(1);
 
         Matrix4x4.Decompose(globalTransform, out _, out var nodeRotation, out var translation);
+        nodeRotation = Quaternion.CreateFromXRotationDegrees(90) * nodeRotation; // fix fbx rotation for socket
 
-        spawnModel.Loc = GbxItemUtils.IsoFromTransform(translation, nodeRotation);
+        spawnModel.Loc = Iso4Utils.IsoFromTransform(translation, nodeRotation);
 
         if (config.ItemConfig.Waypoint is null)
             return spawnModel;

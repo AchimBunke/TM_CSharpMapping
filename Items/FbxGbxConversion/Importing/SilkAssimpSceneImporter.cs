@@ -1,8 +1,8 @@
 
 using Silk.NET.Assimp;
 using System.Numerics;
-using System.Runtime.InteropServices;
-using TM_GenericMapping.Items.FbxGbxConverter;
+using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.MeshCompilation;
 using Matrix4x4 = System.Numerics.Matrix4x4;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
@@ -16,6 +16,11 @@ namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
 /// </summary>
 public class SilkAssimpSceneImporter : ISceneImporter
 {
+    private readonly float _scale;
+    public SilkAssimpSceneImporter(float scale)
+    {
+        _scale = scale;
+    }
     static readonly Matrix4x4 GbxCoordinateSpaceFixup =
         Matrix4x4.Create(
             1,0,0,0,
@@ -31,28 +36,38 @@ public class SilkAssimpSceneImporter : ISceneImporter
         var v2 = context.GetVersionMinor();
         var v3 = context.GetVersionPatch();
 
-        //context.SetConfig(new Assimp.Configs.FloatPropertyConfig("AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY", 1f));
-
-        if (stream.CanSeek)
-            stream.Seek(0, SeekOrigin.Begin);
-
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        byte[] data = memory.ToArray();
-
         unsafe
         {
+            var store = context.CreatePropertyStore();
+
+            //byte[] key = Encoding.UTF8.GetBytes("AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY\0");
+            //context.SetImportPropertyFloat(
+            //        store,
+            //        "GLOBAL_SCALE_FACTOR",
+            //        0.01f
+            //    );
+           
+
+
+            if (stream.CanSeek)
+                stream.Seek(0, SeekOrigin.Begin);
+
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            byte[] data = memory.ToArray();
+
+
             fixed (byte* ptr = data)
             {
                 PostProcessSteps postProcess =
                     PostProcessSteps.Triangulate |
                     PostProcessSteps.CalculateTangentSpace;
 
-                Scene* scene = context.ImportFileFromMemory(
+                Scene* scene = context.ImportFileFromMemoryWithProperties(
                     ptr,
                     (uint)data.Length,
                     (uint)postProcess,
-                    "fbx");
+                    "fbx", store);
 
                 if (scene == null)
                 {
@@ -72,21 +87,79 @@ public class SilkAssimpSceneImporter : ISceneImporter
                 {
                     context.ReleaseImport(scene);
                 }
+
             }
         }
-      
 
        
 
         return null;
     }
 
+
+    unsafe object? ExtractMetadataValue(MetadataType type, void* valuePtr)
+    {
+        switch (type)
+        {
+            case MetadataType.Bool:
+                return *(bool*)valuePtr;
+            case MetadataType.Int32:
+                return *(int*)valuePtr;
+            case MetadataType.Int64:
+                return *(long*)valuePtr;
+            case MetadataType.Uint32:
+                return *(uint*)valuePtr;
+            case MetadataType.Uint64:
+                return *(ulong*)valuePtr;
+            case MetadataType.Float:
+                return *(float*)valuePtr;
+            case MetadataType.Double:
+                return *(double*)valuePtr;
+            case MetadataType.Aistring:
+                {
+                    var str = (AssimpString*)valuePtr;
+                    return str->ToString();
+                }
+            case MetadataType.Aivector3D:
+                {
+                    var vec = (Vector3*)valuePtr;
+                    return new Vector3(vec->X, vec->Y, vec->Z);
+                }
+            case MetadataType.Aimetadata:
+                return ExtractMetadataValue((Metadata*)valuePtr); 
+            case MetadataType.MetaMax:
+                return null;
+            default:
+                throw new NotSupportedException($"Unsupported metadata type: {type}");
+        }
+    }
+    unsafe Dictionary<string, object?> ExtractMetadataValue(Metadata* metaData)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if(metaData is null)
+            return result;
+        for (uint i = 0; i < metaData->MNumProperties; i++)
+        {
+            var key = metaData->MKeys[i];
+            var entry = metaData->MValues[i];
+            var data = ExtractMetadataValue(entry.MType, entry.MData);
+
+            result[key] = data;
+        }
+
+        return result;
+    }
     unsafe ImportedScene Convert(Assimp assimp, Scene* scene)
     {
         if (scene == null)
             throw new ArgumentNullException(nameof(scene));
 
         var importedScene = new ImportedScene();
+
+        // Scene metadata
+        var metadata = ExtractMetadataValue(scene->MMetaData);
+
+     
 
         // Meshes
         for (uint i = 0; i < scene->MNumMeshes; i++)
@@ -152,11 +225,6 @@ public class SilkAssimpSceneImporter : ISceneImporter
                         _ => ImportedLightType.Point
                     },
 
-                    Direction = new Vector3(
-                        light->MDirection.X,
-                        light->MDirection.Y,
-                        light->MDirection.Z),
-
                     GlobalTransform = node.GlobalTransform
                 });
             }
@@ -170,9 +238,11 @@ public class SilkAssimpSceneImporter : ISceneImporter
         if (node == null)
             throw new ArgumentNullException(nameof(node));
 
+        var metadata = ExtractMetadataValue(node->MMetaData);
+
         Matrix4x4 local = Matrix4x4.Transpose(node->MTransformation);
         Matrix4x4 global = parentGlobal * local;
-
+       
         var importedNode = new ImportedNode
         {
             Name = node->MName.ToString(),
@@ -387,44 +457,126 @@ public class SilkAssimpSceneImporter : ISceneImporter
         return result;
     }
 
-    static void ApplyGbxCoordinateSpaceFixup(ImportedScene scene)
+    void ApplyGbxCoordinateSpaceFixup(ImportedScene scene)
     {
-        Matrix4x4.Invert(GbxCoordinateSpaceFixup, out var inverseFixup);
-        Matrix4x4 normalFixup = Matrix4x4.Transpose(inverseFixup);
+        Matrix4x4 SC = new Matrix4x4(
+            100f, 0f, 0f, 0f,
+              0f, 0f, -100f, 0f,
+              0f, 100f, 0f, 0f,
+              0f, 0f, 0f, 1f);
 
-        foreach (var node in scene.CollectNodes())
-        {
-            node.LocalTransform = inverseFixup * node.LocalTransform * GbxCoordinateSpaceFixup;
-            node.GlobalTransform = inverseFixup * node.GlobalTransform * GbxCoordinateSpaceFixup;
+        Matrix4x4 C = new Matrix4x4(
+          1f, 0f, 0f, 0f,
+            0f, 0f, -1f, 0f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 0f, 1f);
 
-        }
+        Matrix4x4.Invert(SC, out Matrix4x4 scInv);
+        scInv *= Matrix4x4.CreateScale(_scale); // scale
 
         foreach (var mesh in scene.Meshes)
         {
-            //for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
-            //    (mesh.Indices[i + 1], mesh.Indices[i + 2]) = (mesh.Indices[i + 2], mesh.Indices[i + 1]);
-
             for (int i = 0; i < mesh.Positions.Length; i++)
-                mesh.Positions[i] = Vector3.Transform(mesh.Positions[i], GbxCoordinateSpaceFixup);
+                mesh.Positions[i] = Vector3.Transform(mesh.Positions[i], C);
 
             for (int i = 0; i < mesh.Normals.Length; i++)
-                mesh.Normals[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Normals[i], normalFixup));
+                mesh.Normals[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Normals[i], C));
 
             if (mesh.Tangents is not null)
                 for (int i = 0; i < mesh.Tangents.Length; i++)
-                    mesh.Tangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Tangents[i], GbxCoordinateSpaceFixup));
+                    mesh.Tangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Tangents[i], C));
 
             if (mesh.BiTangents is not null)
                 for (int i = 0; i < mesh.BiTangents.Length; i++)
-                    mesh.BiTangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.BiTangents[i], GbxCoordinateSpaceFixup));
+                    mesh.BiTangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.BiTangents[i], C));
         }
+
+
+        // 2) Strip C back out of every node's local transform, then recompute
+        //    globals top-down using the SAME composition your ConvertNode uses.
+        void FixupNode(ImportedNode node, Matrix4x4 parentGlobal)
+        {
+            Matrix4x4 l = node.LocalTransform;
+
+            Matrix4x4 linearOnly = l;
+            linearOnly.M41 = linearOnly.M42 = linearOnly.M43 = 0f;
+
+            Matrix4x4 rContainer = scInv * linearOnly;   // conjugates the baked conversion out
+            rContainer.M41 = l.M41 / 100f * _scale;                      // translation cm -> m
+            rContainer.M42 = l.M42 / 100f * _scale;
+            rContainer.M43 = l.M43 / 100f * _scale;
+            rContainer.M44 = 1f;
+
+            node.LocalTransform = rContainer;
+            node.GlobalTransform = parentGlobal * node.LocalTransform;
+           
+            foreach (var child in node.Children)
+                FixupNode(child, node.GlobalTransform);
+        }
+
+        foreach(var child in scene.RootNode.Children)
+        {
+            FixupNode(child, Matrix4x4.Identity);
+        }
+
+
 
         foreach (var light in scene.Lights)
         {
-            light.Direction = Vector3.Normalize(Vector3.TransformNormal(light.Direction, GbxCoordinateSpaceFixup));
-            light.GlobalTransform *= GbxCoordinateSpaceFixup;
+            var node = scene.CollectNodes().FirstOrDefault(n => n.Name == light.NodeName);
+
+
+            Matrix4x4 baseTransform = node.GlobalTransform;
+
+            var lightRotFix = baseTransform;
+            lightRotFix = Matrix4x4.Transpose(lightRotFix);
+            light.GlobalTransform = lightRotFix with
+            {
+                M41 = baseTransform.M41,
+                M42 = baseTransform.M42,
+                M43 = baseTransform.M43
+            };
         }
     }
+
+    //static void ApplyGbxCoordinateSpaceFixup(ImportedScene scene)
+    //{
+    //    Matrix4x4.Invert(GbxCoordinateSpaceFixup, out var inverseFixup);
+    //    Matrix4x4 normalFixup = Matrix4x4.Transpose(inverseFixup);
+
+    //    foreach (var node in scene.CollectNodes())
+    //    {
+    //        node.LocalTransform = inverseFixup * node.LocalTransform * GbxCoordinateSpaceFixup;
+    //        node.GlobalTransform = inverseFixup * node.GlobalTransform * GbxCoordinateSpaceFixup;
+
+    //    }
+
+    //    foreach (var mesh in scene.Meshes)
+    //    {
+    //        //for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
+    //        //    (mesh.Indices[i + 1], mesh.Indices[i + 2]) = (mesh.Indices[i + 2], mesh.Indices[i + 1]);
+
+    //        for (int i = 0; i < mesh.Positions.Length; i++)
+    //            mesh.Positions[i] = Vector3.Transform(mesh.Positions[i], GbxCoordinateSpaceFixup);
+
+    //        for (int i = 0; i < mesh.Normals.Length; i++)
+    //            mesh.Normals[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Normals[i], normalFixup));
+
+    //        if (mesh.Tangents is not null)
+    //            for (int i = 0; i < mesh.Tangents.Length; i++)
+    //                mesh.Tangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Tangents[i], GbxCoordinateSpaceFixup));
+
+    //        if (mesh.BiTangents is not null)
+    //            for (int i = 0; i < mesh.BiTangents.Length; i++)
+    //                mesh.BiTangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.BiTangents[i], GbxCoordinateSpaceFixup));
+    //    }
+
+    //    foreach (var light in scene.Lights)
+    //    {
+    //        light.Direction = Vector3.Normalize(Vector3.TransformNormal(light.Direction, GbxCoordinateSpaceFixup));
+    //        light.GlobalTransform *= GbxCoordinateSpaceFixup;
+    //    }
+    //}
 
 
 }

@@ -1,7 +1,4 @@
-﻿namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
-
-using GBX.NET;
-using GBX.NET.Engines.Game;
+﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
@@ -14,6 +11,8 @@ using TmEssentials;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Meta.NPlugDyna_SKinematicConstraint;
 using static TM_GenericMapping.Items.ItemPlacementUtils;
+
+namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 [Flags]
 public enum ItemConversionOptions
@@ -386,7 +385,7 @@ public class LightConfig
     {
         get; set;
     } = string.Empty;
-    public LightType Type
+    public MeshCompilation.LightType? Type
     {
         get; set;
     }
@@ -524,7 +523,7 @@ public class PlacementConfig
                             ItemCount = pl.ItemCount,
                             ItemSpacing = pl.ItemSpacing,
                             FillAlign = (int)pl.FillAlign,
-                            FillDir = pl.UseFillDir ? 1 : 0,
+                            FillDir = pl.UseFillAlign ? 1 : 0,
                             NormedPos = pl.NormedPos,
                             OnlyOnGroups = pl.OnlyOnGroups?.ToArray() ?? Array.Empty<string>(),
                             Altitude = pl.Altitude
@@ -574,7 +573,7 @@ public class PlacementConfig
                         ItemCount = pl.ItemCount,
                         ItemSpacing = pl.ItemSpacing,
                         FillAlign = (FillAlign)pl.FillAlign,
-                        UseFillDir = pl.FillDir == 1 ? true : false,
+                        UseFillAlign = pl.FillDir == 1 ? true : false,
                         NormedPos = pl.NormedPos,
                         OnlyOnGroups = pl.OnlyOnGroups?.ToList() ?? new List<string>()
                     };
@@ -610,7 +609,7 @@ public class PlacementPatchLayout
     /// </summary>
     public float ItemSpacing { get; set; }
     public FillAlign FillAlign { get; set; } = FillAlign.Center;
-    public bool UseFillDir { get; set; } = true;
+    public bool UseFillAlign { get; set; } = true;
     /// <summary>
     /// Horizontal Position along patch width
     /// </summary>

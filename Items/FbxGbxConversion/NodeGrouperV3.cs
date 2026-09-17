@@ -165,6 +165,7 @@ internal class NodeGrouperV3
     {
         var f = node.NodeConfig.MeshFlags;
         bool isSingle = f.HasFlag(MeshFlags.SingleMesh);
+        //isSingle = true;
 
         if (f.HasFlag(MeshFlags.TriggerWaypoint))
         {

@@ -11,7 +11,8 @@ public enum RefKind { Mesh, Shape, Light }
 public enum LightType
 {
     Point,
-    Spot
+    Spot,
+    Area
 }
 
 
@@ -131,6 +132,7 @@ public sealed class BuildSettings
                     {
                         0 => LightType.Point,
                         1 => LightType.Spot,
+                        2 => LightType.Area,
                         _ => LightType.Point,
                     };
                     settings.Instances[l.Id] = new InstanceSettings { Kind = RefKind.Light, ClusterKey = clusterKey, LightTypeOverride = type };

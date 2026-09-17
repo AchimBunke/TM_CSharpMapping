@@ -1,7 +1,5 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Plug;
-using System.Drawing;
-using System.Text.Json.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
@@ -24,7 +22,7 @@ public class MeshConfig
     public MeshFlags MeshFlags { get; set; }
     public LegacyGameplayId? TriggerEffect { get; set; } = null;
     public EWaypointType? WaypointType { get; set; } = null;
-    public Vec3? GameplayMainDir{ get; set;  } = null;
+    public Vec3? GameplayMainDir { get; set; } = null;
     public string? MovingGroup { get; set; }
     public float? LightmapSize { get; set; } = null;
 

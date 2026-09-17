@@ -78,7 +78,7 @@ public sealed class LightXml
     public string Name { get; set; } = string.Empty;
 
     [XmlAttribute("Type")]
-    public LightType Type { get; set; }
+    public MeshCompilation.LightType Type { get; set; }
 
     [XmlAttribute("sRGB")]
     public string? ColorValue { get; set; }

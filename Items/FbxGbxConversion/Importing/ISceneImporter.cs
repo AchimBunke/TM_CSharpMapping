@@ -83,10 +83,5 @@ public class ImportedLight
 {
     public required string NodeName { get; set; }
     public ImportedLightType Type { get; set; }
-
-    /// <summary>Local light direction in the node's own space (matches Assimp's light Direction semantics).</summary>
-    public Vector3 Direction { get; set; }
-
-    /// <summary>Global transform of the node this light is attached to, in normalized (meters) space.</summary>
     public Matrix4x4 GlobalTransform { get; set; }
 }

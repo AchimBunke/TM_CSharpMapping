@@ -1,5 +1,6 @@
 using GBX.NET.Engines.Plug;
 using System.Numerics;
+using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
@@ -28,13 +29,13 @@ internal class FbxLightConverterV3
             if (!TryFindConfigForLight(light.NodeName, config, out var lightConfig))
                 return ToolResult.Fail(nameof(FbxLightConverterV3), ErrorCodes.FbxGbxConverter.MissingLightConfig, light.NodeName);
 
-            var (normalizedLight, position, rotation) = ConvertLight(light, lightConfig!, config.ItemConfig.Scale);
+            var (normalizedLight, position, rotation) = ConvertLight(light, lightConfig!);
             lights.Add(new LightDefV3 { Light = normalizedLight, LightConfig = lightConfig!, Position = position, Rotation = rotation });
         }
         return ToolResult.Success(lights, nameof(FbxLightConverterV3));
     }
 
-    static (NormalizedLightV3 Light, Vector3 Position, Quaternion Rotation) ConvertLight(ImportedLight light, LightConfig lightConfig, float scale)
+    static (NormalizedLightV3 Light, Vector3 Position, Quaternion Rotation) ConvertLight(ImportedLight light, LightConfig lightConfig)
     {
         var normalizedLight = new NormalizedLightV3();
         MeshCompilation.LightType lightType = light.Type switch
@@ -42,8 +43,11 @@ internal class FbxLightConverterV3
             ImportedLightType.Directional => MeshCompilation.LightType.Point,
             ImportedLightType.Point => MeshCompilation.LightType.Point,
             ImportedLightType.Spot => MeshCompilation.LightType.Spot,
+            ImportedLightType.Area => MeshCompilation.LightType.Area,
             _ => MeshCompilation.LightType.Point,
         };
+        if(lightConfig.Type.HasValue)
+            lightType = lightConfig.Type.Value;
         var lightUserModel = new CPlugLightUserModel
         {
             Intensity = lightConfig.Intensity,
@@ -65,17 +69,13 @@ internal class FbxLightConverterV3
         normalizedLight.Name = lightConfig.Name;
 
         Matrix4x4.Decompose(light.GlobalTransform, out _, out var nodeRotation, out var translation);
-        translation *= scale;
 
-        var localDirection = light.Direction;
-
-        var directionQ = FromTo(-Vector3.UnitZ, localDirection);
-
-        var rotation = nodeRotation * directionQ;
+        var rotation = nodeRotation;
         var position = translation;
 
         return (normalizedLight, position, rotation);
     }
+
 
     static bool TryFindConfigForLight(string lightName, FbxGbxConversionInput config, out LightConfig? lightConfig)
     {

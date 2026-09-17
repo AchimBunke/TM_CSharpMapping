@@ -1,9 +1,12 @@
 using GBX.NET.Engines.GameData;
+using Silk.NET.Maths;
 using System.Numerics;
+using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.Plug.CPlugCrystal;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
@@ -52,7 +55,7 @@ public class FbxGbxConverterV3
         ImportedScene scene;
         try
         {
-            var importer = CreateSceneImporter();
+            var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
             scene = importer.Import(conversionInput.Fbx);
         }
         catch (Exception e)
@@ -63,7 +66,7 @@ public class FbxGbxConverterV3
         return ConvertToNormalizedItem(scene, conversionInput);
     }
 
-    protected virtual ISceneImporter CreateSceneImporter() => new SilkAssimpSceneImporter();
+    protected virtual ISceneImporter CreateSceneImporter(float scale) => new SilkAssimpSceneImporter(scale);
 
     ToolResult<NormalizedItemV3> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config)
     {
@@ -204,15 +207,14 @@ public class FbxGbxConverterV3
         var modelKey = groupIndexToModelKey[firstStaticGroupIndex];
         var model = item.ModelPool[modelKey];
 
-        Matrix4x4.Invert(Matrix4x4.CreateFromQuaternion(anchorRot), out var invRot);
-
+        var anchorInverseRotation = Quaternion.Inverse(anchorRot);
         foreach (var lightDef in lights)
         {
             int lightKey = item.LightPool.Count == 0 ? 0 : item.LightPool.Keys.Max() + 1;
             item.LightPool[lightKey] = lightDef.Light;
 
-            var localPos = Vector3.Transform(lightDef.Position - anchorPos, invRot);
-            var localRot = Quaternion.Concatenate(lightDef.Rotation, Quaternion.Inverse(anchorRot));
+            var localPos = Vector3.Transform(lightDef.Position - anchorPos, anchorInverseRotation);
+            var localRot = lightDef.Rotation * anchorRot;   
 
             model.Lights.Add(new LightRef
             {

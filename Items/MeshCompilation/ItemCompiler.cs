@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.FbxGbxConversion;
 using TM_GenericMapping.Messaging;
 using TM_GenericMapping.Templating;
 using static GBX.NET.Engines.GameData.CGameItemModel;
@@ -529,7 +530,7 @@ public class ItemCompiler
             sockets.Add(new Socket()
             {
                 U01 = -1,
-                U02 = GbxItemUtils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
+                U02 = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
                 Name = light.Name
             });
 
@@ -1794,7 +1795,7 @@ public class ItemCompiler
             if(compileContext.PendingWaypoints.Count(pw=>pw.Value.SpawnPosition.HasValue) > 0)
             {
                 var pendingWaypoint = compileContext.PendingWaypoints.First(pw=>pw.Value.SpawnPosition.HasValue);
-                waypointSpawn = GbxItemUtils.IsoFromTransform(pendingWaypoint.Value.SpawnPosition.Value!, pendingWaypoint.Value.SpawnRotation.Value!);
+                waypointSpawn = Iso4Utils.IsoFromTransform(pendingWaypoint.Value.SpawnPosition.Value!, pendingWaypoint.Value.SpawnRotation.Value!);
             }
         }
         commonEntityModel.GetChunk<CGameCommonItemEntityModel.Chunk2E027000>().U03 = waypointSpawn;
@@ -1887,11 +1888,11 @@ public class ItemCompiler
             var sockets = GbxItemUtils.ParseSockets(skel);
             foreach(var s in sockets)
             {
-                s.U02.Deconstruct(out var rot, out var pos);
-                var pitchYawRoll = Quaternion.CreateFromPitchYawRoll(s.U02.GetPitchYawRoll());
-                var newPos = position + Vector3.Transform(pos, rotation);
-                var newRot = Quaternion.Normalize(rotation * pitchYawRoll);
-                s.U02 = GbxItemUtils.IsoFromTransform(newPos, newRot);
+                var currentRot = s.U02.GetRotationQuaternion();
+                var curPos = s.U02.GetPosition();
+                var newRot = currentRot * Quaternion.Inverse(rotation);
+                var newPos = position + Vector3.Transform(curPos, rotation);
+                s.U02 = Iso4Utils.IsoFromTransform(newPos, newRot);
             }
             staticObject.Mesh.Skel = GbxItemUtils.CreateSkel(sockets);
         }

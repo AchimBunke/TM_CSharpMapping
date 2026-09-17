@@ -25,7 +25,7 @@ The root object of the configuration file.
 | `MaterialConfiguration` | `MaterialConfig[]`     | `[]`             | Material definitions and their corresponding FBX/GBX material mappings. Required for each used material |
 | `MeshConfiguration`     | `MeshConfig[]`         | `[]`             | Configuration for individual nodes in the FBX.                          |
 | `Lights`                | `LightConfig[]`        | `[]`             | Light definitions to generate with the item.                            |
-| `LodParameters`         | `LodParameters?`       | `null`           | Optional LOD configuration.                                             |
+| `LodParameters`         | `LodParameters?`       | `null`           | Optional LOD configuration. Required if meshes define LODs.                                             |
 
 ---
 
@@ -91,8 +91,8 @@ Defines how multiple items are distributed within a placement patch.
 | -------------- | ------------------------- | ------- | -------------------------------------------------------------------------------------------- |
 | `ItemCount`    | `int`                     | `0`     | Number of items placed in the patch. `0` uses as many items as the available spacing allows. |
 | `ItemSpacing`  | `float`                   | `0`     | Space between consecutive items.                                                             |
-| `FillAlign`    | `int`                     | `0`     | Controls how the items are aligned within the available patch space.                         |
-| `FillDir`      | `int`                     | `1`     | Controls the direction in which the patch is filled.                                         |
+| `FillAlign`    | `FillAlign`               | `0`     | Controls how the items are aligned within the available patch space.                         |
+| `UseFillAlign` | `bool`                    | `true`  | If false Fill align is ignored and center is used.                                         |
 | `NormedPos`    | `float`                   | `0.5`   | Normalized horizontal position along the patch width. `0` is one side, `1` the other.        |
 | `OnlyOnGroups` | `PlacementPatchGroups[]?` | `[]`    | Restricts this layout to the specified patch groups.                                         |
 | `Altitude`     | `float`                   | `0`     | Vertical offset above the patch.                                                             |
@@ -129,7 +129,7 @@ Defines global LOD distance settings for the item.
 
 | Field             | Type      | Default | Description                                                   |
 | ----------------- | --------- | ------- | ------------------------------------------------------------- |
-| `MaxLodDistances` | `float[]` | `[]`    | Maximum distance value associated with each global LOD level. |
+| `MaxLodDistances` | `float[]` | `[]`    | Maximum distance value associated with each global LOD level. More than 3 entries might result in nodes splitting into multiple groups.|
 
 The values represent the configured LOD distance.
 
@@ -162,7 +162,7 @@ Defines conversion behavior for an individual mesh.
 | `MovingGroup`   | `string?`           | `null`  | Optional moving group identifier for meshes that belong to a moving object/group.            |
 | `Lods`          | `int[]`             | `[]`    | LOD indices pointing to the global MaxLodDistances.                             |
 | `GameplayMainDir`| `Vec3?`            | `null`  | Optional main direction vector for trigger purposes.                                 |
-| `LightmapSize`  | `int?`              | `null`  | Optional override size for the mesh. Multiple meshes merged together will use the max value of all lightmap sizes |
+| `LightmapSize`  | `int?`              | `null`  | Optional override size for the mesh. Multiple meshes merged together will use the max value of all lightmap sizes (also includes generated lightmap sizes) |
 
 ### `Lods`
 
@@ -195,7 +195,7 @@ Flags can be combined using their bitwise values.
 
 | Flag              | Value | Description                                                                      |
 | ----------------- | ----: | -------------------------------------------------------------------------------- |
-| `None`            |   `0` | No special behavior.                                                             |
+| `None`            |   `0` | No special behavior. Considered 'static' node.                                                            |
 | `NonCollidable`   |   `1` | Mesh does not participate in collision.                                          |
 | `Invisible`       |   `2` | Mesh is not rendered.                                                            |
 | `Moving`          |   `4` | Mesh is treated as part of a moving object.                                      |
@@ -259,7 +259,7 @@ Defines a light generated as part of the GBX item.
 | Field                 | Type        | Default | Description                            |
 | --------------------- | ----------- | ------- | -------------------------------------- |
 | `Name`                | `string`    | —       | Name identifying the node.            |
-| `Type`                | `LightType` | —       | Type of light. (Point=0, Spot=1)                         |
+| `Type`                | `LightType?` | —       | Type of light. (Point=0, Spot=1). *null* will use light type from fbx|                         
 | `Color`               | `Color`     | —       | Light color.                           |
 | `Intensity`           | `float`     | —       | Light intensity.                       |
 | `Distance`            | `float`     | —       | Maximum/functional light distance.     |
