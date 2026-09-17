@@ -11,7 +11,7 @@ using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items;
-
+/*
 public class MeshExtractor
 {
     NodeRefTable _nodeRefTable = new NodeRefTable();
@@ -866,3 +866,4 @@ public class MeshExtractor
     }
 
 }
+*/

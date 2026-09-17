@@ -20,7 +20,7 @@ using static GBX.NET.Engines.Plug.CPlugVertexStream;
 using static GBX.NET.Engines.Plug.NPlugTrigger_SWaypoint;
 
 namespace TM_GenericMapping.Items;
-
+/*
 public class MeshBuilder
 {
     public struct MeshBuilderSettings
@@ -1304,19 +1304,19 @@ public class MeshBuilder
         }
 
 
-        /*
-        if(ents.Count == 1 && ents[0].Model is CPlugPrefab singleNestedPrefab)
-        {
-            var position = ents[0].Position;
-            var rotation = ents[0].Rotation;
-            ents = singleNestedPrefab.Ents.ToList();
-            foreach(var nestedEnt in ents)
-            {
-                nestedEnt.Position = position;
-                nestedEnt.Rotation = rotation;
-            }
-        }
-        */
+        
+        //if(ents.Count == 1 && ents[0].Model is CPlugPrefab singleNestedPrefab)
+        //{
+        //    var position = ents[0].Position;
+        //    var rotation = ents[0].Rotation;
+        //    ents = singleNestedPrefab.Ents.ToList();
+        //    foreach(var nestedEnt in ents)
+        //    {
+        //        nestedEnt.Position = position;
+        //        nestedEnt.Rotation = rotation;
+        //    }
+        //}
+        
         var prefab = (item.EntityModel as CPlugPrefab)!;
         prefab.FileWriteTime = DateTime.Now;
         prefab.Ents = ents.ToArray();
@@ -1810,3 +1810,5 @@ public class MeshBuilder
     }
 
 }
+
+*/

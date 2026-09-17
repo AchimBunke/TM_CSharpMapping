@@ -2,7 +2,6 @@
 using GBX.NET.Engines.Plug;
 using System.Numerics;
 using static GBX.NET.Engines.GameData.CGameItemModel;
-using static TM_GenericMapping.Items.MeshBuilder;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
 
@@ -42,9 +41,7 @@ public sealed class InstanceSettings
 
 public sealed class ClusterSettings
 {
-    public bool Movable { get; set; }
-    public bool TriggerWaypoint { get; set; }
-    public bool TriggerSpecial { get; set; }
+    public ModelTypeV3 Type { get; set; }
 
     public float[] LODDistances { get; set; } = [];
     public EWaypointType? WaypointType { get; set; }
@@ -95,9 +92,7 @@ public sealed class BuildSettings
 
                 settings.Clusters[clusterKey] = new ClusterSettings
                 {
-                    Movable = model.Type == ModelTypeV3.Dynamic,
-                    TriggerWaypoint = model.Type == ModelTypeV3.Trigger_Waypoint,
-                    TriggerSpecial = model.Type == ModelTypeV3.Trigger_Special,
+                    Type = model.Type,
                     LODDistances = model.LODDistances,
                     WaypointType = model.WaypointType,
                     WaypointNoRespawn = model.WaypointNoRespawn,

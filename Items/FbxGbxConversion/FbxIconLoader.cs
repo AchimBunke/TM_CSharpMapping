@@ -2,6 +2,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using TM_GenericMapping.Items.MeshCompilation;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
@@ -33,7 +34,7 @@ internal class FbxIconLoader
 
         return colors;
     }
-    public static Stream ExtractIcon(NormalizedItem item)
+    public static Stream ExtractIcon(NormalizedItemV3 item)
     {
         if (item.Icon is null)
             return Stream.Null;

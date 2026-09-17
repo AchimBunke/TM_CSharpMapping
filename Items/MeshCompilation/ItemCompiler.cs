@@ -298,9 +298,9 @@ public class ItemCompiler
         out SMetaPtr? modelParams)
     {
         modelParams = null;
-        switch (cluster)
+        switch (cluster.Type)
         {
-            case { Movable: true }:
+            case ModelTypeV3.Dynamic:
                 {
                     modelParams = cluster.DynaObjectModelParams ?? new NPlugDynaObjectModel_SInstanceParams
                     {
@@ -315,9 +315,9 @@ public class ItemCompiler
                     };
                     return GetOrCreateDynaObjectModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
                 }
-            case { TriggerWaypoint: true }:
+            case ModelTypeV3.Trigger_Waypoint:
                 return GetOrCreateTriggerWaypoint(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
-            case { TriggerSpecial: true }:
+            case ModelTypeV3.Trigger_Special:
                 return GetOrCreateTriggerSpecial(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
             default:
                 return GetOrCreateStaticObjectModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
@@ -1178,7 +1178,7 @@ public class ItemCompiler
         var parts = instances.OrderBy(i => i.Id).Select(i =>
             $"{i.Id}:{i.Settings.Enabled}:{i.Settings.Visible}:{i.Settings.Collidable}:{i.Settings.LODMaskOverride}");
 
-        return $"cluster{identityPart}:{cluster.Movable}:{cluster.TriggerWaypoint}:{cluster.TriggerSpecial}:" +
+        return $"cluster{identityPart}:{cluster.Type}:" +
                $"{cluster.WaypointType}:{cluster.WaypointNoRespawn}:{cluster.TriggerGameplayId}:{string.Join(",", cluster.LODDistances)}:[{string.Join(";", parts)}]";
     }
 
@@ -1411,7 +1411,7 @@ public class ItemCompiler
 
             CPlugCrystal.Layer layer = null!;
             int layerIndex = context.Layers.Count;
-            if (cluster.TriggerSpecial || cluster.TriggerWaypoint)
+            if (cluster.Type == ModelTypeV3.Trigger_Special || cluster.Type == ModelTypeV3.Trigger_Waypoint)
             {
                 CPlugCrystal.TriggerLayer triggerLayer = BuildTriggerLayer(item, instance, material, parentPosition, parentRotation);
                 triggerLayer.Crystal!.U02 = layerIndex;
@@ -1466,7 +1466,7 @@ public class ItemCompiler
             context.Layers.Add(layer);
         }
 
-        if (cluster.TriggerWaypoint &&
+        if (cluster.Type == ModelTypeV3.Trigger_Waypoint &&
               (cluster.WaypointType == EWaypointType.Checkpoint || cluster.WaypointType == EWaypointType.Start || cluster.WaypointType == EWaypointType.StartFinish))
         {
             var layerCount = context.Layers.Count;
@@ -1716,11 +1716,11 @@ public class ItemCompiler
 
             var cluster = buildSettings.Clusters[instance.Value.ClusterKey];
 
-            if (cluster.Movable)
+            if (cluster.Type == ModelTypeV3.Dynamic)
                 return false;
-            else if (cluster.TriggerSpecial)
+            else if (cluster.Type == ModelTypeV3.Trigger_Special)
                 return false;
-            else if (cluster.TriggerWaypoint)
+            else if (cluster.Type == ModelTypeV3.Trigger_Waypoint)
                 triggerClusterCount++;
             else
                 staticClusterCount++;
@@ -1830,7 +1830,7 @@ public class ItemCompiler
     {
         foreach(var cluster in buildSettings.Clusters)
         {
-            if (cluster.Value.TriggerWaypoint)
+            if (cluster.Value.Type == ModelTypeV3.Trigger_Waypoint)
                 continue;
             foreach(var instance in buildSettings.Instances.Where(i=>i.Value.ClusterKey == cluster.Key))
             {
