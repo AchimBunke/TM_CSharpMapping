@@ -28,29 +28,77 @@ public static class GbxItemUtils
         return spawnModel;
     }
 
-
-
-    public static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices)
+    static long PosKey(Vec3 p, float eps = 1e-4f)
+    {
+        int x = (int)MathF.Round(p.X / eps);
+        int y = (int)MathF.Round(p.Y / eps);
+        int z = (int)MathF.Round(p.Z / eps);
+        // pack into one long to avoid tuple hashing overhead if perf matters
+        return ((long)(x & 0x1FFFFF) << 42) | ((long)(y & 0x1FFFFF) << 21) | (long)(z & 0x1FFFFF);
+    }
+    public static Vec3[] ComputeFlatNormals(Vec3[] positions, int[] indices)
     {
         var normals = new Vec3[positions.Length];
+
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            int i0 = indices[i];
+            int i1 = indices[i + 1];
+            int i2 = indices[i + 2];
+
+            var a = positions[i0];
+            var b = positions[i1];
+            var c = positions[i2];
+
+            var faceNormal = Vec3.GetCrossProduct(b - a, c - a);
+            faceNormal = faceNormal != Vec3.Zero ? faceNormal.GetNormalized() : Vec3.Zero;
+
+            // No accumulation — every vertex of this triangle gets the same normal.
+            normals[i0] = faceNormal;
+            normals[i1] = faceNormal;
+            normals[i2] = faceNormal;
+        }
+
+        return normals;
+    }
+    public static Vec3[] ComputeSmoothNormals(Vec3[] positions, int[] indices, float mergeEps = 1e-4f)
+    {
+        var normals = new Vec3[positions.Length];
+
+        var posToBucket = new Dictionary<long, int>();
+        var buckets = new List<Vec3>();
+        var vertToBucket = new int[positions.Length];
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            long key = PosKey(positions[i], mergeEps);
+            if (!posToBucket.TryGetValue(key, out int b))
+            {
+                b = buckets.Count;
+                buckets.Add(Vec3.Zero);
+                posToBucket[key] = b;
+            }
+            vertToBucket[i] = b;
+        }
 
         for (int i = 0; i < indices.Length; i += 3)
         {
             var a = positions[indices[i]];
             var b = positions[indices[i + 1]];
             var c = positions[indices[i + 2]];
-
-            // weighted by triangle area (cross product magnitude = 2x area)
             var faceNormal = Vec3.GetCrossProduct(b - a, c - a);
 
-            normals[indices[i]] += faceNormal;
-            normals[indices[i + 1]] += faceNormal;
-            normals[indices[i + 2]] += faceNormal;
+            buckets[vertToBucket[indices[i]]] += faceNormal;
+            buckets[vertToBucket[indices[i + 1]]] += faceNormal;
+            buckets[vertToBucket[indices[i + 2]]] += faceNormal;
         }
 
-        for (int i = 0; i < normals.Length; i++)
-            if (normals[i] != Vec3.Zero)
-                normals[i] = normals[i].GetNormalized();
+        for (int i = 0; i < buckets.Count; i++)
+            if (buckets[i] != Vec3.Zero)
+                buckets[i] = buckets[i].GetNormalized();
+
+        for (int i = 0; i < positions.Length; i++)
+            normals[i] = buckets[vertToBucket[i]];
 
         return normals;
     }

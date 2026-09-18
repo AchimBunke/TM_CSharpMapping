@@ -929,8 +929,10 @@ public class ItemCompiler
     };
     void MergeIntoCollisionGeometry(IEnumerable<object> geometrySources, bool trigger, out List<Vec3> positions, out List<CPlugSurface.Mesh.Triangle> triangles)
     {
-        positions = new List<Vec3>();
+        //positions = new List<Vec3>();
         triangles = new List<CPlugSurface.Mesh.Triangle>();
+
+        Dictionary<Vec3, int> positionMap = new Dictionary<Vec3, int>();
 
         foreach (var geometrySource in geometrySources)
         {
@@ -955,8 +957,17 @@ public class ItemCompiler
                 throw new InvalidOperationException($"Unexpected geometry source type: {geometrySource.GetType().Name}");
             }
 
-            int vertOffset = positions.Count;
-            positions.AddRange(sourcePositions);
+            Dictionary<int, int> localPositionToGlobalPosition = new Dictionary<int, int>();
+            for(int i = 0; i < sourcePositions.Length; i++)
+            {
+                var p = sourcePositions[i];
+                if(!positionMap.TryGetValue(p, out var globalIndex))
+                {
+                    globalIndex = positionMap.Count;
+                    positionMap[p] = globalIndex;
+                }
+                localPositionToGlobalPosition[i] = globalIndex;
+            }
 
             for (int i = 0; i < sourceIndices.Length; i += 3)
             {
@@ -970,15 +981,16 @@ public class ItemCompiler
                 triangles.Add(new CPlugSurface.Mesh.Triangle
                 {
                     Indices = new Int3(
-                        vertOffset + sourceIndices[i],
-                        vertOffset + sourceIndices[i + 1],
-                        vertOffset + sourceIndices[i + 2]),
+                        localPositionToGlobalPosition[sourceIndices[i]],
+                        localPositionToGlobalPosition[sourceIndices[i + 1]],
+                        localPositionToGlobalPosition[sourceIndices[i + 2]]),
                     SurfaceIndex = 0,
                     U02 = trigger ? (byte)0 : (byte)materialId,
                     U03 = 0
                 });
             }
         }
+        positions = positionMap.Keys.ToList();
     }
     private ShapeRoleV3 ResolveDestination(NormalizedItemV3 item, (Guid Id, InstanceSettings Instance) i, ShapeRoleV3 meshRole)
     {

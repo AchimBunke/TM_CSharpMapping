@@ -62,7 +62,7 @@ public class MovingItemCreator
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, parseResult);
 
 
-        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(BuildSettings.DefaultFromItem(parseResult.Value));
+        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(parseResult.Value, BuildSettings.DefaultFromItem(parseResult.Value));
         var movingItemResult = _itemCompiler.Compile(parseResult.Value, buildSettings, _compileOptions);
 
         if(movingItemResult.IsFailure)
@@ -80,7 +80,7 @@ public class MovingItemCreator
         return ToolResult.Success(movingItem, nameof(MovingItemCreator));
 
     }
-    BuildSettings CreateDefaultBuildOptions(BuildSettings defaultOptions)
+    BuildSettings CreateDefaultBuildOptions(NormalizedItemV3 normItem, BuildSettings defaultOptions)
     {
         if (defaultOptions.Clusters.Any(c => c.Value.Type == ModelTypeV3.Dynamic))
             return defaultOptions;
@@ -92,9 +92,65 @@ public class MovingItemCreator
             group.Value.Type = ModelTypeV3.Dynamic;
 
             defaultOptions.Clusters[group.Key] = group.Value;
+
+            var groupInstances = defaultOptions.Instances.Where(i => i.Value.ClusterKey == group.Key).ToArray();
+            bool meshCollidable = groupInstances.Any(i => i.Value.Collidable && i.Value.Kind == RefKind.Mesh);
+            bool hasDynaShape = groupInstances.Any(i =>i.Value.ShapeRoleOverride.HasValue && i.Value.ShapeRoleOverride.Value == ShapeRoleV3.Dynamic);
+            foreach (var instance in groupInstances)
+            {
+                if(instance.Value.ShapeRoleOverride.HasValue && 
+                    instance.Value.ShapeRoleOverride == ShapeRoleV3.Static &&
+                    !hasDynaShape &&
+                    !meshCollidable)
+                {
+                    var dynaInstance = new InstanceSettings()
+                    {
+                        ClusterKey = instance.Value.ClusterKey,
+                        Enabled = instance.Value.Enabled,
+                        Visible = instance.Value.Visible,
+                        SmoothingGroupOverride = instance.Value.SmoothingGroupOverride,
+                        LightmapSizeOverride = instance.Value.LightmapSizeOverride,
+                        Collidable = instance.Value.Collidable,
+                        Kind = instance.Value.Kind,
+                        LightTypeOverride = instance.Value.LightTypeOverride,
+                        LODMaskOverride = instance.Value.LODMaskOverride,
+                        ShapeRoleOverride = ShapeRoleV3.Dynamic,
+                    };
+                    var entRef = defaultOptions.EntityClusterAssignments.FirstOrDefault(ec => ec.Value == group.Key);
+                    var model = FindModel(normItem, entRef.Key);
+                    var shapeKey = model.Shapes.First(s => s.Id == instance.Key).ShapeKey;
+
+                    var dynaShapeRef = new ShapeRef()
+                    {
+                        Id = Guid.NewGuid(),
+                        Role = ShapeRoleV3.Dynamic,
+                        ShapeKey = shapeKey,
+                    };
+                    model.Shapes.Add(dynaShapeRef);
+                    defaultOptions.Instances.Add(dynaShapeRef.Id, dynaInstance);
+                }
+            }
+
         }
 
         return defaultOptions;
+    }
+    NormalizedModelV3? FindModel(NormalizedItemV3 item, Guid entRefId)
+    {
+        NormalizedModelV3? SearchModel(NormalizedModelV3 model, Guid entRefId)
+        {
+            var found = model.Children.FirstOrDefault(c => c.Id == entRefId, null);
+            if (found != null)
+                return item.ModelPool[found.ModelKey];
+            foreach(var child in model.Children)
+            {
+                var result = SearchModel(item.ModelPool[child.ModelKey], entRefId);
+                if (result != null)
+                    return result;
+            }
+            return null;
+        }
+        return SearchModel(item.Model, entRefId);
     }
     void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel? template)
     {

@@ -77,12 +77,14 @@ public enum ModelTypeV3
     Trigger_Waypoint,
     Variant_List,
 }
+
 public enum ShapeRoleV3
 {
     Static,
     Dynamic,
     Trigger_Special,
     Trigger_Waypoint,
+
 }
 
 

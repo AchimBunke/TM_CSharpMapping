@@ -2,6 +2,7 @@
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Plug;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Templating;
 
 namespace TM_GenericMapping.Items;
@@ -49,10 +50,11 @@ public class ItemTriggerEffectConverter
             ConvertCommonItemEntityModelToCPlugPrefab(item);
         if(item.EntityModel is not CPlugPrefab prefab)
             return false;
-        foreach (var entRef in prefab.Ents)
+        var triggers = ItemExtensions.Traverse<NPlugTrigger_SSpecial>(prefab).ToList();
+        if (triggers.Count == 0)
+            return false;
+        foreach (var triggerSpecial in triggers)
         {
-            if (entRef.Model is not NPlugTrigger_SSpecial triggerSpecial)
-                continue;
             ConvertEffect(gameplay, triggerSpecial);
         }
         return true;

@@ -17,6 +17,12 @@ public static class ItemExtensions
         nPlugDyna_SKinematicConstraints = Traverse<NPlugDyna_SKinematicConstraint>(itemModel.EntityModel).ToList();
         return nPlugDyna_SKinematicConstraints.Count > 0;
     }
+    public static bool TryGetAllNPlugTrigger_SSpecial(CGameItemModel itemModel, out List<NPlugTrigger_SSpecial> nPlugTrigger_SSpecials)
+    {
+        nPlugTrigger_SSpecials = Traverse<NPlugTrigger_SSpecial>(itemModel.EntityModel).ToList();
+        return nPlugTrigger_SSpecials.Count > 0;
+    }
+
 
     public static bool TryGetNPlugDyna_SKinematicConstraint(CGameItemModel itemModel,
         out NPlugDyna_SKinematicConstraint nPlugDyna_SKinematicConstraint)

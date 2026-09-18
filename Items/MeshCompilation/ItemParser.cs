@@ -99,14 +99,16 @@ public class ItemParser
         public Dictionary<(Vec3, Vec2, Vec2), int> WeldMap = new();
         public int SmoothingGroup;
     }
+    
     void ParseCPlugCrystal(CPlugCrystal crystal, NormalizedItemV3 normalizedItem)
     {
         const int Mesh = 0;
         const int Trigger = 1;
-        const int Unknown = -1;
+        const int Collision = 2;
 
         List<MeshRef> meshes = new List<MeshRef>();
         List<ShapeRef> triggers = new List<ShapeRef>();
+        List<ShapeRef> collisionShapes = new List<ShapeRef>();
 
         CPlugSpawnModel? spawnModel = null;
         List<int> smoothingGroups = crystal.GetChunk<CPlugCrystal.Chunk09003007>()?.U01?.ToList() ?? new List<int>();
@@ -116,12 +118,8 @@ public class ItemParser
 
         foreach (var layer in crystal.Layers)
         {
-            // Two-pass: group split vertices by material first, then concatenate
-            // so each material produces a contiguous index range (NormalizedMesh)
-
-            // per-material buckets of indices (into the shared vertex buffer)
-
-            var buckets = new Dictionary<CPlugMaterialUserInst, MaterialBucket>();
+            // per-material (+ per-smoothing-group, for visible geo) buckets, scoped to this layer
+            var buckets = new Dictionary<(CPlugMaterialUserInst mat, int smoothingGroup), MaterialBucket>();
 
             MeshPropertiesV3 properties = MeshPropertiesV3.None;
 
@@ -136,24 +134,33 @@ public class ItemParser
                             properties |= MeshPropertiesV3.Visible;
                         if (geo.Collidable)
                             properties |= MeshPropertiesV3.Collidable;
-                        foreach (var face in geo.Crystal.Faces)
+
+                        for (int faceIdx = 0; faceIdx < geo.Crystal.Faces.Length; faceIdx++)
                         {
+                            var face = geo.Crystal.Faces[faceIdx];
                             var mat = face.Material!.MaterialUserInst!;
-                            if (!buckets.TryGetValue(mat, out var bucket))
+
+                            // per-face smoothing group — advances with faceIdx, not shared across the whole layer
+                            int faceSmoothingGroup = geo.IsVisible
+                                ? smoothingGroups[firstSmoothingGroupIdx + faceIdx]
+                                : -1; // invisible/collision geo doesn't need shading groups
+
+                            var bucketKey = (mat, faceSmoothingGroup);
+                            if (!buckets.TryGetValue(bucketKey, out var bucket))
                             {
                                 bucket = new MaterialBucket()
                                 {
                                     Positions = new List<Vec3>(),
-                                    Normals = new List<Vec3>(),
-                                    TexCoords = new List<Vec2>(),
-                                    LightmapCoords = new List<Vec2>(),
+                                    Normals = geo.IsVisible ? new List<Vec3>() : null,
+                                    TexCoords = geo.IsVisible ? new List<Vec2>() : null,
+                                    LightmapCoords = geo.IsVisible ? new List<Vec2>() : null,
                                     Indices = new List<int>(),
-                                    Type = Mesh,
-                                    Collidable = mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable,
+                                    Type = geo.IsVisible ? Mesh : Collision,
+                                    Collidable = geo.Collidable && mat.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable,
                                     WeldMap = new Dictionary<(Vec3, Vec2, Vec2), int>(),
-                                    SmoothingGroup = geo.IsVisible ? smoothingGroups[firstSmoothingGroupIdx] : 0
+                                    SmoothingGroup = faceSmoothingGroup
                                 };
-                                buckets[mat] = bucket;
+                                buckets[bucketKey] = bucket;
                             }
 
                             // fan triangulation — fully split vertices (per corner)
@@ -163,22 +170,28 @@ public class ItemParser
 
                                 foreach (var corner in corners)
                                 {
-                                    var key = (sourcePositions[corner.Index], corner.TexCoord, corner.LightmapCoord);
+                                    var texCoord = geo.IsVisible ? corner.TexCoord : default;
+                                    var lmCoord = geo.IsVisible ? corner.LightmapCoord : default;
+                                    var key = (sourcePositions[corner.Index], texCoord, lmCoord);
+
                                     if (!bucket.WeldMap.TryGetValue(key, out int dst))
                                     {
                                         dst = bucket.Positions.Count;
                                         bucket.WeldMap[key] = dst;
                                         bucket.Positions.Add(sourcePositions[corner.Index]);
-                                        bucket.TexCoords.Add(corner.TexCoord);
-                                        bucket.LightmapCoords.Add(corner.LightmapCoord);
-                                        bucket.Normals.Add(Vec3.Zero);
-                                        bucket.SmoothingGroup = geo.IsVisible ? smoothingGroups[firstSmoothingGroupIdx] : 0;
+                                        if (geo.IsVisible)
+                                        {
+                                            bucket.TexCoords.Add(texCoord);
+                                            bucket.LightmapCoords.Add(lmCoord);
+                                            bucket.Normals.Add(Vec3.Zero);
+                                        }
                                     }
                                     bucket.Indices.Add(dst);
                                 }
                             }
                         }
-                        if(geo.IsVisible)
+
+                        if (geo.IsVisible)
                             firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
                     }
                     break;
@@ -190,7 +203,8 @@ public class ItemParser
                         foreach (var face in trigger.Crystal.Faces)
                         {
                             var mat = face.Material!.MaterialUserInst!;
-                            if (!buckets.TryGetValue(mat, out var bucket))
+                            var bucketKey = (mat, -1); // no smoothing groups for triggers
+                            if (!buckets.TryGetValue(bucketKey, out var bucket))
                             {
                                 bucket = new MaterialBucket()
                                 {
@@ -204,18 +218,12 @@ public class ItemParser
                                     WeldMap = new Dictionary<(Vec3, Vec2, Vec2), int>(),
                                     SmoothingGroup = -1
                                 };
-                                buckets[mat] = bucket;
+                                buckets[bucketKey] = bucket;
                             }
 
-                            // fan triangulation — fully split vertices (per corner)
                             for (int i = 1; i < face.Vertices.Length - 1; i++)
                             {
-                                var corners = new[]
-                                {
-                                    face.Vertices[0],
-                                    face.Vertices[i],
-                                    face.Vertices[i + 1]
-                                };
+                                var corners = new[] { face.Vertices[0], face.Vertices[i], face.Vertices[i + 1] };
 
                                 foreach (var corner in corners)
                                 {
@@ -242,8 +250,7 @@ public class ItemParser
                         spawnModel = GbxItemUtils.CreateSpawnModel();
                         waypointSpawnPos = spawn.SpawnPosition;
                         waypointSpawnRot = Quaternion.CreateFromYawPitchRoll(spawn.HorizontalAngle * MathUtils.Deg2Rad, spawn.VerticalAngle * MathUtils.Deg2Rad, spawn.RollAngle * MathUtils.Deg2Rad);
-                        
-                        //unused
+
                         var position = spawn.SpawnPosition.ToVector3();
                         spawnModel.Loc = Iso4Utils.IsoFromPitchYawRoll(position, spawn.VerticalAngle, spawn.HorizontalAngle, spawn.RollAngle);
                     }
@@ -253,26 +260,48 @@ public class ItemParser
             }
 
             // concatenate buckets into final index buffer, recording submesh ranges
-            var indices = new List<int>();
-
-            foreach (var (mat, bucket) in buckets)
+            foreach (var (bucketKey, bucket) in buckets)
             {
+                var mat = bucketKey.mat;
                 var posArr = bucket.Positions.ToArray();
                 var idxArr = bucket.Indices.ToArray();
-                var nrmArr = GbxItemUtils.ComputeSmoothNormals(posArr, idxArr);
+                var texArr = bucket.TexCoords?.ToArray() ?? [];
+                var lmArr = bucket.LightmapCoords?.ToArray() ?? [];
 
                 var normalizedModel = new NormalizedModelV3();
-                if(bucket.Type == Mesh)
+                if (bucket.Type == Mesh)
                 {
+
+                    var nrmArr = GbxItemUtils.ComputeFlatNormals(posArr, idxArr);
+                  
+                    Vector3[] tangents = [];
+                    Vector3[] bitangents = [];
+                    if (bucket.TexCoords.Count > 0)
+                    {
+                        CalculateTangents(
+                            posArr.Select(v => v.AsVector3()).ToArray(), 
+                            nrmArr.Select(v => v.AsVector3()).ToArray(),
+                            idxArr,
+                            texArr.Select(v => v.AsVector2()).ToArray(),
+                            out tangents, 
+                            out bitangents);
+                        tangents = tangents.Select(v=>QuantizeVec3_10b(v)).Select(v=>v.ToVector3()).ToArray();
+                        bitangents = bitangents.Select(v=>QuantizeVec3_10b(v)).Select(v=>v.ToVector3()).ToArray();
+                    }
+                    nrmArr = nrmArr.Select(QuantizeVec3_10b).ToArray();
+
+
                     normalizedModel.Type = ModelTypeV3.Static;
 
                     var mesh = new NormalizedMeshV3()
                     {
                         Positions = posArr,
                         Normals = nrmArr,
-                        TexCoords = bucket.TexCoords.Count > 0 ? bucket.TexCoords.ToArray() : null,
-                        LightmapCoords = bucket.LightmapCoords.Count > 0 ? bucket.LightmapCoords.ToArray() : null,
-                        Colors = null, // crystal has no vertex colors
+                        TexCoords = texArr.Length> 0 ? texArr.ToArray() : null,
+                        LightmapCoords = lmArr.Length > 0 ? lmArr.ToArray() : null,
+                        TangentUs = tangents.Length > 0 ? tangents.Select(v => v.ToVec3()).ToArray() : null,
+                        TangentVs = bitangents.Length > 0 ? bitangents.Select(v => v.ToVec3()).ToArray() : null,
+                        Colors = null,
                         Indices = idxArr,
                         Material = mat,
                         Name = GbxItemUtils.MaterialToName(mat),
@@ -288,7 +317,7 @@ public class ItemParser
                     };
                     meshes.Add(meshRef);
                 }
-                else if( bucket.Type == Trigger)
+                else if (bucket.Type == Trigger)
                 {
                     var shape = new NormalizedShapeV3()
                     {
@@ -298,12 +327,27 @@ public class ItemParser
                     };
                     int key = normalizedItem.ShapePool.Count;
                     normalizedItem.ShapePool.Add(key, shape);
-                    var shapeRef = new ShapeRef() 
+                    triggers.Add(new ShapeRef()
                     {
                         ShapeKey = key,
-                        Role = ShapeRoleV3.Trigger_Waypoint, 
+                        Role = ShapeRoleV3.Trigger_Waypoint,
+                    });
+                }
+                else if (bucket.Type == Collision)
+                {
+                    var shape = new NormalizedShapeV3()
+                    {
+                        Positions = posArr,
+                        Indices = idxArr,
+                        SurfaceMaterialIds = Enumerable.Repeat(mat.SurfacePhysicId, idxArr.Length / 3).ToArray()
                     };
-                    triggers.Add(shapeRef);
+                    int key = normalizedItem.ShapePool.Count;
+                    normalizedItem.ShapePool.Add(key, shape);
+                    collisionShapes.Add(new ShapeRef()
+                    {
+                        ShapeKey = key,
+                        Role = ShapeRoleV3.Static,
+                    });
                 }
             }
         }
@@ -313,23 +357,19 @@ public class ItemParser
             Type = ModelTypeV3.Container,
         };
         normalizedItem.ModelPool.Add(normalizedItem.ModelPool.Count, root);
-        if (meshes.Count > 0)
+        if (meshes.Count > 0 || collisionShapes.Count > 0)
         {
             var model = new NormalizedModelV3()
             {
                 Type = ModelTypeV3.Static,
                 Meshes = meshes,
+                Shapes = collisionShapes,
             };
             var key = normalizedItem.ModelPool.Count;
             normalizedItem.ModelPool.Add(key, model);
-
-            var modelRef = new EntityRef()
-            {
-                ModelKey = key,
-            };
-            root.Children.Add(modelRef);
+            root.Children.Add(new EntityRef() { ModelKey = key });
         }
-        if(triggers.Count > 0)
+        if (triggers.Count > 0)
         {
             var model = new NormalizedModelV3()
             {
@@ -340,17 +380,113 @@ public class ItemParser
             };
             var key = normalizedItem.ModelPool.Count;
             normalizedItem.ModelPool.Add(key, model);
-
-            var modelRef = new EntityRef()
+            root.Children.Add(new EntityRef()
             {
                 ModelKey = key,
                 WaypointSpawnPosition = waypointSpawnPos,
                 WaypointSpawnRotation = waypointSpawnRot,
-            };
-            root.Children.Add(modelRef);
+            });
         }
         
+
         normalizedItem.Model = root;
+    }
+
+    public Vec3 QuantizeVec3_10b(Vec3 value)
+    {
+        float x = Math.Clamp(value.X, -1f, 1f);
+        float y = Math.Clamp(value.Y, -1f, 1f);
+        float z = Math.Clamp(value.Z, -1f, 1f);
+
+        x = MathF.Round(x * 511f) / 511f;
+        y = MathF.Round(y * 511f) / 511f;
+        z = MathF.Round(z * 511f) / 511f;
+
+        return new Vec3(x, y, z);
+    }
+    public static void CalculateTangents(
+        Vector3[] positions,
+        Vector3[] normals,
+        int[] indices,
+        Vector2[] texCoords,
+        out Vector3[] tangents,
+        out Vector3[] bitangents)
+    {
+        int vertexCount = positions.Length;
+
+        tangents = new Vector3[vertexCount];
+        bitangents = new Vector3[vertexCount];
+
+        for (int i = 0; i < indices.Length; i += 3)
+        {
+            int i0 = indices[i + 0];
+            int i1 = indices[i + 1];
+            int i2 = indices[i + 2];
+
+            Vector3 p0 = positions[i0];
+            Vector3 p1 = positions[i1];
+            Vector3 p2 = positions[i2];
+
+            Vector2 uv0 = texCoords[i0];
+            Vector2 uv1 = texCoords[i1];
+            Vector2 uv2 = texCoords[i2];
+
+            Vector3 edge1 = p1 - p0;
+            Vector3 edge2 = p2 - p0;
+
+            float du1 = uv1.X - uv0.X;
+            float dv1 = uv1.Y - uv0.Y;
+            float du2 = uv2.X - uv0.X;
+            float dv2 = uv2.Y - uv0.Y;
+
+            float det = du1 * dv2 - du2 * dv1;
+
+            // Degenerate UV triangle
+            if (MathF.Abs(det) < 1e-8f)
+                continue;
+
+            float invDet = 1.0f / det;
+
+            Vector3 tangent =
+                (edge1 * dv2 - edge2 * dv1) * invDet;
+
+            Vector3 bitangent =
+                (edge2 * du1 - edge1 * du2) * invDet;
+
+            tangents[i0] += tangent;
+            tangents[i1] += tangent;
+            tangents[i2] += tangent;
+
+            bitangents[i0] += bitangent;
+            bitangents[i1] += bitangent;
+            bitangents[i2] += bitangent;
+        }
+
+        // Orthogonalize and normalize per vertex.
+        for (int i = 0; i < vertexCount; i++)
+        {
+            Vector3 n = normals[i].Normalized();
+
+            // Gram-Schmidt: T must be perpendicular to N.
+            Vector3 t = tangents[i];
+            t = t - n * Vector3.Dot(n, t);
+
+            if (t.LengthSquared() > 1e-8f)
+                t = Vector3.Normalize(t);
+            else
+                t = Vector3.Zero;
+
+            tangents[i] = t;
+
+            // Reconstruct B from N × T.
+            Vector3 b = Vector3.Cross(n, t);
+
+            // Preserve the UV handedness.
+            if (Vector3.Dot(b, bitangents[i]) < 0.0f)
+                b = -b;
+
+            bitangents[i] = b;
+        }
     }
 
     ToolResult<None> ParsePrefabEntityModel(CPlugPrefab prefab, EntityRefBase? entityRef, NormalizedItemV3 normalizedItem) 
