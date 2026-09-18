@@ -71,7 +71,7 @@ public class ItemParser
         }
         else
         {
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.UnsupportedMesh);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.UnsupportedMesh);
         }
 
         return ToolResult.Success(normalizedItem, nameof(ItemParser));
@@ -586,20 +586,20 @@ public class ItemParser
     {
         var constraintParams = (entRef.Params as NPlugDyna_SPrefabConstraintParams)!;
         if (constraintParams.Ent2 >= parseContext.processedDynaObjectModels.Count)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingDynamicConstraintTarget);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingDynamicConstraintTarget);
         
         if(!parseContext.dynaIndexToEntityRef.TryGetValue(constraintParams.Ent2, out var targetEntityRef))
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingDynamicConstraintTarget);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingDynamicConstraintTarget);
 
         targetEntityRef.KinematicConstraint = kinematicConstraint;
 
         if (constraintParams.Ent1 >= 0)
         {
             if (constraintParams.Ent1 >= parseContext.processedDynaObjectModels.Count)
-                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingDynamicConstraintParent);
+                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingDynamicConstraintParent);
 
             if(!parseContext.dynaIndexToEntityRef.TryGetValue(constraintParams.Ent1, out var parentEntityRef))
-                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingDynamicConstraintParent);
+                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingDynamicConstraintParent);
             targetEntityRef.RelativeMovingParentKey = parentEntityRef.ModelKey;
         }
 
@@ -631,7 +631,7 @@ public class ItemParser
 
         // mesh
         if(staticObjectModel.Mesh is null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingMesh);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingMesh);
 
         ParseSolid2Model(staticObjectModel.Mesh, model, normalizedItem, staticObjectModel.IsMeshCollidable);
 
@@ -685,7 +685,7 @@ public class ItemParser
 
         // mesh
         if (dynamicObjectModel.Mesh is null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingMesh);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingMesh);
 
         ParseSolid2Model(dynamicObjectModel.Mesh, model, normalizedItem, meshIsCollisionSource: false);
 
@@ -728,7 +728,7 @@ public class ItemParser
 
         var triggerShape = triggerSpecial.GetTriggerShape();
         if (triggerShape == null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingTriggerShape);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingTriggerShape);
 
         key = normalizedItem.ModelPool.Count.ToString();
         parseContext.nodeRefTable.Register(key, triggerSpecial);
@@ -776,7 +776,7 @@ public class ItemParser
 
         var triggerShape = triggerWaypoint.GetTriggerShape();
         if (triggerShape == null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingTriggerShape);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingTriggerShape);
 
         key = normalizedItem.ModelPool.Count.ToString();
 
@@ -885,7 +885,7 @@ public class ItemParser
             }
         }
     }
-    void ParseIndexedTriangles(
+    ToolResult<None> ParseIndexedTriangles(
         CPlugVisualIndexedTriangles visual,
         CPlugMaterialUserInst material, 
         MeshRef meshRef,
@@ -901,9 +901,8 @@ public class ItemParser
         {
             meshRef.MeshKey = key.GetHashCode();
         }
-        else
+        else if(visual.VertexStreams.Count == 1) 
         {
-
             var stream = visual.VertexStreams[0];
 
             var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
@@ -958,8 +957,30 @@ public class ItemParser
             normalizedItem.MeshPool.Add(key.GetHashCode(), normalizedMesh);
             meshRef.MeshKey = key.GetHashCode();
         }
+        else if (visual.Vertices.Length > 0)
+        {
+            var emptyMesh = new NormalizedMeshV3()
+            {
+                Positions = visual.Vertices.Select(v => v.Position).ToArray(),
+                Normals = visual.Vertices.Select(v => v.Normal ?? new Vec3(0, 1, 0)).ToArray(),
+                Name = GbxItemUtils.MaterialToName(material),
+                Material = material,
+                TangentUs = visual.Tangents?.ToArray(),
+                TangentVs = visual.BiTangents?.ToArray(),
+                // missing texcoords, lightmapcoords, colors, tangents, bitangents. This is a fallback for meshes that don't have a vertex stream but have vertices.
+            };
+            key = normalizedItem.MeshPool.Count.ToString();
+            parseContext.nodeRefTable.Register(key, visual);
+            normalizedItem.MeshPool.Add(key.GetHashCode(), emptyMesh);
+            meshRef.MeshKey = key.GetHashCode();
+        }
+        else
+        {
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingMesh);
+        }
         var mesh = normalizedItem.MeshPool[meshRef.MeshKey];
         meshRef.PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh);
+        return ToolResult.Success(nameof(ItemParser));
     }
 
     void ParseLightModel(CPlugLightUserModel lightModel, Socket socket, LightRef lightRef, NormalizedItemV3 normalizedItem)
@@ -1000,7 +1021,7 @@ public class ItemParser
                 ParseSurfaceMesh(mesh, shape, normalizedItem);
                 break;
             default:
-                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.UnsupportedSurfaceType);
+                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.UnsupportedSurfaceType);
         }
 
 
@@ -1036,7 +1057,7 @@ public class ItemParser
         var containerkey = normalizedItem.ModelPool.Count;
 
         if (commonItemEntityModel.StaticObject is null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.MissingMesh);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingMesh);
         var staticModel = commonItemEntityModel.StaticObject;
 
         // root container
@@ -1131,7 +1152,7 @@ public class ItemParser
     ToolResult<None> ParseVariant(NPlugItem_SVariant variant, NormalizedItemV3 normalizedItem, NormalizedModelV3 container)
     {
         if (variant.EntityModel is not CPlugPrefab prefab)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.MeshParser.UnsupportedVariantType);
+            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.UnsupportedVariantType);
 
 
         var key = normalizedItem.ModelPool.Count;

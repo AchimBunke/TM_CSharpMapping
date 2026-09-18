@@ -257,6 +257,8 @@ public static class GbxItemUtils
 
     public static BoxAligned BuildBoxAligned(NormalizedMeshV3 mesh)
     {
+        if (mesh.Positions.Length == 0)
+            return default;
         Vec3 min = mesh.Positions[0];
         Vec3 max = mesh.Positions[0];
 

@@ -68,7 +68,7 @@ public static class ErrorCodes
         public const string ValidationError = "NormalizedItemValidator.ValidationError";
     }
 
-    public static class MeshParser
+    public static class ItemParser
     {
         public const string UnsupportedMesh = "MeshCompiler.UnsupportedMesh";
         public const string MissingDynamicConstraintTarget = "MeshCompiler.MissingDynamicConstraintTarget";
