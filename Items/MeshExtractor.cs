@@ -371,13 +371,14 @@ public class MeshExtractor
                                         bucket.texCoords.Add(corner.TexCoord);
                                         bucket.lightmapCoords.Add(corner.LightmapCoord);
                                         bucket.normals.Add(Vec3.Zero);
-                                        bucket.smoothingGroup = smoothingGroups[firstSmoothingGroupIdx];
+                                        bucket.smoothingGroup = geo.IsVisible ? smoothingGroups[firstSmoothingGroupIdx] : 0;
                                     }
                                     bucket.indices.Add(dst);
                                 }
                             }
                         }
-                        firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
+                        if (geo.IsVisible)
+                            firstSmoothingGroupIdx += geo.Crystal.Faces.Length;
                     }
                     break;
                 case CPlugCrystal.TriggerLayer trigger:

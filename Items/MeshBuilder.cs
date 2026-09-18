@@ -840,7 +840,8 @@ public class MeshBuilder
             };
             materials.Add(material);
             var layer = BuildGeometryLayer(submesh, material, meshSetting,groupSetting, buildSettings);
-            smoothingGroups.AddRange(layer.Crystal!.Faces.Select(_ => submesh.SmoothingGroup.HasValue ? submesh.SmoothingGroup.Value : 0));
+            if(layer.IsVisible)
+                smoothingGroups.AddRange(layer.Crystal!.Faces.Select(_ => submesh.SmoothingGroup.HasValue ? submesh.SmoothingGroup.Value : 0));
             layer.Crystal.U02 = layerIdx;
             layer.LayerId = $"Layer{layerIdx}";
             layer.IsVisible = meshSetting.Visible;
