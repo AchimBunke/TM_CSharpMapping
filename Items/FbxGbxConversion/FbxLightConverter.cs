@@ -1,8 +1,9 @@
-﻿/*
- using Assimp;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
+using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
+using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
 using Quaternion = System.Numerics.Quaternion;
 
@@ -12,37 +13,41 @@ internal class LightDef
 {
     public required NormalizedLight Light { get; set; }
     public required LightConfig LightConfig { get; set; }
+    public Vector3 Position { get; set; }
+    public Quaternion Rotation { get; set; }
+    public int GroupIndex { get; set; } = -1;
 }
+
 internal class FbxLightConverter
 {
-    public static ToolResult<List<LightDef>> ExtractLights(Scene scene, FbxGbxConversionInput config)
+    public static ToolResult<List<LightDef>> ExtractLights(ImportedScene scene, FbxGbxConversionInput config)
     {
         List<LightDef> lights = new List<LightDef>();
 
-        var nodes = FbxSceneReader.CollectNodes(scene, scene.RootNode);
-        var lightInstances = FbxSceneReader.GetLightInstances(scene, nodes);
-
-        foreach (var (light, nodeName, globalTransform) in lightInstances)
+        foreach (var light in scene.Lights)
         {
-            if (!TryFindConfigForLight(light.Name, config, out var lightConfig))
-                return ToolResult.Fail(nameof(FbxLightConverter), ErrorCodes.FbxGbxConverter.MissingLightConfig, light.Name);
+            if (!TryFindConfigForLight(light.NodeName, config, out var lightConfig))
+                return ToolResult.Fail(nameof(FbxLightConverter), ErrorCodes.FbxGbxConverter.MissingLightConfig, light.NodeName);
 
-            var normalizedLight = ConvertLight(light, lightConfig!, globalTransform, config.ItemConfig.Scale);
-            lights.Add(new LightDef { Light = normalizedLight, LightConfig = lightConfig! });
+            var (normalizedLight, position, rotation) = ConvertLight(light, lightConfig!);
+            lights.Add(new LightDef { Light = normalizedLight, LightConfig = lightConfig!, Position = position, Rotation = rotation });
         }
         return ToolResult.Success(lights, nameof(FbxLightConverter));
     }
-    static NormalizedLight ConvertLight(Assimp.Light light, LightConfig lightConfig, Assimp.Matrix4x4 globalTransform, float scale)
+
+    static (NormalizedLight Light, Vector3 Position, Quaternion Rotation) ConvertLight(ImportedLight light, LightConfig lightConfig)
     {
         var normalizedLight = new NormalizedLight();
-        LightType lightType = light.LightType switch
+        MeshCompilation.LightType lightType = light.Type switch
         {
-            Assimp.LightSourceType.Directional => LightType.Point,
-            Assimp.LightSourceType.Point => LightType.Point,
-            Assimp.LightSourceType.Spot => LightType.Spot,
-            Assimp.LightSourceType.Area => LightType.Area,
-            _ => LightType.Point,
+            ImportedLightType.Directional => MeshCompilation.LightType.Point,
+            ImportedLightType.Point => MeshCompilation.LightType.Point,
+            ImportedLightType.Spot => MeshCompilation.LightType.Spot,
+            ImportedLightType.Area => MeshCompilation.LightType.Area,
+            _ => MeshCompilation.LightType.Point,
         };
+        if(lightConfig.Type.HasValue)
+            lightType = lightConfig.Type.Value;
         var lightUserModel = new CPlugLightUserModel
         {
             Intensity = lightConfig.Intensity,
@@ -62,32 +67,15 @@ internal class FbxLightConverter
 
         normalizedLight.LightModel = lightUserModel;
         normalizedLight.Name = lightConfig.Name;
-        normalizedLight.Type = lightType;
 
-        var convertedTransform = FbxMeshConverter.CoordinateConversionMatrix * globalTransform;
+        Matrix4x4.Decompose(light.GlobalTransform, out _, out var nodeRotation, out var translation);
 
-        convertedTransform.Decompose(out _, out var nodeRotation, out var translation);
-        translation *= scale;
+        var rotation = nodeRotation;
+        var position = translation;
 
-        var nodeQ = new System.Numerics.Quaternion(
-            nodeRotation.X,
-            nodeRotation.Y,
-            nodeRotation.Z,
-            nodeRotation.W);
-        var localDirection = new Vector3(
-            light.Direction.X,
-            light.Direction.Y,
-            light.Direction.Z);
-
-        var directionQ = FromTo(
-            -Vector3.UnitZ,
-            localDirection);
-
-        normalizedLight.Rotation = nodeQ * directionQ;
-        normalizedLight.Position = new System.Numerics.Vector3(translation.X, translation.Y, translation.Z);
-
-        return normalizedLight;
+        return (normalizedLight, position, rotation);
     }
+
 
     static bool TryFindConfigForLight(string lightName, FbxGbxConversionInput config, out LightConfig? lightConfig)
     {
@@ -95,18 +83,6 @@ internal class FbxLightConverter
         return lightConfig is not null;
     }
 
-    public static ToolResult<None> GroupLights(List<LightDef> lights, List<MeshGroup> meshGroups)
-    {
-        var firstStaticGroup = meshGroups.FirstOrDefault(g => g.GroupType == GroupType.StaticObject);
-        if(firstStaticGroup is null)
-            return ToolResult.Fail(nameof(FbxLightConverter), ErrorCodes.FbxGbxConverter.MissingStaticMeshGroup);
-        int lightGroupIndex = meshGroups.IndexOf(firstStaticGroup);
-        foreach (var l in lights)
-        {
-            l.Light.GroupIndex = lightGroupIndex;
-        }
-        return ToolResult.Success(None.Value, nameof(FbxLightConverter));
-    }
     static Quaternion FromTo(Vector3 from, Vector3 to)
     {
         from = Vector3.Normalize(from);
@@ -118,16 +94,11 @@ internal class FbxLightConverter
             return Quaternion.Identity;
 
         if (dot < -0.999999f)
-            return Quaternion.CreateFromAxisAngle(
-                Vector3.UnitY,
-                MathF.PI);
+            return Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI);
 
-        Vector3 axis = Vector3.Normalize(
-            Vector3.Cross(from, to));
-
+        Vector3 axis = Vector3.Normalize(Vector3.Cross(from, to));
         float angle = MathF.Acos(dot);
 
         return Quaternion.CreateFromAxisAngle(axis, angle);
     }
 }
-*/

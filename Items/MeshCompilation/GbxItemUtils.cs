@@ -139,7 +139,7 @@ public static class GbxItemUtils
             UvGroups = [],
         };
     }
-    public static PreLightGen? ComputePreLightGenFromMeshData(NormalizedMeshV3 mesh)
+    public static PreLightGen? ComputePreLightGenFromMeshData(NormalizedMesh mesh)
     {
         if (mesh.LightmapCoords == null)
             return null;
@@ -255,7 +255,7 @@ public static class GbxItemUtils
         };
     }
 
-    public static BoxAligned BuildBoxAligned(NormalizedMeshV3 mesh)
+    public static BoxAligned BuildBoxAligned(NormalizedMesh mesh)
     {
         if (mesh.Positions.Length == 0)
             return default;
@@ -338,7 +338,7 @@ public static class GbxItemUtils
 
         return skel;
     }
-    public static CPlugLightUserModel CreateLightUserModel(NormalizedLightV3 light, InstanceSettings instanceSetting)
+    public static CPlugLightUserModel CreateLightUserModel(NormalizedLight light, InstanceSettings instanceSetting)
     {
         var lightModel = ObjectCloner.DeepCloneObject(light.LightModel)!;
         var c = lightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>()!;

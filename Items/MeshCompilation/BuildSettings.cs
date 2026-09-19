@@ -27,7 +27,7 @@ public sealed class InstanceSettings
     public bool Collidable { get; set; }    // contributes geometry to the cluster's collision Surface
 
     // shape only
-    public ShapeRoleV3? ShapeRoleOverride { get; set; }
+    public ShapeRole? ShapeRoleOverride { get; set; }
  
 
     // mesh only
@@ -41,7 +41,7 @@ public sealed class InstanceSettings
 
 public sealed class ClusterSettings
 {
-    public ModelTypeV3 Type { get; set; }
+    public ModelType Type { get; set; }
 
     public float[] LODDistances { get; set; } = [];
     public EWaypointType? WaypointType { get; set; }
@@ -76,12 +76,12 @@ public sealed class BuildSettings
     public List<VariantSetting> Variants { get; set; } = [];
     public Dictionary<Guid, Guid> EntityClusterAssignments { get; set; } = []; // entity.Id -> ClusterKey it renders
 
-    public static BuildSettings DefaultFromItem(NormalizedItemV3 item)
+    public static BuildSettings DefaultFromItem(NormalizedItem item)
     {
         var settings = new BuildSettings();
         var clusterByModelKey = new Dictionary<int, Guid>();
 
-        void Visit(NormalizedModelV3 model, EntityRefBase refBase, int modelKey)
+        void Visit(NormalizedModel model, EntityRefBase refBase, int modelKey)
         {
             if (!clusterByModelKey.TryGetValue(modelKey, out var clusterKey))
             {
@@ -111,9 +111,9 @@ public sealed class BuildSettings
                     {
                         Kind = RefKind.Mesh,
                         ClusterKey = clusterKey,
-                        Visible = m.Properties.HasFlag(MeshPropertiesV3.Visible),
-                        Collidable = m.Properties.HasFlag(MeshPropertiesV3.Collidable),
-                        LODMaskOverride = m.Properties.HasFlag(MeshPropertiesV3.LOD) ? m.LODMask : null,
+                        Visible = m.Properties.HasFlag(MeshProperties.Visible),
+                        Collidable = m.Properties.HasFlag(MeshProperties.Collidable),
+                        LODMaskOverride = m.Properties.HasFlag(MeshProperties.LOD) ? m.LODMask : null,
                         SmoothingGroupOverride = m.SmoothingGroup,
                         LightmapSizeOverride = m.PreLightGenerator?.U02,
                     };

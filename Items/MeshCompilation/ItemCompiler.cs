@@ -64,7 +64,7 @@ public class ItemCompiler
     }
     internal class CompileContext
     {
-        public NodeRefTableV3 nodeRefTable = new();
+        public NodeRefTable nodeRefTable = new();
 
         public List<Guid> BuildDynaObjectClusters { get; } = new(); // includes also copied
         public Dictionary<CPlugDynaObjectModel, PendingConstraint> PendingConstraints { get; } = new();
@@ -81,7 +81,7 @@ public class ItemCompiler
             BuildDynaObjectClusters.Clear();
             CompileOptions = new();
         }
-        public void Rebuild(NormalizedItemV3 item, CompileOptions compileOptions)
+        public void Rebuild(NormalizedItem item, CompileOptions compileOptions)
         {
             Reset();
             CompileOptions = compileOptions;
@@ -106,7 +106,7 @@ public class ItemCompiler
         compileContext = new();
     }
 
-    public ToolResult<CGameItemModel> Compile(NormalizedItemV3 item, BuildSettings buildSettings, CompileOptions compileOptions)
+    public ToolResult<CGameItemModel> Compile(NormalizedItem item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
         switch (compileOptions.Target)
         {
@@ -119,7 +119,7 @@ public class ItemCompiler
         }
     }
 
-    public ToolResult<CGameItemModel> CompilePrefabItem(NormalizedItemV3 item, BuildSettings buildSettings, CompileOptions compileOptions)
+    public ToolResult<CGameItemModel> CompilePrefabItem(NormalizedItem item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
         compileContext.Rebuild(item, compileOptions);
 
@@ -153,7 +153,7 @@ public class ItemCompiler
 
         return ToolResult.Success(itemTemplate, nameof(ItemCompiler));
     }
-    public ToolResult<CGameItemModel> CompileMeshModelerItem(NormalizedItemV3 item, BuildSettings buildSettings, CompileOptions compileOptions)
+    public ToolResult<CGameItemModel> CompileMeshModelerItem(NormalizedItem item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
         compileContext.Rebuild(item, compileOptions);
 
@@ -177,12 +177,12 @@ public class ItemCompiler
         //itemTemplate.Value.GetChunk<CGameItemModel.Chunk2E002020>().U03 = false;
         return itemTemplate;
     }
-    private ToolResult<CMwNod> BuildEntity(NormalizedItemV3 item, EntityRefBase entity, BuildSettings settings, out SMetaPtr? modelParams)
+    private ToolResult<CMwNod> BuildEntity(NormalizedItem item, EntityRefBase entity, BuildSettings settings, out SMetaPtr? modelParams)
     {
         var model = item.ModelPool[entity.ModelKey];
         modelParams = null;
 
-        if (model.Type is ModelTypeV3.Container or ModelTypeV3.Variant_List)
+        if (model.Type is ModelType.Container or ModelType.Variant_List)
         {
             var contentKey = ComputeContentKey(item, entity.ModelKey, entity.Id, settings);
             if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
@@ -190,7 +190,7 @@ public class ItemCompiler
                 return ToolResult.Success(cached, nameof(ItemCompiler));
 
             ToolResult<CMwNod> builtResult;
-            if (model.Type == ModelTypeV3.Container)
+            if (model.Type == ModelType.Container)
                 builtResult = BuildPrefab(item, model.Children, settings, out modelParams).Cast<CMwNod>();
 
             else
@@ -207,7 +207,7 @@ public class ItemCompiler
         return BuildLeaf(item, model, settings, out modelParams);
     }
 
-    ToolResult<CPlugPrefab> BuildPrefab(NormalizedItemV3 item, List<EntityRef> children, BuildSettings settings, out SMetaPtr? modelParams)
+    ToolResult<CPlugPrefab> BuildPrefab(NormalizedItem item, List<EntityRef> children, BuildSettings settings, out SMetaPtr? modelParams)
     {
         modelParams = null;
         List<EntRef> ents = [];
@@ -230,7 +230,7 @@ public class ItemCompiler
         prefab.Ents = ents.ToArray();
         return ToolResult.Success(prefab, nameof(ItemCompiler));
     }
-    ToolResult<NPlugItem_SVariantList> BuildVariantList(NormalizedItemV3 item, List<NormalizedVariantV3> variants, BuildSettings settings)
+    ToolResult<NPlugItem_SVariantList> BuildVariantList(NormalizedItem item, List<NormalizedVariant> variants, BuildSettings settings)
     {
         List<NPlugItem_SVariant> builtVariants = [];
         foreach (var v in variants)
@@ -249,7 +249,7 @@ public class ItemCompiler
         return ToolResult.Success(variantList, nameof(ItemCompiler));
     }
 
-    ToolResult<CMwNod> BuildLeaf(NormalizedItemV3 item, NormalizedModelV3 model, BuildSettings settings, out SMetaPtr? modelParams)
+    ToolResult<CMwNod> BuildLeaf(NormalizedItem item, NormalizedModel model, BuildSettings settings, out SMetaPtr? modelParams)
     {
         modelParams = null;
 
@@ -290,7 +290,7 @@ public class ItemCompiler
     }
 
     private ToolResult<CMwNod> BuildCluster(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         Guid clusterKey,
         List<(Guid Id, InstanceSettings Instance)> instances,
         ClusterSettings cluster,
@@ -300,7 +300,7 @@ public class ItemCompiler
         modelParams = null;
         switch (cluster.Type)
         {
-            case ModelTypeV3.Dynamic:
+            case ModelType.Dynamic:
                 {
                     modelParams = cluster.DynaObjectModelParams ?? new NPlugDynaObjectModel_SInstanceParams
                     {
@@ -315,9 +315,9 @@ public class ItemCompiler
                     };
                     return GetOrCreateDynaObjectModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
                 }
-            case ModelTypeV3.Trigger_Waypoint:
+            case ModelType.Trigger_Waypoint:
                 return GetOrCreateTriggerWaypoint(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
-            case ModelTypeV3.Trigger_Special:
+            case ModelType.Trigger_Special:
                 return GetOrCreateTriggerSpecial(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
             default:
                 return GetOrCreateStaticObjectModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
@@ -325,7 +325,7 @@ public class ItemCompiler
 
     }
 
-    ToolResult<CPlugStaticObjectModel> GetOrCreateStaticObjectModel(NormalizedItemV3 item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<CPlugStaticObjectModel> GetOrCreateStaticObjectModel(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
@@ -346,7 +346,7 @@ public class ItemCompiler
         return ToolResult.Success(staticObject, nameof(ItemCompiler));
 
     }
-    ToolResult<CPlugStaticObjectModel> CreateStaticObjectModel(NormalizedItemV3 item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, string clusterKey, BuildSettings buildSettings)
+    ToolResult<CPlugStaticObjectModel> CreateStaticObjectModel(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, string clusterKey, BuildSettings buildSettings)
     {
         var staticObject = GbxTemplateLibrary.CreateStaticObjectModelTemplate().Value;
 
@@ -363,7 +363,7 @@ public class ItemCompiler
         staticObject.Mesh = solid;
 
         var collidable = instances.Where(i => i.Instance.Collidable).ToList();
-        var staticCollidableInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRoleV3.Static) == ShapeRoleV3.Static).ToList();
+        var staticCollidableInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRole.Static) == ShapeRole.Static).ToList();
 
 
         var surface = GetOrCreateSurface(item, staticCollidableInstances, buildSettings);
@@ -373,7 +373,7 @@ public class ItemCompiler
     }
 
 
-    ToolResult<CPlugDynaObjectModel> GetOrCreateDynaObjectModel(NormalizedItemV3 item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<CPlugDynaObjectModel> GetOrCreateDynaObjectModel(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
@@ -406,7 +406,7 @@ public class ItemCompiler
 
     }
 
-    ToolResult<CPlugDynaObjectModel> CreateDynaObjectModel(NormalizedItemV3 item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, string clusterKey, BuildSettings buildSettings)
+    ToolResult<CPlugDynaObjectModel> CreateDynaObjectModel(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, string clusterKey, BuildSettings buildSettings)
     {
         var dyna = GbxTemplateLibrary.CreateDynaObjectModelTemplate().Value;
 
@@ -422,8 +422,8 @@ public class ItemCompiler
 
         var collidable = instances.Where(i => i.Instance.Collidable).ToList();
 
-        var staticInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRoleV3.Static) == ShapeRoleV3.Static).ToList();
-        var dynamicInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRoleV3.Dynamic) == ShapeRoleV3.Dynamic).ToList();
+        var staticInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRole.Static) == ShapeRole.Static).ToList();
+        var dynamicInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRole.Dynamic) == ShapeRole.Dynamic).ToList();
 
         if (dynamicInstances.Count == 0)
             return ToolResult.Fail(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingDynaCollisionShape);
@@ -436,7 +436,7 @@ public class ItemCompiler
 
         return ToolResult.Success(dyna, nameof(ItemCompiler));
     }
-    ToolResult<CPlugSolid2Model> GetOrCreateSolid2Model(NormalizedItemV3 item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<CPlugSolid2Model> GetOrCreateSolid2Model(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         if (instances.Count == 0)
             return ToolResult.Success(CreateEmptySolid2Model(item), nameof(ItemCompiler));
@@ -453,7 +453,7 @@ public class ItemCompiler
     }
 
     CPlugSolid2Model CreateSolid2Model(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         List<(Guid Id, InstanceSettings Instance)> instances,
         ClusterSettings cluster,
         BuildSettings buildSettings)
@@ -479,7 +479,7 @@ public class ItemCompiler
         {
             var refBase = compileContext.GuidToRef[id];
             var meshRef = refBase as MeshRef;
-            NormalizedMeshV3? mesh = meshRef != null ? item.MeshPool[meshRef.MeshKey] : null;
+            NormalizedMesh? mesh = meshRef != null ? item.MeshPool[meshRef.MeshKey] : null;
 
             var visual = GetOrCreateIndexedTriangles(item, refBase, instance, buildSettings, out CPlugMaterialUserInst material);
 
@@ -521,7 +521,7 @@ public class ItemCompiler
         {
             var refBase = compileContext.GuidToRef[id];
             var lightRef = refBase as LightRef;
-            NormalizedLightV3 light = item.LightPool[lightRef!.LightKey];
+            NormalizedLight light = item.LightPool[lightRef!.LightKey];
 
             var lightInst = new LightInst() { ModelIndex = lightUserModels.Count, SocketIndex = sockets.Count };
             lightInsts.Add(lightInst);
@@ -557,7 +557,7 @@ public class ItemCompiler
     }
 
 
-    CPlugSolid2Model CreateEmptySolid2Model(NormalizedItemV3 item)
+    CPlugSolid2Model CreateEmptySolid2Model(NormalizedItem item)
     {
         var solid = GbxTemplateLibrary.CreateCPlugSolid2ModelTemplate().Value;
 
@@ -584,14 +584,14 @@ public class ItemCompiler
 
 
     CPlugVisualIndexedTriangles GetOrCreateIndexedTriangles(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         RefBase refBase,
         InstanceSettings instanceSetting,
         BuildSettings buildSettings,
         out CPlugMaterialUserInst material)
     {
-        NormalizedShapeV3? shape = refBase is ShapeRef sr ? item.ShapePool[sr.ShapeKey] : null;
-        NormalizedMeshV3? mesh = refBase is MeshRef mr ? item.MeshPool[mr.MeshKey] : null;
+        NormalizedShape? shape = refBase is ShapeRef sr ? item.ShapePool[sr.ShapeKey] : null;
+        NormalizedMesh? mesh = refBase is MeshRef mr ? item.MeshPool[mr.MeshKey] : null;
 
         material = GbxItemUtils.CreateErrorMat();
         if (mesh != null)
@@ -617,7 +617,7 @@ public class ItemCompiler
         throw new InvalidOperationException($"Unknown RefBase type: {refBase.GetType().Name}");
     }
     CPlugVisualIndexedTriangles CreateIndexedTrianglesFromMesh(
-       NormalizedMeshV3 mesh,
+       NormalizedMesh mesh,
        BuildSettings buildSettings)
     {
         var uvs = new SortedDictionary<int, Vec2[]>();
@@ -733,10 +733,10 @@ public class ItemCompiler
     }
 
     CPlugVisualIndexedTriangles CreateIndexedTrianglesFromShape(
-        NormalizedShapeV3 shape,
+        NormalizedShape shape,
         BuildSettings buildSettings)
     {
-        var tempMesh = new NormalizedMeshV3()
+        var tempMesh = new NormalizedMesh()
         {
             Positions = shape.Positions,
             Normals = new Vec3[shape.Positions.Length], // todo compute normals
@@ -745,7 +745,7 @@ public class ItemCompiler
         return CreateIndexedTrianglesFromMesh(tempMesh, buildSettings);
     }
 
-    PreLightGen? MergePreLightGenerator(NormalizedMeshV3 mesh, InstanceSettings instanceSetting, PreLightGen? preLightGen)
+    PreLightGen? MergePreLightGenerator(NormalizedMesh mesh, InstanceSettings instanceSetting, PreLightGen? preLightGen)
     {
         var meshLightGen = GbxItemUtils.ComputePreLightGenFromMeshData(mesh);
         if (instanceSetting.LightmapSizeOverride.HasValue)
@@ -774,10 +774,10 @@ public class ItemCompiler
 
 
 
-    CPlugSurface? GetOrCreateSurface(NormalizedItemV3 item, List<(Guid Id, InstanceSettings Instance)> collidableInstances, BuildSettings buildSettings)
+    CPlugSurface? GetOrCreateSurface(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> collidableInstances, BuildSettings buildSettings)
         => GetOrCreateSurface(item, collidableInstances, LegacyGameplayId.None, new Vec3(0, 0, 1), false, buildSettings);
     CPlugSurface? GetOrCreateSurface(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         List<(Guid Id, InstanceSettings Instance)> triggerInstances,
         LegacyGameplayId gameplayId,
         Vec3 gameplayMainDir,
@@ -798,7 +798,7 @@ public class ItemCompiler
         return surface;
     }
     CPlugSurface? CreateSurface(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         List<(Guid Id, InstanceSettings Instance)> collidableInstances,
         LegacyGameplayId gameplayId,
         Vec3 gameplayMainDir,
@@ -828,7 +828,7 @@ public class ItemCompiler
         return surface;
     }
 
-    ToolResult<NPlugTrigger_SWaypoint> GetOrCreateTriggerWaypoint(NormalizedItemV3 item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<NPlugTrigger_SWaypoint> GetOrCreateTriggerWaypoint(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
@@ -856,7 +856,7 @@ public class ItemCompiler
         compileContext.nodeRefTable.Register(key, waypoint);
         return ToolResult.Success(waypoint, nameof(ItemCompiler));
     }
-    ToolResult<NPlugTrigger_SWaypoint> CreateTriggerWaypoint(NormalizedItemV3 item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<NPlugTrigger_SWaypoint> CreateTriggerWaypoint(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         NPlugTrigger_SWaypoint triggerWaypoint = new NPlugTrigger_SWaypoint()
         {
@@ -885,7 +885,7 @@ public class ItemCompiler
         triggerWaypoint.TriggerShape = surface;
         return ToolResult.Success(triggerWaypoint, nameof(ItemCompiler));
     }
-    ToolResult<NPlugTrigger_SSpecial> GetOrCreateTriggerSpecial(NormalizedItemV3 item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<NPlugTrigger_SSpecial> GetOrCreateTriggerSpecial(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
 
@@ -901,7 +901,7 @@ public class ItemCompiler
         compileContext.nodeRefTable.Register(key, special);
         return ToolResult.Success(special, nameof(ItemCompiler));
     }
-    ToolResult<NPlugTrigger_SSpecial> CreateTriggerSpecial(NormalizedItemV3 item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    ToolResult<NPlugTrigger_SSpecial> CreateTriggerSpecial(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         NPlugTrigger_SSpecial triggerSpecial = new NPlugTrigger_SSpecial()
         {
@@ -921,7 +921,7 @@ public class ItemCompiler
         return ToolResult.Success(triggerSpecial, nameof(ItemCompiler));
     }
 
-    object ResolveCollisionSource(NormalizedItemV3 item, Guid id, RefKind kind) => kind switch
+    object ResolveCollisionSource(NormalizedItem item, Guid id, RefKind kind) => kind switch
     {
         RefKind.Mesh => item.MeshPool[(compileContext.GuidToRef[id] as MeshRef)!.MeshKey],
         RefKind.Shape => item.ShapePool[(compileContext.GuidToRef[id] as ShapeRef)!.ShapeKey],
@@ -939,14 +939,14 @@ public class ItemCompiler
             ReadOnlySpan<Vec3> sourcePositions;
             ReadOnlySpan<int> sourceIndices;
             ReadOnlySpan<MaterialId> surfaceMaterialIds;
-            NormalizedMeshV3 normMesh;
-            if ((normMesh = geometrySource as NormalizedMeshV3) != null)
+            NormalizedMesh normMesh;
+            if ((normMesh = geometrySource as NormalizedMesh) != null)
             {
                 sourcePositions = normMesh.Positions.AsSpan();
                 sourceIndices = normMesh.Indices.AsSpan();
                 surfaceMaterialIds = default;
             }
-            else if (geometrySource is NormalizedShapeV3 normShape)
+            else if (geometrySource is NormalizedShape normShape)
             {
                 sourcePositions = normShape.Positions.AsSpan();
                 sourceIndices = normShape.Indices.AsSpan();
@@ -992,7 +992,7 @@ public class ItemCompiler
         }
         positions = positionMap.Keys.ToList();
     }
-    private ShapeRoleV3 ResolveDestination(NormalizedItemV3 item, (Guid Id, InstanceSettings Instance) i, ShapeRoleV3 meshRole)
+    private ShapeRole ResolveDestination(NormalizedItem item, (Guid Id, InstanceSettings Instance) i, ShapeRole meshRole)
     {
         if (i.Instance.ShapeRoleOverride is { } explicitDest)
             return explicitDest;
@@ -1001,8 +1001,8 @@ public class ItemCompiler
         {
             RefKind.Shape => (compileContext.GuidToRef[i.Id] as ShapeRef)!.Role switch
             {
-                ShapeRoleV3.Static => ShapeRoleV3.Static,
-                _ => ShapeRoleV3.Dynamic,
+                ShapeRole.Static => ShapeRole.Static,
+                _ => ShapeRole.Dynamic,
             },
             _ => meshRole, // meshes default 
         };
@@ -1146,30 +1146,30 @@ public class ItemCompiler
     }
 
 
-    private string ComputeContentKey(NormalizedItemV3 item, int modelKey, Guid entityId, BuildSettings settings)
+    private string ComputeContentKey(NormalizedItem item, int modelKey, Guid entityId, BuildSettings settings)
     {
         var model = item.ModelPool[modelKey];
 
         return model.Type switch
         {
-            ModelTypeV3.Container => ComputeContainerKey(item, model, modelKey, settings),
-            ModelTypeV3.Variant_List => ComputeVariantListKey(item, model, modelKey, settings),
+            ModelType.Container => ComputeContainerKey(item, model, modelKey, settings),
+            ModelType.Variant_List => ComputeVariantListKey(item, model, modelKey, settings),
             _ => ComputeLeafKey(item, model, modelKey, settings), // NEW — leaves DO need a key for container-parent purposes
         };
     }
-    private string ComputeContainerKey(NormalizedItemV3 item, NormalizedModelV3 model, int modelKey, BuildSettings settings)
+    private string ComputeContainerKey(NormalizedItem item, NormalizedModel model, int modelKey, BuildSettings settings)
     {
         var childKeys = model.Children
             .Select(c => $"{c.Position}|{c.Rotation}|{ComputeContentKey(item, c.ModelKey, c.Id, settings)}");
         return $"container:{modelKey}:[{string.Join(";", childKeys)}]";
     }
 
-    private string ComputeVariantListKey(NormalizedItemV3 item, NormalizedModelV3 model, int modelKey, BuildSettings settings)
+    private string ComputeVariantListKey(NormalizedItem item, NormalizedModel model, int modelKey, BuildSettings settings)
     {
         var variantKeys = model.Variants.Select(v => ComputeContentKey(item, v.ModelKey, v.Id, settings));
         return $"variantlist:{modelKey}:[{string.Join(";", variantKeys)}]";
     }
-    private string ComputeLeafKey(NormalizedItemV3 item, NormalizedModelV3 model, int modelKey, BuildSettings settings)
+    private string ComputeLeafKey(NormalizedItem item, NormalizedModel model, int modelKey, BuildSettings settings)
     {
         var instanceIds = model.Meshes.Select(m => m.Id).Concat(model.Shapes.Select(s => s.Id)).Concat(model.Lights.Select(l => l.Id)).ToList();
         var byCluster = instanceIds
@@ -1266,7 +1266,7 @@ public class ItemCompiler
         => $"{value.X.ToString("R", CultureInfo.InvariantCulture)},{value.Y.ToString("R", CultureInfo.InvariantCulture)},{value.Z.ToString("R", CultureInfo.InvariantCulture)},{value.W.ToString("R", CultureInfo.InvariantCulture)}";
 
 
-    void FillItemData(CGameItemModel item, NormalizedItemV3 normalizedItem, BuildSettings buildSettings)
+    void FillItemData(CGameItemModel item, NormalizedItem normalizedItem, BuildSettings buildSettings)
     {
         item.Name = string.IsNullOrWhiteSpace(normalizedItem.Name) ? "New Item" : normalizedItem.Name;
         ChunkSafeItemOperations.SetIcon(item, normalizedItem.Icon, normalizedItem.IconWebP);
@@ -1297,7 +1297,7 @@ public class ItemCompiler
         List<int> SmoothingGroups,
         CPlugMaterialUserInst ErrorMat);
 
-    CPlugCrystal BuildCrystal(NormalizedItemV3 item, EntityRefBase entity, BuildSettings buildSettings)
+    CPlugCrystal BuildCrystal(NormalizedItem item, EntityRefBase entity, BuildSettings buildSettings)
     {
         var model = item.ModelPool[entity.ModelKey];
 
@@ -1312,7 +1312,7 @@ public class ItemCompiler
         return crystal;
     }
 
-    void BuildEntityCrystal(NormalizedItemV3 item,
+    void BuildEntityCrystal(NormalizedItem item,
         EntityRefBase entity,
         Vector3 parentPosition,
         Quaternion parentRotation,
@@ -1322,10 +1322,10 @@ public class ItemCompiler
         var model = item.ModelPool[entity.ModelKey];
         switch (model.Type)
         {
-            case ModelTypeV3.Container:
+            case ModelType.Container:
                 BuildPrefabCrystal(item, model.Children, parentPosition, parentRotation, buildSettings, context);
                 break;
-            case ModelTypeV3.Variant_List:
+            case ModelType.Variant_List:
                 BuildVariantListCrystal(item, model.Variants, parentPosition, parentRotation, buildSettings, context);
                 break;
             default:
@@ -1334,7 +1334,7 @@ public class ItemCompiler
         }
 
     }
-    void BuildPrefabCrystal(NormalizedItemV3 item,
+    void BuildPrefabCrystal(NormalizedItem item,
         List<EntityRef> children,
         Vector3 parentPosition,
         Quaternion parentRotation,
@@ -1347,8 +1347,8 @@ public class ItemCompiler
             BuildEntityCrystal(item, ent, globalPosition, globalRotation, buildSettings, context);
         }
     }
-    void BuildVariantListCrystal(NormalizedItemV3 item,
-        List<NormalizedVariantV3> variants,
+    void BuildVariantListCrystal(NormalizedItem item,
+        List<NormalizedVariant> variants,
         Vector3 parentPosition,
         Quaternion parentRotation,
         BuildSettings buildSettings,
@@ -1361,8 +1361,8 @@ public class ItemCompiler
     }
 
     void BuildLeafCrystal(
-        NormalizedItemV3 item,
-        NormalizedModelV3 model,
+        NormalizedItem item,
+        NormalizedModel model,
         Vector3 parentPosition,
         Quaternion parentRotation,
         BuildSettings settings,
@@ -1387,7 +1387,7 @@ public class ItemCompiler
     }
 
     void BuildLayers(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         List<(Guid Id, InstanceSettings Instance)> instances,
         ClusterSettings cluster,
         Vector3 parentPosition,
@@ -1401,9 +1401,9 @@ public class ItemCompiler
                 continue;
             var refBase = compileContext.GuidToRef[instance.Id];
             MeshRef? meshRef = refBase as MeshRef;
-            NormalizedMeshV3? mesh = meshRef != null ? item.MeshPool[meshRef.MeshKey] : null;
+            NormalizedMesh? mesh = meshRef != null ? item.MeshPool[meshRef.MeshKey] : null;
             ShapeRef? shapeRef = refBase as ShapeRef;
-            NormalizedShapeV3? shape = shapeRef != null ? item.ShapePool[shapeRef.ShapeKey] : null;
+            NormalizedShape? shape = shapeRef != null ? item.ShapePool[shapeRef.ShapeKey] : null;
 
             CPlugMaterialUserInst baseMaterialInstance;
             if (mesh != null)
@@ -1423,7 +1423,7 @@ public class ItemCompiler
 
             CPlugCrystal.Layer layer = null!;
             int layerIndex = context.Layers.Count;
-            if (cluster.Type == ModelTypeV3.Trigger_Special || cluster.Type == ModelTypeV3.Trigger_Waypoint)
+            if (cluster.Type == ModelType.Trigger_Special || cluster.Type == ModelType.Trigger_Waypoint)
             {
                 CPlugCrystal.TriggerLayer triggerLayer = BuildTriggerLayer(item, instance, material, parentPosition, parentRotation);
                 triggerLayer.Crystal!.U02 = layerIndex;
@@ -1478,7 +1478,7 @@ public class ItemCompiler
             context.Layers.Add(layer);
         }
 
-        if (cluster.Type == ModelTypeV3.Trigger_Waypoint &&
+        if (cluster.Type == ModelType.Trigger_Waypoint &&
               (cluster.WaypointType == EWaypointType.Checkpoint || cluster.WaypointType == EWaypointType.Start || cluster.WaypointType == EWaypointType.StartFinish))
         {
             var layerCount = context.Layers.Count;
@@ -1496,7 +1496,7 @@ public class ItemCompiler
         }
     }
     CPlugCrystal.GeometryLayer BuildGeometryLayer(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         (Guid Id, InstanceSettings Instance) instance,
         float[] lodDistances,
         CPlugCrystal.Material material,
@@ -1574,7 +1574,7 @@ public class ItemCompiler
     }
 
     CPlugCrystal.TriggerLayer BuildTriggerLayer(
-        NormalizedItemV3 item,
+        NormalizedItem item,
         (Guid Id, InstanceSettings Instance) instance,
         CPlugCrystal.Material material,
         Vector3 parentPosition,
@@ -1707,7 +1707,7 @@ public class ItemCompiler
 
     // -----------------------
     // CommonEntityModel
-    bool CanConvertToCommonEntityModel(NormalizedItemV3 item, BuildSettings buildSettings, CompileOptions compileOptions)
+    bool CanConvertToCommonEntityModel(NormalizedItem item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
         if (buildSettings.Variants.Count > 0)
             return false;
@@ -1728,11 +1728,11 @@ public class ItemCompiler
 
             var cluster = buildSettings.Clusters[instance.Value.ClusterKey];
 
-            if (cluster.Type == ModelTypeV3.Dynamic)
+            if (cluster.Type == ModelType.Dynamic)
                 return false;
-            else if (cluster.Type == ModelTypeV3.Trigger_Special)
+            else if (cluster.Type == ModelType.Trigger_Special)
                 return false;
-            else if (cluster.Type == ModelTypeV3.Trigger_Waypoint)
+            else if (cluster.Type == ModelType.Trigger_Waypoint)
                 triggerClusterCount++;
             else
                 staticClusterCount++;
@@ -1754,7 +1754,7 @@ public class ItemCompiler
         return true;
     }
 
-    ToolResult<CGameItemModel> ConvertToCommonEntityModel(NormalizedItemV3 item, CPlugPrefab prefab, BuildSettings buildSettings)
+    ToolResult<CGameItemModel> ConvertToCommonEntityModel(NormalizedItem item, CPlugPrefab prefab, BuildSettings buildSettings)
     {
         var entities = ExtractEntities(prefab, Vector3.Zero, Quaternion.Identity).ToList();
         var commonEntityModel = GbxTemplateLibrary.CreateCommonItemEntityModelTemplate().Value;
@@ -1842,7 +1842,7 @@ public class ItemCompiler
     {
         foreach(var cluster in buildSettings.Clusters)
         {
-            if (cluster.Value.Type == ModelTypeV3.Trigger_Waypoint)
+            if (cluster.Value.Type == ModelType.Trigger_Waypoint)
                 continue;
             foreach(var instance in buildSettings.Instances.Where(i=>i.Value.ClusterKey == cluster.Key))
             {

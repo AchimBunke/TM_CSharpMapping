@@ -21,7 +21,7 @@ public class ItemParser
 {
     internal class ParseContext
     {
-        public NodeRefTableV3 nodeRefTable = new();
+        public NodeRefTable nodeRefTable = new();
         public Dictionary<int, EntityRef> dynaIndexToEntityRef = new();
         public List<CPlugDynaObjectModel> processedDynaObjectModels = new();
 
@@ -39,11 +39,11 @@ public class ItemParser
     }
     ParseContext parseContext = new();
 
-    public ToolResult<NormalizedItemV3> Parse(CGameItemModel item)
+    public ToolResult<NormalizedItem> Parse(CGameItemModel item)
     {
         parseContext.Reset();
 
-        NormalizedItemV3 normalizedItem = new NormalizedItemV3();
+        NormalizedItem normalizedItem = new NormalizedItem();
 
         ParseMetadata(item, normalizedItem);
 
@@ -77,7 +77,7 @@ public class ItemParser
         return ToolResult.Success(normalizedItem, nameof(ItemParser));
     }
 
-    void ParseMetadata(CGameItemModel item, NormalizedItemV3 normalizedItem)
+    void ParseMetadata(CGameItemModel item, NormalizedItem normalizedItem)
     {
         normalizedItem.PlacementParam = item.DefaultPlacement;
         normalizedItem.IconWebP = item.IconWebP;
@@ -100,7 +100,7 @@ public class ItemParser
         public int SmoothingGroup;
     }
     
-    void ParseCPlugCrystal(CPlugCrystal crystal, NormalizedItemV3 normalizedItem)
+    void ParseCPlugCrystal(CPlugCrystal crystal, NormalizedItem normalizedItem)
     {
         const int Mesh = 0;
         const int Trigger = 1;
@@ -121,7 +121,7 @@ public class ItemParser
             // per-material (+ per-smoothing-group, for visible geo) buckets, scoped to this layer
             var buckets = new Dictionary<(CPlugMaterialUserInst mat, int smoothingGroup), MaterialBucket>();
 
-            MeshPropertiesV3 properties = MeshPropertiesV3.None;
+            MeshProperties properties = MeshProperties.None;
 
             switch (layer)
             {
@@ -129,11 +129,11 @@ public class ItemParser
                     {
                         var sourcePositions = geo.Crystal!.Positions;
                         if (geo.IsEnabled)
-                            properties |= MeshPropertiesV3.Enabled;
+                            properties |= MeshProperties.Enabled;
                         if (geo.IsVisible)
-                            properties |= MeshPropertiesV3.Visible;
+                            properties |= MeshProperties.Visible;
                         if (geo.Collidable)
-                            properties |= MeshPropertiesV3.Collidable;
+                            properties |= MeshProperties.Collidable;
 
                         for (int faceIdx = 0; faceIdx < geo.Crystal.Faces.Length; faceIdx++)
                         {
@@ -199,7 +199,7 @@ public class ItemParser
                     {
                         var sourcePositions = trigger.Crystal!.Positions;
                         if (trigger.IsEnabled)
-                            properties |= MeshPropertiesV3.Enabled;
+                            properties |= MeshProperties.Enabled;
                         foreach (var face in trigger.Crystal.Faces)
                         {
                             var mat = face.Material!.MaterialUserInst!;
@@ -268,7 +268,7 @@ public class ItemParser
                 var texArr = bucket.TexCoords?.ToArray() ?? [];
                 var lmArr = bucket.LightmapCoords?.ToArray() ?? [];
 
-                var normalizedModel = new NormalizedModelV3();
+                var normalizedModel = new NormalizedModel();
                 if (bucket.Type == Mesh)
                 {
 
@@ -291,9 +291,9 @@ public class ItemParser
                     nrmArr = nrmArr.Select(QuantizeVec3_10b).ToArray();
 
 
-                    normalizedModel.Type = ModelTypeV3.Static;
+                    normalizedModel.Type = ModelType.Static;
 
-                    var mesh = new NormalizedMeshV3()
+                    var mesh = new NormalizedMesh()
                     {
                         Positions = posArr,
                         Normals = nrmArr,
@@ -319,7 +319,7 @@ public class ItemParser
                 }
                 else if (bucket.Type == Trigger)
                 {
-                    var shape = new NormalizedShapeV3()
+                    var shape = new NormalizedShape()
                     {
                         Positions = posArr,
                         Indices = idxArr,
@@ -330,12 +330,12 @@ public class ItemParser
                     triggers.Add(new ShapeRef()
                     {
                         ShapeKey = key,
-                        Role = ShapeRoleV3.Trigger_Waypoint,
+                        Role = ShapeRole.Trigger_Waypoint,
                     });
                 }
                 else if (bucket.Type == Collision)
                 {
-                    var shape = new NormalizedShapeV3()
+                    var shape = new NormalizedShape()
                     {
                         Positions = posArr,
                         Indices = idxArr,
@@ -346,22 +346,22 @@ public class ItemParser
                     collisionShapes.Add(new ShapeRef()
                     {
                         ShapeKey = key,
-                        Role = ShapeRoleV3.Static,
+                        Role = ShapeRole.Static,
                     });
                 }
             }
         }
 
-        var root = new NormalizedModelV3()
+        var root = new NormalizedModel()
         {
-            Type = ModelTypeV3.Container,
+            Type = ModelType.Container,
         };
         normalizedItem.ModelPool.Add(normalizedItem.ModelPool.Count, root);
         if (meshes.Count > 0 || collisionShapes.Count > 0)
         {
-            var model = new NormalizedModelV3()
+            var model = new NormalizedModel()
             {
-                Type = ModelTypeV3.Static,
+                Type = ModelType.Static,
                 Meshes = meshes,
                 Shapes = collisionShapes,
             };
@@ -371,9 +371,9 @@ public class ItemParser
         }
         if (triggers.Count > 0)
         {
-            var model = new NormalizedModelV3()
+            var model = new NormalizedModel()
             {
-                Type = ModelTypeV3.Trigger_Waypoint,
+                Type = ModelType.Trigger_Waypoint,
                 Shapes = triggers,
                 WaypointNoRespawn = false,
                 WaypointType = normalizedItem.WaypointType,
@@ -489,7 +489,7 @@ public class ItemParser
         }
     }
 
-    ToolResult<None> ParsePrefabEntityModel(CPlugPrefab prefab, EntityRefBase? entityRef, NormalizedItemV3 normalizedItem) 
+    ToolResult<None> ParsePrefabEntityModel(CPlugPrefab prefab, EntityRefBase? entityRef, NormalizedItem normalizedItem) 
     {
         if (parseContext.nodeRefTable.TryGetKey(prefab, out var key))
         {
@@ -498,9 +498,9 @@ public class ItemParser
         }
 
         key = normalizedItem.ModelPool.Count.ToString();
-        var container = new NormalizedModelV3()
+        var container = new NormalizedModel()
         {
-            Type = ModelTypeV3.Container,
+            Type = ModelType.Container,
         };
         normalizedItem.ModelPool.Add(key.GetHashCode(), container);
 
@@ -518,7 +518,7 @@ public class ItemParser
         }
         return ToolResult.Success(nameof(ItemParser));
     }
-    ToolResult<None> ParsePrefab(CPlugPrefab prefab, EntityRefBase entityRef, NormalizedItemV3 normalizedItem, NormalizedModelV3 container)
+    ToolResult<None> ParsePrefab(CPlugPrefab prefab, EntityRefBase entityRef, NormalizedItem normalizedItem, NormalizedModel container)
     {
         if (parseContext.nodeRefTable.TryGetKey(prefab, out var key))
         {
@@ -528,9 +528,9 @@ public class ItemParser
         key = normalizedItem.ModelPool.Count.ToString();
 
 
-        var model = new NormalizedModelV3()
+        var model = new NormalizedModel()
         {
-            Type = ModelTypeV3.Container,
+            Type = ModelType.Container,
         };
         normalizedItem.ModelPool.Add(key.GetHashCode(), model);
         entityRef.ModelKey = key.GetHashCode();
@@ -544,7 +544,7 @@ public class ItemParser
         }
         return ToolResult.Success(nameof(ItemParser));
     }
-    ToolResult<None> ParseEntRef(EntRef entRef, NormalizedItemV3 normalizedItem, NormalizedModelV3 container)
+    ToolResult<None> ParseEntRef(EntRef entRef, NormalizedItem normalizedItem, NormalizedModel container)
     {
         // Special case kinematic constraints, which are not represented as a model but rather as a constraint on another entity
         if (entRef.Model is NPlugDyna_SKinematicConstraint kinematicConstraint)
@@ -606,7 +606,7 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    ToolResult<None> ParseStaticObjectModel(CPlugStaticObjectModel staticObjectModel, EntityRef entityRef, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseStaticObjectModel(CPlugStaticObjectModel staticObjectModel, EntityRef entityRef, NormalizedItem normalizedItem)
     {
         //already parsed this model, just reference it
         if (parseContext.nodeRefTable.TryGetKey(staticObjectModel, out var key))
@@ -620,9 +620,9 @@ public class ItemParser
         // register this model in the nodeRefTable so we don't parse it again
         parseContext.nodeRefTable.Register(key, staticObjectModel);
 
-        var model = new NormalizedModelV3()
+        var model = new NormalizedModel()
         {
-            Type = ModelTypeV3.Static,
+            Type = ModelType.Static,
         };
         // add the model to the pool so it can be referenced by other entities
         normalizedItem.ModelPool.Add(key.GetHashCode(), model);
@@ -641,7 +641,7 @@ public class ItemParser
 
         var shapeRef = new ShapeRef()
         {
-            Role = ShapeRoleV3.Static,
+            Role = ShapeRole.Static,
         };
         var shapeResult = ParseShape(staticObjectModel.Shape, shapeRef, normalizedItem);
         if (shapeResult.IsFailure)
@@ -652,7 +652,7 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    ToolResult<None> ParseDynamicObjectModel(CPlugDynaObjectModel dynamicObjectModel, EntRef ent, EntityRef entityRef, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseDynamicObjectModel(CPlugDynaObjectModel dynamicObjectModel, EntRef ent, EntityRef entityRef, NormalizedItem normalizedItem)
     {
         // register this model in the dynaIndexToEntityRef so that kinematic constraints can reference it later
         parseContext.dynaIndexToEntityRef[parseContext.processedDynaObjectModels.Count] = entityRef;
@@ -673,9 +673,9 @@ public class ItemParser
         parseContext.nodeRefTable.Register(key, dynamicObjectModel);
 
 
-        var model = new NormalizedModelV3()
+        var model = new NormalizedModel()
         {
-            Type = ModelTypeV3.Dynamic,
+            Type = ModelType.Dynamic,
         };
         // add the model to the pool so it can be referenced by other entities
         normalizedItem.ModelPool.Add(key.GetHashCode(), model);
@@ -694,7 +694,7 @@ public class ItemParser
         {
             var staticShapeRef = new ShapeRef()
             {
-                Role = ShapeRoleV3.Static,
+                Role = ShapeRole.Static,
             };
             var shapeResult = ParseShape(dynamicObjectModel.StaticShape, staticShapeRef, normalizedItem);
             if (shapeResult.IsFailure)
@@ -707,7 +707,7 @@ public class ItemParser
         {
             var dynamicShapeRef = new ShapeRef()
             {
-                Role = ShapeRoleV3.Dynamic,
+                Role = ShapeRole.Dynamic,
             };
             var shapeResult = ParseShape(dynamicObjectModel.DynaShape, dynamicShapeRef, normalizedItem);
             if (shapeResult.IsFailure)
@@ -718,7 +718,7 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    ToolResult<None> ParseTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial, EntityRef entityRef, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseTriggerSpecial(NPlugTrigger_SSpecial triggerSpecial, EntityRef entityRef, NormalizedItem normalizedItem)
     {
         if (parseContext.nodeRefTable.TryGetKey(triggerSpecial, out var key))
         {
@@ -737,9 +737,9 @@ public class ItemParser
         ushort gamplayIdShort = triggerShape.GetChunk<CPlugSurface.Chunk0900C003>()?.U02?.FirstOrDefault() ?? 0;
         var triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
 
-        var model = new NormalizedModelV3()
+        var model = new NormalizedModel()
         {
-            Type = ModelTypeV3.Trigger_Special,
+            Type = ModelType.Trigger_Special,
             TriggerGameplayId = triggerGameplayId,
             GameplayMainDir = triggerShape.Surf?.GameplayMainDir ?? new Vector3(0,0,1),
         };
@@ -752,7 +752,7 @@ public class ItemParser
 
         var triggerShapeRef = new ShapeRef()
         {
-            Role = ShapeRoleV3.Trigger_Special,
+            Role = ShapeRole.Trigger_Special,
         };
         var shapeResult = ParseShape(triggerShape, triggerShapeRef, normalizedItem);
         if (shapeResult.IsFailure)
@@ -762,7 +762,7 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    ToolResult<None> ParseTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint, EntityRef entityRef, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseTriggerWaypoint(NPlugTrigger_SWaypoint triggerWaypoint, EntityRef entityRef, NormalizedItem normalizedItem)
     {
         // register this model in the waypointIndexToEntityRef so that waypoint spawn can reference it later
         parseContext.waypointIndexToEntityRef[parseContext.processedWaypointModels.Count] = entityRef;
@@ -783,9 +783,9 @@ public class ItemParser
         parseContext.nodeRefTable.Register(key, triggerWaypoint);
 
 
-        var model = new NormalizedModelV3()
+        var model = new NormalizedModel()
         {
-            Type = ModelTypeV3.Trigger_Waypoint,
+            Type = ModelType.Trigger_Waypoint,
             WaypointType = (EWaypointType?)triggerWaypoint.Type,
             WaypointNoRespawn = triggerWaypoint.NoRespawn,
         };
@@ -798,7 +798,7 @@ public class ItemParser
 
         var triggerShapeRef = new ShapeRef()
         {
-            Role = ShapeRoleV3.Trigger_Waypoint,
+            Role = ShapeRole.Trigger_Waypoint,
         };
         var shapeResult = ParseShape(triggerShape, triggerShapeRef, normalizedItem);
         if (shapeResult.IsFailure)
@@ -821,8 +821,8 @@ public class ItemParser
     }
     void ParseSolid2Model(
         CPlugSolid2Model solid2Model,
-        NormalizedModelV3 normalizedModel,
-        NormalizedItemV3 normalizedItem,
+        NormalizedModel normalizedModel,
+        NormalizedItem normalizedItem,
         bool meshIsCollisionSource)
     {
         bool hasLods = solid2Model.LodMaxDistAtFov90?.Length > 0;
@@ -841,14 +841,14 @@ public class ItemParser
 
             // disable collision for non-collision source meshes (shape takes role of collision)
             if (!meshIsCollisionSource)
-                meshRef.Properties &= ~MeshPropertiesV3.Collidable; 
+                meshRef.Properties &= ~MeshProperties.Collidable; 
 
             // set LOD properties
             if (hasLods)
             {
                 if (!LODUtils.IsVisibleInAllLods(shaded.LodMask, solid2Model.LodMaxDistAtFov90!.Length)) // check if has any lod or always visible
                 {
-                    meshRef.Properties |= MeshPropertiesV3.LOD;
+                    meshRef.Properties |= MeshProperties.LOD;
                 }
                 meshRef.LODMask = shaded.LodMask;
             }
@@ -889,12 +889,12 @@ public class ItemParser
         CPlugVisualIndexedTriangles visual,
         CPlugMaterialUserInst material, 
         MeshRef meshRef,
-        NormalizedItemV3 normalizedItem)
+        NormalizedItem normalizedItem)
     {
         // properties, lod/smoothing group, etc. are set within static object model compilation.
-        meshRef.Properties = MeshPropertiesV3.Enabled | MeshPropertiesV3.Visible;
+        meshRef.Properties = MeshProperties.Enabled | MeshProperties.Visible;
         if (material.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable)
-            meshRef.Properties |= MeshPropertiesV3.Collidable;
+            meshRef.Properties |= MeshProperties.Collidable;
 
         // already parsed this mesh, just reference it
         if (parseContext.nodeRefTable.TryGetKey(visual, out var key))
@@ -939,7 +939,7 @@ public class ItemParser
                 }
 
             }
-            var normalizedMesh = new NormalizedMeshV3()
+            var normalizedMesh = new NormalizedMesh()
             {
                 Positions = stream.Positions!,
                 Normals = stream.Normals!,
@@ -959,7 +959,7 @@ public class ItemParser
         }
         else if (visual.Vertices.Length > 0)
         {
-            var emptyMesh = new NormalizedMeshV3()
+            var emptyMesh = new NormalizedMesh()
             {
                 Positions = visual.Vertices.Select(v => v.Position).ToArray(),
                 Normals = visual.Vertices.Select(v => v.Normal ?? new Vec3(0, 1, 0)).ToArray(),
@@ -983,12 +983,12 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    void ParseLightModel(CPlugLightUserModel lightModel, Socket socket, LightRef lightRef, NormalizedItemV3 normalizedItem)
+    void ParseLightModel(CPlugLightUserModel lightModel, Socket socket, LightRef lightRef, NormalizedItem normalizedItem)
     {
         // currently no reference reuse for lights as they are lightweight.
 
         var key = normalizedItem.LightPool.Count.ToString();
-        var normalizedLight = new NormalizedLightV3
+        var normalizedLight = new NormalizedLight
         {
             LightModel = ObjectCloner.DeepCloneObject(lightModel)!,
             Name = $"Light_{key}",
@@ -998,7 +998,7 @@ public class ItemParser
         lightRef.LightKey = key.GetHashCode();
     }
 
-    ToolResult<None> ParseShape(CPlugSurface surface, ShapeRef shapeRef, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseShape(CPlugSurface surface, ShapeRef shapeRef, NormalizedItem normalizedItem)
     {
         if (parseContext.nodeRefTable.TryGetKey(surface, out var key))
         {
@@ -1010,7 +1010,7 @@ public class ItemParser
 
         parseContext.nodeRefTable.Register(key, surface);
 
-        var shape = new NormalizedShapeV3()
+        var shape = new NormalizedShape()
         {
         };
 
@@ -1032,7 +1032,7 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    void ParseSurfaceMesh(CPlugSurface.Mesh mesh, NormalizedShapeV3 normalizedShape, NormalizedItemV3 normalizedItem)
+    void ParseSurfaceMesh(CPlugSurface.Mesh mesh, NormalizedShape normalizedShape, NormalizedItem normalizedItem)
     {
         normalizedShape.Positions = mesh.Vertices.ToArray();
 
@@ -1052,7 +1052,7 @@ public class ItemParser
         }
     }
 
-    ToolResult<None> ParseCommonItemEntityModel(CGameCommonItemEntityModel commonItemEntityModel, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseCommonItemEntityModel(CGameCommonItemEntityModel commonItemEntityModel, NormalizedItem normalizedItem)
     {
         var containerkey = normalizedItem.ModelPool.Count;
 
@@ -1061,9 +1061,9 @@ public class ItemParser
         var staticModel = commonItemEntityModel.StaticObject;
 
         // root container
-        var container = new NormalizedModelV3()
+        var container = new NormalizedModel()
         {
-            Type = ModelTypeV3.Container,
+            Type = ModelType.Container,
         };
         normalizedItem.ModelPool.Add(containerkey, container);
         normalizedItem.Model = container;
@@ -1084,9 +1084,9 @@ public class ItemParser
             return ToolResult.Success(nameof(ItemParser)); // early return if no triggershape
 
         bool isWaypoint = normalizedItem.WaypointType == EWaypointType.None;
-        var triggerModel = new NormalizedModelV3()
+        var triggerModel = new NormalizedModel()
         {
-            Type = isWaypoint ? ModelTypeV3.Trigger_Waypoint : ModelTypeV3.Trigger_Special,
+            Type = isWaypoint ? ModelType.Trigger_Waypoint : ModelType.Trigger_Special,
         };
         var triggerModelKey = normalizedItem.ModelPool.Count;
         normalizedItem.ModelPool.Add(triggerModelKey, triggerModel);
@@ -1101,7 +1101,7 @@ public class ItemParser
 
         var shapeRef = new ShapeRef()
         {
-            Role = isWaypoint ? ShapeRoleV3.Trigger_Waypoint : ShapeRoleV3.Trigger_Special,
+            Role = isWaypoint ? ShapeRole.Trigger_Waypoint : ShapeRole.Trigger_Special,
         };
         triggerModel.Shapes.Add(shapeRef);
 
@@ -1128,14 +1128,14 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    ToolResult<None> ParseVariantList(NPlugItem_SVariantList variantList, NormalizedItemV3 normalizedItem)
+    ToolResult<None> ParseVariantList(NPlugItem_SVariantList variantList, NormalizedItem normalizedItem)
     {
         // root container
         var containerkey = normalizedItem.ModelPool.Count;
 
-        var container = new NormalizedModelV3()
+        var container = new NormalizedModel()
         {
-            Type = ModelTypeV3.Variant_List,
+            Type = ModelType.Variant_List,
         };
         normalizedItem.ModelPool.Add(containerkey, container);
         normalizedItem.Model = container;
@@ -1149,7 +1149,7 @@ public class ItemParser
         }
         return ToolResult.Success(nameof(ItemParser));
     }
-    ToolResult<None> ParseVariant(NPlugItem_SVariant variant, NormalizedItemV3 normalizedItem, NormalizedModelV3 container)
+    ToolResult<None> ParseVariant(NPlugItem_SVariant variant, NormalizedItem normalizedItem, NormalizedModel container)
     {
         if (variant.EntityModel is not CPlugPrefab prefab)
             return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.UnsupportedVariantType);
@@ -1157,7 +1157,7 @@ public class ItemParser
 
         var key = normalizedItem.ModelPool.Count;
 
-        var normVariant = new NormalizedVariantV3()
+        var normVariant = new NormalizedVariant()
         {
             Tags = variant.Tags.ToDictionary(),
             HiddenInManualCycle = variant.HiddenInManualCycle,

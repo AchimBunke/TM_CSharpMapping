@@ -23,7 +23,7 @@ public class VariantItemBuilder
 
         var firstModel = normalizedItem.Model;
 
-        var normVariantItem = new NormalizedItemV3
+        var normVariantItem = new NormalizedItem
         {
             PlacementParam = normalizedItem.PlacementParam,
             Description = normalizedItem.Description,
@@ -33,9 +33,9 @@ public class VariantItemBuilder
             WaypointType = normalizedItem.WaypointType,
         };
        
-        normVariantItem.Model = new NormalizedModelV3
+        normVariantItem.Model = new NormalizedModel
         {
-            Type = ModelTypeV3.Variant_List,
+            Type = ModelType.Variant_List,
             Variants = [],
         };
         normVariantItem.ModelPool.Add(0, normVariantItem.Model);
@@ -48,7 +48,7 @@ public class VariantItemBuilder
             int shapeCount = normVariantItem.ShapePool.Count;
             int lightCount = normVariantItem.LightPool.Count;
 
-            NormalizedItemV3 normItem;
+            NormalizedItem normItem;
             if (i == 0)
                 normItem = normalizedItem;
             else
@@ -131,9 +131,9 @@ public class VariantItemBuilder
 
 
 
-    NormalizedVariantV3 CreateVariantModel(NormalizedItemV3 normalizedItem, ItemVariantInput input)
+    NormalizedVariant CreateVariantModel(NormalizedItem normalizedItem, ItemVariantInput input)
     {
-        var group = new NormalizedVariantV3();
+        var group = new NormalizedVariant();
         group.Tags = input.Tags;
         group.HiddenInManualCycle = input.HiddenInManualCycle;
         return group;

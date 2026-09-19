@@ -34,7 +34,7 @@ internal class FbxIconLoader
 
         return colors;
     }
-    public static Stream ExtractIcon(NormalizedItemV3 item)
+    public static Stream ExtractIcon(NormalizedItem item)
     {
         if (item.Icon is null)
             return Stream.Null;

@@ -8,11 +8,7 @@ using Matrix4x4 = System.Numerics.Matrix4x4;
 namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
 
 /// <summary>
-/// Assimp-backed implementation of <see cref="ISceneImporter"/>. This is the single place that
-/// knows about Assimp types, coordinate space, unit scale (currently cm -&gt; m), and axis conventions.
-/// If the import library is ever swapped, only a new <see cref="ISceneImporter"/> implementation
-/// needs to be written - the rest of the V3 conversion pipeline works exclusively against the
-/// neutral <see cref="ImportedScene"/> DTOs.
+/// TODO: If used needs to be re-implemented for current required scene structure.
 /// </summary>
 public class AssimpNetSceneImporter : ISceneImporter
 {

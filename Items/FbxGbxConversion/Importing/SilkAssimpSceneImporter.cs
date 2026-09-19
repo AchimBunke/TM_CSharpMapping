@@ -11,7 +11,7 @@ namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
 /// Assimp-backed implementation of <see cref="ISceneImporter"/>. This is the single place that
 /// knows about Assimp types, coordinate space, unit scale (currently cm -&gt; m), and axis conventions.
 /// If the import library is ever swapped, only a new <see cref="ISceneImporter"/> implementation
-/// needs to be written - the rest of the V3 conversion pipeline works exclusively against the
+/// needs to be written - the rest of the conversion pipeline works exclusively against the
 /// neutral <see cref="ImportedScene"/> DTOs.
 /// </summary>
 public class SilkAssimpSceneImporter : ISceneImporter
@@ -32,9 +32,6 @@ public class SilkAssimpSceneImporter : ISceneImporter
     public  ImportedScene Import(Stream stream)
     {
         using var context = Assimp.GetApi();
-        var v = context.GetVersionMajor();
-        var v2 = context.GetVersionMinor();
-        var v3 = context.GetVersionPatch();
 
         unsafe
         {

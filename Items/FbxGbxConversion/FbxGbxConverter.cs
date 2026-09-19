@@ -1,49 +1,46 @@
-﻿/*using Assimp;
-using Assimp.Unmanaged;
-using DirectXTexNet;
-using GBX.NET;
 using GBX.NET.Engines.GameData;
-using GBX.NET.Engines.Plug;
-using SixLabors.ImageSharp;
-using System.IO.Compression;
+using Silk.NET.Maths;
 using System.Numerics;
+using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
+using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
-using TM_GenericMapping.Templating;
+using static GBX.NET.Engines.Plug.CPlugCrystal;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
+/// <summary>
+/// Converts FBX scenes into <see cref="NormalizedItem"/>/<see cref="CGameItemModel"/> using the new
+/// position/rotation hierarchy item model. Unlike the legacy <see cref="FbxGbxConverter"/>, mesh vertices
+/// are NOT baked into a shared world anchor - each group's meshes are expressed relative to the group's own
+/// anchor transform (position AND rotation), and that anchor is stored on the group's EntityRef, since
+/// NormalizedItem natively supports a position/rotation hierarchy.
+/// </summary>
 public class FbxGbxConverter
 {
-    MeshBuilder meshBuilder = new();
-
-    public ToolResult<CGameItemModel> ConvertToGbx(
-        FbxGbxConversionInput conversionInput,
-        MeshBuilder.ItemModel targetModel = MeshBuilder.ItemModel.General)
+    public ToolResult<CGameItemModel> ConvertToGbx(FbxGbxConversionInput conversionInput, CompileOptions? compileOptions = null)
     {
-
         var normalizedItemResult = ConvertToNormalizedItem(conversionInput);
         if (normalizedItemResult.IsFailure)
             return ToolResult.Fail(normalizedItemResult);
 
-        var buildSettings = CreateBuildSettings(normalizedItemResult.Value, conversionInput);
-        buildSettings.TargetModel = targetModel;
-        var itemResult = meshBuilder.BuildItem(normalizedItemResult.Value, buildSettings);
+        var buildSettings = BuildSettings.DefaultFromItem(normalizedItemResult.Value);
+        var compiler = new ItemCompiler();
+        var itemResult = compiler.Compile(normalizedItemResult.Value, buildSettings, compileOptions ?? new CompileOptions());
 
-        if(itemResult.IsFailure)
+        if (itemResult.IsFailure)
             return ToolResult.Fail(itemResult);
-
 
         return ToolResult.Success(itemResult.Value, nameof(FbxGbxConverter));
     }
 
-    public ToolResult<CGameItemModel> ConvertToGbxAndSaveItem(FbxGbxConversionInput conversionInput,
-        MeshBuilder.ItemModel targetModel = MeshBuilder.ItemModel.General)
+    public ToolResult<CGameItemModel> ConvertToGbxAndSaveItem(FbxGbxConversionInput conversionInput, CompileOptions? compileOptions = null)
     {
-        if(string.IsNullOrWhiteSpace(conversionInput.ItemOutputPath))
+        if (string.IsNullOrWhiteSpace(conversionInput.ItemOutputPath))
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.InvalidItemOutputPath);
 
-        var itemResult = ConvertToGbx(conversionInput, targetModel);
+        var itemResult = ConvertToGbx(conversionInput, compileOptions);
         if (itemResult.IsFailure)
             return ToolResult.Fail(itemResult);
 
@@ -55,36 +52,27 @@ public class FbxGbxConverter
 
     public ToolResult<NormalizedItem> ConvertToNormalizedItem(FbxGbxConversionInput conversionInput)
     {
-        var fbxSceneResult = FbxSceneReader.ParseFbx(conversionInput.Fbx);
-        if(fbxSceneResult.IsFailure)
-            return ToolResult.Fail(fbxSceneResult);
+        ImportedScene scene;
+        try
+        {
+            var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
+            scene = importer.Import(conversionInput.Fbx);
+        }
+        catch (Exception e)
+        {
+            return ToolResult.Fail<NormalizedItem>(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.FbxParsingError, e);
+        }
 
-        return ConvertToNormalizedItem(fbxSceneResult.Value, conversionInput);
+        return ConvertToNormalizedItem(scene, conversionInput);
     }
 
-    public ToolResult<CGameItemModel> CreateVariantItem(VariantItemCreationInput variantCreationInput)
+    protected virtual ISceneImporter CreateSceneImporter(float scale) => new SilkAssimpSceneImporter(scale);
+
+    ToolResult<NormalizedItem> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config)
     {
-        var builder = new VariantItemBuilder();
-        var itemResult = builder.CreateVariantItem(variantCreationInput.ItemVariants.ToArray());
-        if (itemResult.IsFailure)
-            return ToolResult.Fail(itemResult);
-        return ToolResult.Success(itemResult.Value, nameof(FbxGbxConverter));
-    }
-
-
-
-
-    ToolResult<NormalizedItem> ConvertToNormalizedItem(Scene scene, FbxGbxConversionInput config)
-    {
-        var normalizedItem = new NormalizedItem();
-
-        normalizedItem.PlacementParam = CreatePlacementParameters(config);
-
-        List<NormalizedMesh> meshes = new List<NormalizedMesh>();
-        List<NodeDefGroup> groups = new List<NodeDefGroup>();
+        var item = new NormalizedItem();
 
         var materialConverter = new FbxMaterialConverter(config.MaterialLibrary);
-
         var materialResults = materialConverter.ExtractMaterials(scene, config);
         if (materialResults.IsFailure)
             return ToolResult.Fail(materialResults);
@@ -96,81 +84,160 @@ public class FbxGbxConverter
         var socketResults = FbxMeshConverter.ExtractSockets(scene, config);
         if (socketResults.IsFailure)
             return ToolResult.Fail(socketResults);
-        if(socketResults.Value.Count > 1)
+        if (socketResults.Value.Count > 1)
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MultipleSocketsNotSupported);
 
         var lightResults = FbxLightConverter.ExtractLights(scene, config);
         if (lightResults.IsFailure)
             return ToolResult.Fail(lightResults);
 
-
         var nodes = FilterAndApplySpecialMeshItems(scene, nodeResults.Value, materialResults.Value);
 
-        var groupResults = FbxMeshConverter.GroupNodes(nodes, socketResults.Value, config);
+        var groupResults = FbxMeshConverter.GroupNodes(nodes, nodeResults.Value, socketResults.Value, config);
         if (groupResults.IsFailure)
             return ToolResult.Fail(groupResults);
 
-        var lightGroupResult = FbxLightConverter.GroupLights(lightResults.Value, groupResults.Value);
-        if (lightGroupResult.IsFailure)
-            return ToolResult.Fail(lightGroupResult);
+        var groups = groupResults.Value;
 
-        AnchorObjects(scene, groupResults.Value, nodes, lightResults.Value);
+        // Root container model that references every group as a child EntityRef.
+        var rootModel = new NormalizedModel { Type = ModelType.Container };
+        int rootKey = 0;
+        item.ModelPool[rootKey] = rootModel;
+        item.Model = rootModel;
 
-        var meshResults = FbxMeshConverter.ExtractMeshes(scene, groupResults.Value, materialResults.Value, nodes, config);
-        if (meshResults.IsFailure)
-            return ToolResult.Fail(meshResults);
+        var groupIndexToModelKey = new Dictionary<int, int>();
+        var groupIndexToAnchorPosition = new Dictionary<int, Vector3>();
+        var groupIndexToAnchorRotation = new Dictionary<int, Quaternion>();
+        var groupIndexToEntityRef = new Dictionary<int, EntityRef>();
+        var groupKeyToIndex = new Dictionary<string, int>();
 
-
-        SetMetaData(normalizedItem, config);
-
-        normalizedItem.Groups = groupResults.Value.ToArray();
-        normalizedItem.Meshes = meshResults.Value.ToArray();
-        normalizedItem.Lights = lightResults.Value.Select(lr => lr.Light).ToArray();
-
-        return ToolResult.Success(normalizedItem, nameof(FbxGbxConverter));
-    }
-    void SetMetaData(NormalizedItem normalizedItem, FbxGbxConversionInput config)
-    {
-        normalizedItem.Icon = FbxIconLoader.LoadIcon(config);
-
-        if (config.ItemConfig.Name != null)
-            normalizedItem.Name = config.ItemConfig.Name;
-        else
-            normalizedItem.Name = "Unnamed Item";
-        if (config.ItemConfig.Description != null)
-            normalizedItem.Description = config.ItemConfig.Description;
-        else
-            normalizedItem.Description = "No Description";
-    }
-    void AnchorObjects(Scene scene, List<MeshGroup> meshGroups, List<NodeDef> nodes, List<LightDef> lights)
-    {
-        for (int i = 0; i < meshGroups.Count; ++i)
+        for (int i = 0; i < groups.Count; i++)
         {
-            var group = meshGroups[i];
-            var pos = group.Position;
-            if (pos == Vector3.Zero)
-                continue;
-            //pos = new Vector3(pos.X, pos.Z, -pos.Y);
-            foreach(var node in nodes.Where(n=>n.GroupIndex == i))
+            var group = groups[i];
+            groupKeyToIndex[group.GroupKey] = i;
+
+            var (anchorPos, anchorRot) = FbxMeshConverter.ComputeGroupAnchor(group);
+            groupIndexToAnchorPosition[i] = anchorPos;
+            groupIndexToAnchorRotation[i] = anchorRot;
+
+            var model = new NormalizedModel
             {
-                node.GlobalTransform = MakeRelativeToPosition(node.GlobalTransform, pos);
+                Type = group.Type,
+                LODDistances = group.LodDistances.ToArray(),
+                WaypointType = group.WaypointType,
+                WaypointNoRespawn = group.WaypointNoRespawn,
+                TriggerGameplayId = group.TriggerGameplayId,
+                GameplayMainDir = group.GameplayMainDir,
+            };
+
+            int modelKey = item.ModelPool.Count == 0 ? 0 : item.ModelPool.Keys.Max() + 1;
+            item.ModelPool[modelKey] = model;
+            groupIndexToModelKey[i] = modelKey;
+
+            var entityRef = new EntityRef
+            {
+                ModelKey = modelKey,
+                Position = anchorPos,
+                Rotation = anchorRot,
+                KinematicConstraint = group.KinematicConstraint,
+                DynaObjectModelParams = group.DynaObjectModelParams,
+            };
+
+            if (group.WaypointSpawnModel is not null)
+            {
+                var spawnLoc = group.WaypointSpawnModel.SpawnModel.Loc;
+                entityRef.WaypointSpawnPosition = new Vector3(spawnLoc.TX, spawnLoc.TY, spawnLoc.TZ);
+                entityRef.WaypointSpawnRotation = Quaternion.CreateFromRotationMatrix(new Matrix4x4(
+                    spawnLoc.XX, spawnLoc.XY, spawnLoc.XZ, 0,
+                    spawnLoc.YX, spawnLoc.YY, spawnLoc.YZ, 0,
+                    spawnLoc.ZX, spawnLoc.ZY, spawnLoc.ZZ, 0,
+                    0, 0, 0, 1));
             }
-            foreach (var light in lights.Where(l => l.Light.GroupIndex == i))
+
+            groupIndexToEntityRef[i] = entityRef;
+            rootModel.Children.Add(entityRef);
+        }
+
+        // resolve relative moving parents now that all groups have model keys
+        for (int i = 0; i < groups.Count; i++)
+        {
+            var group = groups[i];
+            if (!string.IsNullOrEmpty(group.RelativeMovingParentGroupId))
             {
-                light.Light.Position -= pos;
+                var parentIndex = groups
+                    .Select((g, idx) => (g, idx))
+                    .Where(t => t.g.Type == ModelType.Dynamic)
+                    .FirstOrDefault(t => t.g.OriginalGroupId == group.RelativeMovingParentGroupId).idx;
+
+                groupIndexToEntityRef[i].RelativeMovingParentKey = groupIndexToModelKey[parentIndex];
             }
         }
-    }
-    static Assimp.Matrix4x4 MakeRelativeToPosition(Assimp.Matrix4x4 globalTransform, Vector3 position)
-    {
-        Assimp.Matrix4x4 result = globalTransform;
-        result.A4 -= position.X;
-        result.B4 -= position.Y;
-        result.C4 -= position.Z;
-        return result;
+
+        var meshResult = FbxMeshConverter.ExtractMeshes(scene, groups, materialResults.Value, nodes, config, item,
+            groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
+        if (meshResult.IsFailure)
+            return ToolResult.Fail(meshResult);
+
+        AssignLightsToGroups(item, lightResults.Value, groups, groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
+
+        SetMetaData(item, config);
+
+        item.PlacementParam = CreatePlacementParameters(config);
+
+        return ToolResult.Success(item, nameof(FbxGbxConverter));
     }
 
-    List<NodeDef> FilterAndApplySpecialMeshItems(Scene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)
+    void AssignLightsToGroups(
+        NormalizedItem item,
+        List<LightDef> lights,
+        List<NodeDefGroup> groups,
+        Dictionary<int, int> groupIndexToModelKey,
+        Dictionary<int, Vector3> groupIndexToAnchorPosition,
+        Dictionary<int, Quaternion> groupIndexToAnchorRotation)
+    {
+        int firstStaticGroupIndex = groups.FindIndex(g => g.Type == ModelType.Static);
+        if (firstStaticGroupIndex < 0)
+            firstStaticGroupIndex = 0;
+
+        if (groups.Count == 0 || lights.Count == 0)
+            return;
+
+        var anchorPos = groupIndexToAnchorPosition[firstStaticGroupIndex];
+        var anchorRot = groupIndexToAnchorRotation[firstStaticGroupIndex];
+        var modelKey = groupIndexToModelKey[firstStaticGroupIndex];
+        var model = item.ModelPool[modelKey];
+
+        var anchorInverseRotation = Quaternion.Inverse(anchorRot);
+        foreach (var lightDef in lights)
+        {
+            int lightKey = item.LightPool.Count == 0 ? 0 : item.LightPool.Keys.Max() + 1;
+            item.LightPool[lightKey] = lightDef.Light;
+
+            var localPos = Vector3.Transform(lightDef.Position - anchorPos, anchorInverseRotation);
+            var localRot = lightDef.Rotation * anchorRot;   
+
+            model.Lights.Add(new LightRef
+            {
+                LightKey = lightKey,
+                Position = localPos,
+                Rotation = localRot,
+            });
+        }
+    }
+
+    void SetMetaData(NormalizedItem item, FbxGbxConversionInput config)
+    {
+        item.Icon = FbxIconLoader.LoadIcon(config);
+        item.Name = !string.IsNullOrWhiteSpace(config.ItemConfig.Name) ? config.ItemConfig.Name! : "Unnamed Item";
+        item.Description = !string.IsNullOrWhiteSpace(config.ItemConfig.Description) ? config.ItemConfig.Description! : "No Description";
+        item.WaypointType = config.ItemConfig.Waypoint?.Type ?? GBX.NET.Engines.GameData.CGameItemModel.EWaypointType.None;
+    }
+    CGameItemPlacementParam CreatePlacementParameters(FbxGbxConversionInput config)
+    {
+        return PlacementConfig.ToPlacementParam(config.ItemConfig.PlacementParams);
+    }
+
+    List<NodeDef> FilterAndApplySpecialMeshItems(ImportedScene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)
     {
         List<NodeDef> nodesWithMesh = new List<NodeDef>();
 
@@ -178,152 +245,11 @@ public class FbxGbxConverter
         {
             if (nodeDef.NodeConfig.MeshFlags.HasMeshData())
             {
-                // has meshes with valid materials
                 if (nodeDef.Node.MeshIndices.Any(mi => materials[scene.Meshes[mi].MaterialIndex]?.MaterialInstance != null))
                     nodesWithMesh.Add(nodeDef);
             }
         }
 
-
         return nodesWithMesh;
     }
-
-
-    //-------------------------------------
-    // Placement Parameter
-    //-------------------------------------
-    CGameItemPlacementParam CreatePlacementParameters(FbxGbxConversionInput config)
-    {
-        return PlacementConfig.ToPlacementParam(config.ItemConfig.PlacementParams);
-    }
- 
-
-    //-------------------------------------
-    // Build Settings
-    //-------------------------------------
-    MeshBuilder.BuildSettings CreateBuildSettings(NormalizedItem normalizedItem, FbxGbxConversionInput conversionInput)
-    {
-        var buildSettings = MeshBuilder.BuildSettings.DefaultFromMesh(normalizedItem);
-
-        for (int i = 0; i < buildSettings.MeshSettings.Count; i++)
-        {
-            var meshSetting = buildSettings.MeshSettings[i];
-            var mesh = normalizedItem.Meshes[meshSetting.MeshIndex];
-            var groupSetting = buildSettings.GroupSettings.FirstOrDefault(b => b.GroupId == mesh.GroupIndex);
-            switch (groupSetting.Type)
-            {
-                case GroupType.StaticObject:
-                    break;
-                case GroupType.DynaObject:
-                    meshSetting.Movable = true;
-                    break;
-                case GroupType.Trigger_Special:
-                    meshSetting.Trigger = true;
-                    break;
-                case GroupType.Trigger_Waypoint:
-                    meshSetting.Trigger = true;
-                    break;
-            }
-        }
-        return buildSettings;
-    }
-
-
-
-    //-------------------------------------
-    // Convert to Fbx
-    //-------------------------------------
-
-    public ToolResult<(Stream fbx, ItemConfig config, Stream icon)> ConvertToFbx(CGameItemModel itemModel, DMaterialLibrary materialLibrary)
-    {
-        var scene = FbxSceneReader.CreateEmptyScene();
-
-        var result = ConvertToFbx(scene, itemModel, materialLibrary);
-        if (result.IsFailure)
-            return ToolResult.Fail(result);
-
-        using var context = new AssimpContext();
-        foreach (var desc in context.GetSupportedExportFormats())
-        {
-            Console.WriteLine($"{desc.FormatId} - {desc.Description} (.{desc.FileExtension})");
-        }
-
-        ExportDataBlob blob = context.ExportToBlob(scene, "gltf2");
-
-        var fbxStream = new MemoryStream();
-        using (var archive = new ZipArchive(fbxStream, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            var current = blob;
-            while (current != null)
-            {
-                var fileName = current.Name switch
-                {
-                    string s when string.IsNullOrEmpty(current.Name) => $"{itemModel.Name ?? "item."}.gltf",
-                    string s when current.Name.EndsWith("bin") => $"$blobfile.bin",
-                    _ => current.Name
-                };
-                var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
-                using var entryStream = entry.Open();
-                entryStream.Write(current.Data, 0, current.Data.Length);
-                current = current.NextBlob;
-            }
-        }
-        fbxStream.Position = 0;
-
-
-        //var fbxStream = new MemoryStream(blob.Data);
-
-        return ToolResult.Success(((Stream)fbxStream, result.Value.config, result.Value.icon), nameof(FbxGbxConverter));
-    }
-
-    void ExtractPlacementParamConfig(CGameItemModel item, ItemConfig config)
-    {
-        var placementConfig = PlacementConfig.FromPlacementParam(item.DefaultPlacement!);
-        config.PlacementParams = placementConfig;
-    }
-    void ExtractMetaData(NormalizedItem normalizedItem, CGameItemModel item, ItemConfig config, out Stream iconStream)
-    {
-        iconStream = FbxIconLoader.ExtractIcon(normalizedItem);
-
-        if (!string.IsNullOrWhiteSpace(normalizedItem.Name))
-            config.Name = normalizedItem.Name;
-        if (!string.IsNullOrWhiteSpace(normalizedItem.Description))
-            config.Description = normalizedItem.Description;
-        config.AuthorName = string.IsNullOrEmpty(item.Ident.Author) ? "Unknown Author" : item.Ident.Author;
-    }
-
-    ToolResult<(ItemConfig config, Stream icon)> ConvertToFbx(Scene scene, CGameItemModel item, DMaterialLibrary materialLibrary)
-    {
-        var config = new ItemConfig();
-
-        var meshExtractor = new MeshExtractor();
-        var extractionResult = meshExtractor.ExtractMesh(item);
-        if (extractionResult.IsFailure)
-            return ToolResult.Fail(extractionResult);
-
-        var normalizedItem = extractionResult.Value;
-
-        ExtractMetaData(normalizedItem, item, config, out var iconStream);
-        ExtractPlacementParamConfig(item, config);
-
-        var result = ConvertToFbx(scene, config, normalizedItem, materialLibrary);
-        if(result.IsFailure)
-            return ToolResult.Fail(result);
-
-        return ToolResult.Success((config, iconStream), nameof(FbxGbxConverter));
-    }
-
-    ToolResult<None> ConvertToFbx(Scene scene, ItemConfig itemConfig, NormalizedItem normalizedItem, DMaterialLibrary materialLibrary)
-    {
-        var materialConverter = new FbxMaterialConverter(materialLibrary);
-
-        var materialResults = materialConverter.RebuildMaterials(scene, normalizedItem, itemConfig);
-
-        var result = FbxMeshConverter.RebuildMeshes(scene, normalizedItem, itemConfig, materialResults);
-        if(result.IsFailure)
-            return ToolResult.Fail(result);
-
-        return ToolResult.Success(None.Value, nameof(FbxGbxConverter));
-    }
 }
-*/

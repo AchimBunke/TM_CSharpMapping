@@ -9,7 +9,7 @@ using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
 
-public class NormalizedItemV3
+public class NormalizedItem
 {
     public CGameItemPlacementParam? PlacementParam { get; set; }
     public byte[]? IconWebP { get; set; }
@@ -19,16 +19,16 @@ public class NormalizedItemV3
     public EWaypointType WaypointType { get; set; } = EWaypointType.None;
 
 
-    public Dictionary<int, NormalizedMeshV3> MeshPool { get; set; } = new();
-    public Dictionary<int, NormalizedShapeV3> ShapePool { get; set; } = new();
-    public Dictionary<int, NormalizedLightV3> LightPool { get; set; } = new();
-    public Dictionary<int, NormalizedModelV3> ModelPool { get; set; } = new();
+    public Dictionary<int, NormalizedMesh> MeshPool { get; set; } = new();
+    public Dictionary<int, NormalizedShape> ShapePool { get; set; } = new();
+    public Dictionary<int, NormalizedLight> LightPool { get; set; } = new();
+    public Dictionary<int, NormalizedModel> ModelPool { get; set; } = new();
 
-    public NormalizedModelV3 Model { get; set; } = null!;
+    public NormalizedModel Model { get; set; } = null!;
 
 }
 
-public class NormalizedMeshV3
+public class NormalizedMesh
 {
     public Vec3[] Positions { get; set; } = [];
     public Vec3[] Normals { get; set; } = [];
@@ -46,21 +46,21 @@ public class NormalizedMeshV3
     public string Name { get; set; } = string.Empty;
 
 }
-public class NormalizedShapeV3
+public class NormalizedShape
 {
     public Vec3[] Positions { get; set; } = [];
     public int[] Indices { get; set; } = [];
     public MaterialId[] SurfaceMaterialIds { get; set; } = [];
 
 }
-public class NormalizedLightV3
+public class NormalizedLight
 {
     public CPlugLightUserModel LightModel { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
 }
 
 [Flags]
-public enum MeshPropertiesV3
+public enum MeshProperties
 {
     None = 0,
     Enabled = 1 << 0,
@@ -68,7 +68,7 @@ public enum MeshPropertiesV3
     Collidable = 1 << 2,
     LOD = 1 << 3
 }
-public enum ModelTypeV3
+public enum ModelType
 {
     Container,
     Static,
@@ -78,7 +78,7 @@ public enum ModelTypeV3
     Variant_List,
 }
 
-public enum ShapeRoleV3
+public enum ShapeRole
 {
     Static,
     Dynamic,
@@ -90,9 +90,9 @@ public enum ShapeRoleV3
 
 
 
-public class NormalizedModelV3
+public class NormalizedModel
 {
-    public ModelTypeV3 Type { get; set; }
+    public ModelType Type { get; set; }
 
 
     public List<MeshRef> Meshes { get; set; } = new();
@@ -115,7 +115,7 @@ public class NormalizedModelV3
     public List<EntityRef> Children { get; set; } = [];
 
     // variant list properties
-    public List<NormalizedVariantV3> Variants { get; set; } = [];
+    public List<NormalizedVariant> Variants { get; set; } = [];
 }
 
 public abstract class RefBase
@@ -126,7 +126,7 @@ public abstract class EntityRefBase : RefBase
 {
     public int ModelKey { get; set; } = -1;
 }
-public class NormalizedVariantV3 : EntityRefBase
+public class NormalizedVariant : EntityRefBase
 {
     public Dictionary<string, string> Tags { get; set; } = [];
     public bool HiddenInManualCycle { get; set; }
@@ -155,13 +155,13 @@ public class MeshRef : RefBase
     public int LODMask { get; set; } = 1;
     public int? SmoothingGroup { get; set; } = 0;
     public PreLightGen? PreLightGenerator { get; set; }
-    public MeshPropertiesV3 Properties { get; set; } = MeshPropertiesV3.None;
+    public MeshProperties Properties { get; set; } = MeshProperties.None;
 }
 
 public class ShapeRef : RefBase
 {
     public int ShapeKey { get; set; }
-    public ShapeRoleV3 Role { get; set; }
+    public ShapeRole Role { get; set; }
 }
 public class LightRef : RefBase
 {

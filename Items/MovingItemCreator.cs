@@ -80,26 +80,26 @@ public class MovingItemCreator
         return ToolResult.Success(movingItem, nameof(MovingItemCreator));
 
     }
-    BuildSettings CreateDefaultBuildOptions(NormalizedItemV3 normItem, BuildSettings defaultOptions)
+    BuildSettings CreateDefaultBuildOptions(NormalizedItem normItem, BuildSettings defaultOptions)
     {
-        if (defaultOptions.Clusters.Any(c => c.Value.Type == ModelTypeV3.Dynamic))
+        if (defaultOptions.Clusters.Any(c => c.Value.Type == ModelType.Dynamic))
             return defaultOptions;
 
-        var staticGroups = defaultOptions.Clusters.Where(gs => gs.Value.Type == ModelTypeV3.Static).ToList();
+        var staticGroups = defaultOptions.Clusters.Where(gs => gs.Value.Type == ModelType.Static).ToList();
         for (int i = 0; i < staticGroups.Count; i++)
         {
             var group = staticGroups[i];
-            group.Value.Type = ModelTypeV3.Dynamic;
+            group.Value.Type = ModelType.Dynamic;
 
             defaultOptions.Clusters[group.Key] = group.Value;
 
             var groupInstances = defaultOptions.Instances.Where(i => i.Value.ClusterKey == group.Key).ToArray();
             bool meshCollidable = groupInstances.Any(i => i.Value.Collidable && i.Value.Kind == RefKind.Mesh);
-            bool hasDynaShape = groupInstances.Any(i =>i.Value.ShapeRoleOverride.HasValue && i.Value.ShapeRoleOverride.Value == ShapeRoleV3.Dynamic);
+            bool hasDynaShape = groupInstances.Any(i =>i.Value.ShapeRoleOverride.HasValue && i.Value.ShapeRoleOverride.Value == ShapeRole.Dynamic);
             foreach (var instance in groupInstances)
             {
                 if(instance.Value.ShapeRoleOverride.HasValue && 
-                    instance.Value.ShapeRoleOverride == ShapeRoleV3.Static &&
+                    instance.Value.ShapeRoleOverride == ShapeRole.Static &&
                     !hasDynaShape &&
                     !meshCollidable)
                 {
@@ -114,7 +114,7 @@ public class MovingItemCreator
                         Kind = instance.Value.Kind,
                         LightTypeOverride = instance.Value.LightTypeOverride,
                         LODMaskOverride = instance.Value.LODMaskOverride,
-                        ShapeRoleOverride = ShapeRoleV3.Dynamic,
+                        ShapeRoleOverride = ShapeRole.Dynamic,
                     };
                     var entRef = defaultOptions.EntityClusterAssignments.FirstOrDefault(ec => ec.Value == group.Key);
                     var model = FindModel(normItem, entRef.Key);
@@ -123,7 +123,7 @@ public class MovingItemCreator
                     var dynaShapeRef = new ShapeRef()
                     {
                         Id = Guid.NewGuid(),
-                        Role = ShapeRoleV3.Dynamic,
+                        Role = ShapeRole.Dynamic,
                         ShapeKey = shapeKey,
                     };
                     model.Shapes.Add(dynaShapeRef);
@@ -135,9 +135,9 @@ public class MovingItemCreator
 
         return defaultOptions;
     }
-    NormalizedModelV3? FindModel(NormalizedItemV3 item, Guid entRefId)
+    NormalizedModel? FindModel(NormalizedItem item, Guid entRefId)
     {
-        NormalizedModelV3? SearchModel(NormalizedModelV3 model, Guid entRefId)
+        NormalizedModel? SearchModel(NormalizedModel model, Guid entRefId)
         {
             var found = model.Children.FirstOrDefault(c => c.Id == entRefId, null);
             if (found != null)
