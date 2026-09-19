@@ -93,7 +93,7 @@ public class FbxGbxConverterV3
 
         var nodes = FilterAndApplySpecialMeshItems(scene, nodeResults.Value, materialResults.Value);
 
-        var groupResults = FbxMeshConverterV3.GroupNodes(nodes, socketResults.Value, config);
+        var groupResults = FbxMeshConverterV3.GroupNodes(nodes, nodeResults.Value, socketResults.Value, config);
         if (groupResults.IsFailure)
             return ToolResult.Fail(groupResults);
 

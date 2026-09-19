@@ -142,7 +142,7 @@ public class MovingGroupConfig
     /// <summary>
     /// Trackmania space so blenderSpace => (X, Z, -Y)
     /// </summary>
-    public Vec3? AnchorPosition { get; set; } = null;
+    public string? RotationAnchorNode { get; set; } = null;
     public KinematicMovement KinematicMovement
     {
         get; set;

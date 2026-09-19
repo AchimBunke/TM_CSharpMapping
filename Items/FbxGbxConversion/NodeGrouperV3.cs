@@ -14,7 +14,7 @@ internal class MovingParameterV3
     public required NPlugDyna_SKinematicConstraint KinematicConstraint { get; set; }
     public required NPlugDynaObjectModel_SInstanceParams InstanceParams { get; set; }
     public string? ParentMovingGroupId { get; set; } = null;
-    public Vec3? AnchorPosition { get; set; } = null;
+    public string? RotationAnchorNode { get; set; } = null;
 }
 
 /// <summary>
@@ -55,6 +55,7 @@ internal class NodeDefGroupV3
     public EWaypointType? WaypointType { get; set; }
     public bool? WaypointNoRespawn { get; set; }
     public Vector3 AnchorPosition { get; set; } = Vector3.Zero;
+    public string? RotationAnchorNode{ get; set; } = null;
     public CPlugSpawnModelHolderV3? WaypointSpawnModel { get; set; }
 
     public List<NodeLodAssignmentV3> Nodes { get; set; } = new();
@@ -86,7 +87,7 @@ internal class NodeGrouperV3
             KinematicConstraint = MovingGroupConfig.ToKinematicConstraint(mg.KinematicMovement),
             InstanceParams = MovingGroupConfig.ToInstanceParams(mg.KinematicModelConfig),
             ParentMovingGroupId = mg.ParentMovingGroupId,
-            AnchorPosition = mg.AnchorPosition,
+            RotationAnchorNode = mg.RotationAnchorNode,
         });
     }
 
@@ -218,7 +219,7 @@ internal class NodeGrouperV3
             GameplayMainDir = bucket.GameplayMainDir,
             WaypointType = bucket.WaypointType,
             WaypointNoRespawn = _itemConfig.Waypoint?.NoRespawn ?? false,
-            AnchorPosition = movingParams?.AnchorPosition is { } ap ? new Vector3(ap.X, ap.Y, ap.Z) : Vector3.Zero,
+            RotationAnchorNode = movingParams?.RotationAnchorNode,
             RelativeMovingParentGroupId = movingParams?.ParentMovingGroupId,
         };
 

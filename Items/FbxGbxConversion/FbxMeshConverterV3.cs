@@ -1,5 +1,6 @@
 using GBX.NET;
 using GBX.NET.Engines.Plug;
+using System.ComponentModel.Design;
 using System.Numerics;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
@@ -75,7 +76,7 @@ internal class FbxMeshConverterV3
     /// and computes a per-group anchor transform (position + rotation) that will become the group's
     /// EntityRef.Position/Rotation. Node geometry is later expressed relative to this anchor instead of world space.
     /// </summary>
-    public static ToolResult<List<NodeDefGroupV3>> GroupNodes(List<NodeDefV3> nodes, List<SocketDefV3> sockets, FbxGbxConversionInput config)
+    public static ToolResult<List<NodeDefGroupV3>> GroupNodes(List<NodeDefV3> nodes, List<NodeDefV3> allSceneNodes, List<SocketDefV3> sockets, FbxGbxConversionInput config)
     {
         var lods = config.ItemConfig.LodParameters?.MaxLodDistances ?? [];
 
@@ -112,6 +113,10 @@ internal class FbxMeshConverterV3
             group.RelativeMovingParentGroupId = string.IsNullOrEmpty(group.RelativeMovingParentGroupId)
                 ? null
                 : group.RelativeMovingParentGroupId;
+            if (!string.IsNullOrEmpty(group.RotationAnchorNode))
+                group.AnchorPosition = allSceneNodes.FirstOrDefault(n => n.NodeConfig.Name == group.RotationAnchorNode)!.GlobalTransform.Translation;
+            else
+                group.AnchorPosition = Vector3.Zero;
         }
 
         if (sockets.Count > 0)

@@ -284,7 +284,7 @@ Defines the moving parameters for a specific moving group.
 | `MovingGroupId`        | `string`               | —       | Identifier of the moving group.                                                                                  |
 | `KinematicMovement`    | `KinematicMovement`    | —       | Defines the translation, rotation, and optional texture animation of the moving group.                           |
 | `KinematicModelConfig` | `KinematicModelConfig` | —       | Defines general runtime parameters of the kinematic model, such as periodic scaling, phase, and shadow behavior. |
-| `AnchorPosition`       | `Vec3?`                | `null`  | Rotation anchor for that group. Required in Trackmania coordinate space (so BlenderSpace => (X, Z, -Y))                                                                 |
+| `RotationAnchorNode`   | `string?`              | `null`  | Rotation anchor for that group. All nodes will rotate around this node.                                                                |
 
 ---
 
@@ -341,7 +341,7 @@ Defines an animated texture using a texture atlas/subtexture layout.
 | `NbSubTexturePerLine`   | `int`           | `0`     | Number of subtextures per horizontal row.                      |
 | `NbSubTexturePerColumn` | `int`           | `0`     | Number of subtextures per vertical column.                     |
 | `TopToBottom`           | `bool`          | `false` | Determines whether subtextures are indexed from top to bottom. |
-| `TextureAnims`          | `TextureAnim[]` | `[]`    | Sequence of texture frames displayed during the animation.     |
+| `TextureAnims`          | `TextureAnim[]` | `[]`    | Sequence of texture frames displayed during the animation. ! Max. 12 anims possible !     |
 
 For example, an atlas with 8 subtextures arranged as 4 × 2 can be represented as:
 
