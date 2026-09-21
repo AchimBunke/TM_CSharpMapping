@@ -46,7 +46,7 @@ public struct CompileOptions()
     public ItemModel Target { get; init; } = ItemModel.Prefab;
     public ItemCompilerOptimization Optimization { get; init; } = ItemCompilerOptimization.PreferNadeoImporterStructure;
 }
-public struct MeshCompilerSettings
+public struct ItemCompilerSettings
 {
     public string Author;
 };
@@ -94,12 +94,12 @@ public class ItemCompiler
 
 
     CompileContext compileContext;
-    MeshCompilerSettings _settings;
+    ItemCompilerSettings _settings;
     Ident _ident;
 
 
     public ItemCompiler() : this(new()) { }
-    public ItemCompiler(MeshCompilerSettings settings)
+    public ItemCompiler(ItemCompilerSettings settings)
     {
         _settings = settings;
         _ident = new Ident("", 26, _settings.Author ?? "TM_CSharpMapping");

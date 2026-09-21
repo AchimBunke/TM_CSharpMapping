@@ -14,6 +14,9 @@ public class MaterialConfig
 
     public CPlugSurface.MaterialId? PhysicsId { get; set; } = null;
     public CPlugMaterialUserInst.GameplayId? GameplayId { get; set; } = null;
+
+    public string? BaseTexture { get; set; } = null;
+    public string? Model { get; set; } = null;
 }
 
 public class MeshConfig

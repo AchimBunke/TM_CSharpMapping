@@ -112,6 +112,8 @@ Defines how a material in the FBX is converted. **Required for every material us
 | `Color`      | `Color?`      | `null`  | Optional color override.                                                |
 | `PhysicsId`  | `MaterialId?` | `null`  | Optional physics/surface material override.                                               |
 | `GameplayId` | `GameplayId?` | `null`  | Optional gameplay material override.                                                      |
+| `BaseTexture`| `string?` | `null`  | Optional base texture override.                                                      |
+| `Model`      | `string?` | `null`  | Optional model override.                                                      |
 
 ### Material linking
 

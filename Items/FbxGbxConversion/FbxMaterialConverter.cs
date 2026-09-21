@@ -63,6 +63,10 @@ internal class FbxMaterialConverter
             customMat.SurfacePhysicId = materialConfig.PhysicsId.Value;
         if (materialConfig.GameplayId.HasValue)
             customMat.SurfaceGameplayId = materialConfig.GameplayId.Value;
+        if(!string.IsNullOrEmpty(materialConfig.BaseTexture))
+            customMat.BaseTexture = materialConfig.BaseTexture;
+        if(!string.IsNullOrEmpty(materialConfig.Model))
+            customMat.Model = materialConfig.Model;
         if (materialConfig.Color.HasValue)
         {
             var color = materialConfig.Color.Value;
@@ -150,7 +154,9 @@ internal class FbxMaterialConverter
             PhysicsId = materialUserInst.SurfacePhysicId,
             Name = mat.Name,
             //not reliable!
-            Link = _materialLibrary.Materials.FirstOrDefault(m => m.Value.LinkFull == materialUserInst.Link, new KeyValuePair<string, DMaterial>("", null!)).Key
+            Link = _materialLibrary.Materials.FirstOrDefault(m => m.Value.LinkFull == materialUserInst.Link, new KeyValuePair<string, DMaterial>("", null!)).Key,
+            BaseTexture = materialUserInst.BaseTexture,
+            Model = materialUserInst.Model,
         };
         if (materialUserInst.Color?.Length > 0)
         {
