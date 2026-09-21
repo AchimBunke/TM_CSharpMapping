@@ -12,6 +12,18 @@ namespace TM_GenericMapping.Items;
 
 public static class ItemExtensions
 {
+    public static bool TryGetAllNPlugDyna_SKinematicConstraints(CGameItemModel itemModel, out List<NPlugDyna_SKinematicConstraint> nPlugDyna_SKinematicConstraints)
+    {
+        nPlugDyna_SKinematicConstraints = Traverse<NPlugDyna_SKinematicConstraint>(itemModel.EntityModel).ToList();
+        return nPlugDyna_SKinematicConstraints.Count > 0;
+    }
+    public static bool TryGetAllNPlugTrigger_SSpecial(CGameItemModel itemModel, out List<NPlugTrigger_SSpecial> nPlugTrigger_SSpecials)
+    {
+        nPlugTrigger_SSpecials = Traverse<NPlugTrigger_SSpecial>(itemModel.EntityModel).ToList();
+        return nPlugTrigger_SSpecials.Count > 0;
+    }
+
+
     public static bool TryGetNPlugDyna_SKinematicConstraint(CGameItemModel itemModel,
         out NPlugDyna_SKinematicConstraint nPlugDyna_SKinematicConstraint)
     {
@@ -265,6 +277,24 @@ public static class ItemExtensions
         return shell;
     }
 
+
+
+    public static IEnumerable<T> Traverse<T>(CMwNod? node)
+        where T : CMwNod
+    {
+        if (node is null)
+            yield break;
+        if (node is T match)
+            yield return match;
+        if (node is CPlugPrefab prefab)
+        {
+            foreach (var ent in prefab.Ents)
+            {
+                foreach (var result in Traverse<T>(ent.Model))
+                    yield return result;
+            }
+        }
+    }
 
 
 

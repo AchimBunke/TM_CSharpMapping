@@ -1,4 +1,4 @@
-﻿namespace TM_GenericMapping.Items.FbxGbxConverter.Serialization;
+﻿namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 public class VariantItemConfig
 {

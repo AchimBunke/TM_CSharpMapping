@@ -1,8 +1,5 @@
-﻿using GBX.NET.Engines.GameData;
-using GBX.NET.Engines.Plug;
-using System.Xml.Serialization;
+﻿using System.Xml.Serialization;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
-using TM_GenericMapping.Items.FbxGbxConverter.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;

@@ -57,10 +57,31 @@ public static class ErrorCodes
         public const string MissingLightConfig = "FbxGbxConverter.MissingLightConfig";
         public const string MultipleSocketsNotSupported = "FbxGbxConverter.MultipleSocketsNotSupported";
         public const string MissingStaticMeshGroup = "FbxGbxConverter.MissingStaticMeshGroup";
+        public const string MissingLodDistanceConfig = "FbxGbxConverter.MissingLodDistanceConfig";
     }
     public static class VariantItemBuilder
     {
         public const string MissingVariantInputs = "VariantItemBuilder.MissingVariantInputs";
+    }
+    public static class NormalizedItemValidator
+    {
+        public const string ValidationError = "NormalizedItemValidator.ValidationError";
+    }
+
+    public static class ItemParser
+    {
+        public const string UnsupportedMesh = "MeshCompiler.UnsupportedMesh";
+        public const string MissingDynamicConstraintTarget = "MeshCompiler.MissingDynamicConstraintTarget";
+        public const string MissingDynamicConstraintParent = "MeshCompiler.MissingDynamicConstraintParent";
+        public const string MissingMesh = "MeshCompiler.MissingMesh";
+        public const string UnsupportedSurfaceType = "MeshCompiler.UnsupportedSurfaceType";
+        public const string MissingTriggerShape = "MeshCompiler.MissingTriggerShape";
+        public const string UnsupportedVariantType = "MeshCompiler.UnsupportedVariantType";
+    }
+    public static class ItemCompiler
+    {
+        public const string MissingDynaCollisionShape = "ItemCompiler.MissingDynaCollisionShape";
+        public const string UnsupportedSurfaceType = "ItemCompiler.UnsupportedSurfaceType";
     }
 }
 

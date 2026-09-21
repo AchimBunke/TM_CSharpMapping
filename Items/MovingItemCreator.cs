@@ -1,12 +1,9 @@
-﻿using GBX.NET;
-using GBX.NET.Engines.GameData;
+﻿using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
-using GBX.NET.Engines.Plug;
-using System.Numerics;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
 using TmEssentials;
-using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items;
 
@@ -35,32 +32,38 @@ public class MovingItemCreator
         public MergeOptions MergeOptions { get; init; } = MergeOptions.None;
     }
 
-    MovingItemCreatorSettings _settings;
-    MeshBuilder _meshBuilder;
-    MeshExtractor _meshExtractor;
+    public MovingItemCreatorSettings Settings { get; set; }
+    ItemCompiler _itemCompiler;
+    ItemParser _itemParser;
+    CompileOptions _compileOptions;
     public MovingItemCreator() : this(new MovingItemCreatorSettings())
     {
     }
     public MovingItemCreator(MovingItemCreatorSettings settings) : this(new(), new(), settings)
     {
     }
-    public MovingItemCreator(MeshExtractor meshExtractor, MeshBuilder meshBuilder, MovingItemCreatorSettings settings)
+    public MovingItemCreator(ItemParser itemParser, ItemCompiler itemCompiler, MovingItemCreatorSettings settings)
     {
-        _settings = settings;
-        _meshBuilder = meshBuilder;
-        _meshExtractor = meshExtractor;
+        Settings = settings;
+        _itemCompiler = itemCompiler;
+        _itemParser = itemParser;
+        _compileOptions = new()
+        {
+            Optimization = ItemCompilerOptimization.None,
+            Target = ItemModel.Prefab,
+        };
     }
     
 
-    public ToolResult<CGameItemModel> CreateMovingItem(CGameItemModel sourceItem, MeshBuilder.BuildSettings? buildOptions = null)
+    public ToolResult<CGameItemModel> CreateMovingItem(CGameItemModel sourceItem, BuildSettings? buildOptions = null)
     {
-        var extractResult = _meshExtractor.ExtractMesh(sourceItem);
-        if(!extractResult.IsSuccess)
-            return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, extractResult);
+        var parseResult = _itemParser.Parse(sourceItem);
+        if(!parseResult.IsSuccess)
+            return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshExtractionFailed, parseResult);
 
 
-        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(MeshBuilder.BuildSettings.DefaultFromMesh(extractResult.Value));
-        var movingItemResult = _meshBuilder.BuildItem(extractResult.Value, buildSettings);
+        var buildSettings = buildOptions ?? CreateDefaultBuildOptions(parseResult.Value, BuildSettings.DefaultFromItem(parseResult.Value));
+        var movingItemResult = _itemCompiler.Compile(parseResult.Value, buildSettings, _compileOptions);
 
         if(movingItemResult.IsFailure)
             return ToolResult.Fail(nameof(MovingItemCreator), ErrorCodes.MovingItemCreator.MeshBuildingFailed, movingItemResult);
@@ -68,37 +71,86 @@ public class MovingItemCreator
         var movingItem = movingItemResult.Value;
 
         ReplaceMaterialLinks(movingItem);
-        if (_settings.MovingItemAnimationTemplate != null && _settings.MergeOptions.HasFlag(MergeOptions.UseTemplateAnimations))
-            CopyAnimations(_settings.MovingItemAnimationTemplate, movingItem);
+        if (Settings.MovingItemAnimationTemplate != null && Settings.MergeOptions.HasFlag(MergeOptions.UseTemplateAnimations))
+            CopyAnimations(Settings.MovingItemAnimationTemplate, movingItem);
         ChangeAnimations(movingItem);
 
-        CopyItemData(movingItem, sourceItem, _settings.MovingItemAnimationTemplate);
+        CopyItemData(movingItem, sourceItem, Settings.MovingItemAnimationTemplate);
 
         return ToolResult.Success(movingItem, nameof(MovingItemCreator));
 
     }
-    MeshBuilder.BuildSettings CreateDefaultBuildOptions(MeshBuilder.BuildSettings defaultOptions)
+    BuildSettings CreateDefaultBuildOptions(NormalizedItem normItem, BuildSettings defaultOptions)
     {
-        if (defaultOptions.GroupSettings.Any(gs => gs.Type == GroupType.DynaObject))
+        if (defaultOptions.Clusters.Any(c => c.Value.Type == ModelType.Dynamic))
             return defaultOptions;
-        var staticGroups = defaultOptions.GroupSettings.Where(gs => gs.Type == GroupType.StaticObject).ToList();
+
+        var staticGroups = defaultOptions.Clusters.Where(gs => gs.Value.Type == ModelType.Static).ToList();
         for (int i = 0; i < staticGroups.Count; i++)
         {
             var group = staticGroups[i];
-            group.Type = GroupType.DynaObject;
+            group.Value.Type = ModelType.Dynamic;
 
-            for (int j = 0; j < defaultOptions.MeshSettings.Count; j++)
+            defaultOptions.Clusters[group.Key] = group.Value;
+
+            var groupInstances = defaultOptions.Instances.Where(i => i.Value.ClusterKey == group.Key).ToArray();
+            bool meshCollidable = groupInstances.Any(i => i.Value.Collidable && i.Value.Kind == RefKind.Mesh);
+            bool hasDynaShape = groupInstances.Any(i =>i.Value.ShapeRoleOverride.HasValue && i.Value.ShapeRoleOverride.Value == ShapeRole.Dynamic);
+            foreach (var instance in groupInstances)
             {
-                var meshSetting = defaultOptions.MeshSettings[j];
-                meshSetting.Movable = true;
-                defaultOptions.MeshSettings[j] = meshSetting;
+                if(instance.Value.ShapeRoleOverride.HasValue && 
+                    instance.Value.ShapeRoleOverride == ShapeRole.Static &&
+                    !hasDynaShape &&
+                    !meshCollidable)
+                {
+                    var dynaInstance = new InstanceSettings()
+                    {
+                        ClusterKey = instance.Value.ClusterKey,
+                        Enabled = instance.Value.Enabled,
+                        Visible = instance.Value.Visible,
+                        SmoothingGroupOverride = instance.Value.SmoothingGroupOverride,
+                        LightmapSizeOverride = instance.Value.LightmapSizeOverride,
+                        Collidable = instance.Value.Collidable,
+                        Kind = instance.Value.Kind,
+                        LightTypeOverride = instance.Value.LightTypeOverride,
+                        LODMaskOverride = instance.Value.LODMaskOverride,
+                        ShapeRoleOverride = ShapeRole.Dynamic,
+                    };
+                    var entRef = defaultOptions.EntityClusterAssignments.FirstOrDefault(ec => ec.Value == group.Key);
+                    var model = FindModel(normItem, entRef.Key);
+                    var shapeKey = model.Shapes.First(s => s.Id == instance.Key).ShapeKey;
+
+                    var dynaShapeRef = new ShapeRef()
+                    {
+                        Id = Guid.NewGuid(),
+                        Role = ShapeRole.Dynamic,
+                        ShapeKey = shapeKey,
+                    };
+                    model.Shapes.Add(dynaShapeRef);
+                    defaultOptions.Instances.Add(dynaShapeRef.Id, dynaInstance);
+                }
             }
 
-            defaultOptions.GroupSettings[i] = group;
         }
-        defaultOptions.TargetModel = MeshBuilder.ItemModel.General;
 
         return defaultOptions;
+    }
+    NormalizedModel? FindModel(NormalizedItem item, Guid entRefId)
+    {
+        NormalizedModel? SearchModel(NormalizedModel model, Guid entRefId)
+        {
+            var found = model.Children.FirstOrDefault(c => c.Id == entRefId, null);
+            if (found != null)
+                return item.ModelPool[found.ModelKey];
+            foreach(var child in model.Children)
+            {
+                var result = SearchModel(item.ModelPool[child.ModelKey], entRefId);
+                if (result != null)
+                    return result;
+            }
+            return null;
+        }
+        return SearchModel(item.Model, entRefId);
     }
     void CopyItemData(CGameItemModel movingItem, CGameItemModel sourceItem, CGameItemModel? template)
     {
@@ -114,11 +166,11 @@ public class MovingItemCreator
         if (template == null)
             return;
 
-        if (_settings.MergeOptions.HasFlag(MergeOptions.UseTemplateIcon))
+        if (Settings.MergeOptions.HasFlag(MergeOptions.UseTemplateIcon))
         {
             ChunkSafeItemOperations.SetIcon(movingItem, template.Icon, template.IconWebP);
         }
-        if(_settings.MergeOptions.HasFlag(MergeOptions.UseTemplatePlacement))
+        if(Settings.MergeOptions.HasFlag(MergeOptions.UseTemplatePlacement))
         {
             movingItem.DefaultPlacement = template.DefaultPlacement;
             movingItem.GroundPoint = template.GroundPoint;
@@ -129,7 +181,7 @@ public class MovingItemCreator
     }
     void ReplaceMaterialLinks(CGameItemModel item)
     {
-        if (_settings.MaterialLinkReplacements.Count == 0)
+        if (Settings.MaterialLinkReplacements.Count == 0)
             return;
         var hasDynaModel = ItemExtensions.TryGetDynaObjectModel(item, out var model);
         if (!hasDynaModel)
@@ -138,64 +190,71 @@ public class MovingItemCreator
         {
             if(mat.MaterialUserInst!.Link == null)
                 continue;
-            if (_settings.MaterialLinkReplacements.TryGetValue(mat.MaterialUserInst.Link, out var replacement))
+            if (Settings.MaterialLinkReplacements.TryGetValue(mat.MaterialUserInst.Link, out var replacement))
                 mat.MaterialUserInst.Link = replacement;
         }
     }
     void CopyAnimations(CGameItemModel from, CGameItemModel to)
     {
         if(!ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(from, out var kinematicSource)||
-            !ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(to, out var kinematicTarget))
+            !ItemExtensions.TryGetAllNPlugDyna_SKinematicConstraints(to, out var kinematicTargets))
             return;
-        kinematicTarget.AngleMaxDeg = kinematicSource.AngleMaxDeg;
-        kinematicTarget.AngleMinDeg = kinematicSource.AngleMinDeg;
-        kinematicTarget.RotAxis = kinematicSource.RotAxis;
-        kinematicTarget.TransAxis = kinematicSource.TransAxis;
-        kinematicTarget.TransMax = kinematicSource.TransMax;
-        kinematicTarget.TransMin = kinematicSource.TransMin;
-        kinematicTarget.ShaderTcAnimFunc = kinematicSource.ShaderTcAnimFunc;
-        kinematicTarget.ShaderTcDataTransSub = kinematicSource.ShaderTcDataTransSub;
-        kinematicTarget.ShaderTcType = kinematicSource.ShaderTcType;
-        kinematicTarget.ShaderTcVersion = kinematicSource.ShaderTcVersion;
+        foreach (var kinematicTarget in kinematicTargets)
+        {
+            kinematicTarget.AngleMaxDeg = kinematicSource.AngleMaxDeg;
+            kinematicTarget.AngleMinDeg = kinematicSource.AngleMinDeg;
+            kinematicTarget.RotAxis = kinematicSource.RotAxis;
+            kinematicTarget.TransAxis = kinematicSource.TransAxis;
+            kinematicTarget.TransMax = kinematicSource.TransMax;
+            kinematicTarget.TransMin = kinematicSource.TransMin;
+            kinematicTarget.ShaderTcAnimFunc = kinematicSource.ShaderTcAnimFunc;
+            kinematicTarget.ShaderTcDataTransSub = kinematicSource.ShaderTcDataTransSub;
+            kinematicTarget.ShaderTcType = kinematicSource.ShaderTcType;
+            kinematicTarget.ShaderTcVersion = kinematicSource.ShaderTcVersion;
 
-        kinematicTarget.RotAnimFunc = ObjectCloner.DeepCloneObject(kinematicSource.RotAnimFunc);
-        kinematicTarget.TransAnimFunc = ObjectCloner.DeepCloneObject(kinematicSource.TransAnimFunc);
+            kinematicTarget.RotAnimFunc = ObjectCloner.DeepCloneObject(kinematicSource.RotAnimFunc);
+            kinematicTarget.TransAnimFunc = ObjectCloner.DeepCloneObject(kinematicSource.TransAnimFunc);
+        }
 
     }
     void ChangeAnimations(CGameItemModel movingItem)
     {
-        if (_settings.TranslationAnimationCount == null && _settings.RotationAnimationCount == null)
+        if (Settings.TranslationAnimationCount == null && Settings.RotationAnimationCount == null)
             return;
-        ItemExtensions.TryGetNPlugDyna_SKinematicConstraint(movingItem, out var kinematic);
-        if(_settings.TranslationAnimationCount != null && kinematic?.TransAnimFunc != null)
+        ItemExtensions.TryGetAllNPlugDyna_SKinematicConstraints(movingItem, out var kinematicConstraints);
+        foreach (var constraint in kinematicConstraints)
         {
-            int requiredNumSubFuncs = _settings.TranslationAnimationCount.Value;
-            var subFuncs = kinematic.TransAnimFunc.SubFuncs?.Take(requiredNumSubFuncs).ToList() ?? [];
-            for (int i = subFuncs.Count; i < requiredNumSubFuncs; ++i)
+            if (Settings.TranslationAnimationCount != null && constraint.TransAnimFunc != null)
             {
-                subFuncs.Add(new NPlugDyna_SKinematicConstraint.SubAnimFunc()
+                int requiredNumSubFuncs = Settings.TranslationAnimationCount.Value;
+                var subFuncs = constraint.TransAnimFunc.SubFuncs?.Take(requiredNumSubFuncs).ToList() ?? [];
+                for (int i = subFuncs.Count; i < requiredNumSubFuncs; ++i)
                 {
-                    Ease = NPlugDyna_SKinematicConstraint.AnimEase.Constant,
-                    Duration = TimeInt32.Zero,
-                    Reverse = false,
-                });
+                    subFuncs.Add(new NPlugDyna_SKinematicConstraint.SubAnimFunc()
+                    {
+                        Ease = NPlugDyna_SKinematicConstraint.AnimEase.Constant,
+                        Duration = TimeInt32.Zero,
+                        Reverse = false,
+                    });
+                }
+                constraint.TransAnimFunc.SubFuncs = subFuncs.ToArray();
             }
-            kinematic.TransAnimFunc.SubFuncs = subFuncs.ToArray();
-        }
-        if (_settings.RotationAnimationCount != null && kinematic?.RotAnimFunc != null)
-        {
-            int requiredNumSubFuncs = _settings.RotationAnimationCount.Value;
-            var subFuncs = kinematic.RotAnimFunc.SubFuncs?.Take(requiredNumSubFuncs).ToList() ?? [];
-            for (int i = subFuncs.Count; i < requiredNumSubFuncs; ++i)
+            if (Settings.RotationAnimationCount != null && constraint?.RotAnimFunc != null)
             {
-                subFuncs.Add(new NPlugDyna_SKinematicConstraint.SubAnimFunc()
+                int requiredNumSubFuncs = Settings.RotationAnimationCount.Value;
+                var subFuncs = constraint.RotAnimFunc.SubFuncs?.Take(requiredNumSubFuncs).ToList() ?? [];
+                for (int i = subFuncs.Count; i < requiredNumSubFuncs; ++i)
                 {
-                    Ease = NPlugDyna_SKinematicConstraint.AnimEase.Constant,
-                    Duration = TimeInt32.Zero,
-                    Reverse = false,
-                });
+                    subFuncs.Add(new NPlugDyna_SKinematicConstraint.SubAnimFunc()
+                    {
+                        Ease = NPlugDyna_SKinematicConstraint.AnimEase.Constant,
+                        Duration = TimeInt32.Zero,
+                        Reverse = false,
+                    });
+                }
+                constraint.RotAnimFunc.SubFuncs = subFuncs.ToArray();
             }
-            kinematic.RotAnimFunc.SubFuncs = subFuncs.ToArray();
         }
+       
     }
 }

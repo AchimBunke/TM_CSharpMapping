@@ -45,6 +45,13 @@ public static class ItemPlacementUtils
 
     }
 
+    public enum FillAlign
+    {
+        Start = -1,
+        Center = 0,
+        End = 1
+    }
+
     public static void SetItemPlacementClass(CGameItemPlacementParam placementParam, NPlugItemPlacement_SClass placementClass)
     {
         placementParam.PlacementClass = placementClass;
@@ -55,4 +62,6 @@ public static class ItemPlacementUtils
         placementParam.PlacementClass = null;
         placementParam.RemoveChunk<CGameItemPlacementParam.Chunk2E020005>();
     }
+
+
 }

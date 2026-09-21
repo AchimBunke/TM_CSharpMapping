@@ -118,7 +118,7 @@ A cost to using CPLugPrefabs is that they alway require a Surface shape. Each me
 | Blocks | 🔴 Not Planned Yet | will require lots of additional research |
 | Default Placement | 🟢 Implemented | |
 | Advanced Placement | 🟢 Implemented | Attachement to Boarders, Blocks & Edges |
-| Variant Items | 🟡 Planned | How to define variant sets (each variant = 1 item)
+| Variant Items | 🟢 Partially Implemented | Allows creation of variant items from list of game-ready items + configuration |
 | Animated Textures (moving items) | 🟡 Partially Implemented | Easier way to configure animated textures? |
 | All Materials | 🟢 Implemented | Just accept MaterialLib.txt |
 | Lights | 🟢 Implemented | Currently only valid if at least 1 static model |

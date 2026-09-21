@@ -106,6 +106,13 @@ public static class QuaternionUtils
             return new Quat(quaternion.X, quaternion.Y, quaternion.Z, quaternion.W);
         }
     }
+    extension(Quat quat)
+    {
+        public Quaternion ToQuaternion()
+        {
+            return new Quaternion(quat.X, quat.Y, quat.Z, quat.W);
+        }
+    }
 
-    
+
 }
