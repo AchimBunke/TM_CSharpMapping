@@ -40,8 +40,8 @@ public class ItemGameplayEffectConverter
     }
     public sealed class SurfaceGameplayToSurfaceGameplayRule : IConversionRule
     {
-        public required CPlugMaterialUserInst.GameplayId From { get; init; }
-        public required CPlugMaterialUserInst.GameplayId To { get; init; }
+        public required CPlugSurface.GameplayId From { get; init; }
+        public required CPlugSurface.GameplayId To { get; init; }
 
         public bool AppliesTo(CPlugMaterialUserInst mat)
             => mat.SurfaceGameplayId == From;
@@ -77,7 +77,7 @@ public class ItemGameplayEffectConverter
     public sealed class MaterialNameToSurfaceGameplayRule : IConversionRule
     {
         public required string From { get; init; }
-        public required CPlugMaterialUserInst.GameplayId To { get; init; }
+        public required CPlugSurface.GameplayId To { get; init; }
 
         public bool AppliesTo(CPlugMaterialUserInst mat)
             => mat.MaterialName == From;
@@ -120,7 +120,7 @@ public class ItemGameplayEffectConverter
                     yield return new MaterialNameDefinedRule { From = requiredMaterialName, InnerRule = new SurfacePhysicsToSurfacePhysicsRule { From = kvp.Key, To = kvp.Value } };
             }
         }
-        public static IEnumerable<IConversionRule> CreateSurfaceGameplayIdMappings(Dictionary<CPlugMaterialUserInst.GameplayId, CPlugMaterialUserInst.GameplayId> surfaceGameplayIdMappings, string requiredMaterialName = "")
+        public static IEnumerable<IConversionRule> CreateSurfaceGameplayIdMappings(Dictionary<CPlugSurface.GameplayId, CPlugSurface.GameplayId> surfaceGameplayIdMappings, string requiredMaterialName = "")
         {
             foreach (var kvp in surfaceGameplayIdMappings)
             {
@@ -144,7 +144,7 @@ public class ItemGameplayEffectConverter
                 yield return new MaterialNameToSurfacePhysicsRule { From = kvp.Key, To = kvp.Value };
             }
         }
-        public static IEnumerable<IConversionRule> CreateMaterialNameToSurfaceGameplayIdMappings(Dictionary<string, CPlugMaterialUserInst.GameplayId> materialNameToSurfaceGameplayIdMappings)
+        public static IEnumerable<IConversionRule> CreateMaterialNameToSurfaceGameplayIdMappings(Dictionary<string, CPlugSurface.GameplayId> materialNameToSurfaceGameplayIdMappings)
         {
             foreach (var kvp in materialNameToSurfaceGameplayIdMappings)
             {

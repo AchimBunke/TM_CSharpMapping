@@ -734,7 +734,7 @@ public class ItemParser
         parseContext.nodeRefTable.Register(key, triggerSpecial);
 
         // trigger gameplay
-        ushort gamplayIdShort = triggerShape.GetChunk<CPlugSurface.Chunk0900C003>()?.U02?.FirstOrDefault() ?? 0;
+        ushort gamplayIdShort = ChunkSafeItemOperations.GetSurfaceGameplayId(triggerShape);
         var triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
 
         var model = new NormalizedModel()
@@ -1120,7 +1120,7 @@ public class ItemParser
         }
         else
         {
-            ushort gamplayIdShort = surface.GetChunk<CPlugSurface.Chunk0900C003>()?.U02?.FirstOrDefault() ?? 0;
+            ushort gamplayIdShort = ChunkSafeItemOperations.GetSurfaceGameplayId(surface);
             var triggerGameplayId = ItemTriggerEffectConverter.ShortToGameplayId(gamplayIdShort);
             triggerModel.TriggerGameplayId = triggerGameplayId;
         }

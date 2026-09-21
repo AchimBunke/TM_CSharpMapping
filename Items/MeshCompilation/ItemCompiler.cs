@@ -820,9 +820,7 @@ public class ItemCompiler
 
         surface.Surf.GameplayMainDir = gameplayMainDir;
 
-        var chunk = surface.GetChunk<Chunk0900C003>();
-        if (chunk!.U02!.Length == 0)
-            chunk.U02 = [0];
+        ChunkSafeItemOperations.SetSurfaceGameplayId(surface, 0u);
 
 
         return surface;
@@ -1409,12 +1407,13 @@ public class ItemCompiler
             if (mesh != null)
                 baseMaterialInstance = mesh.Material;
             else
-                baseMaterialInstance = context.ErrorMat;
+                baseMaterialInstance = ObjectCloner.DeepCloneObject(context.ErrorMat)!;
 
             if (!context.MaterialMap.TryGetValue(baseMaterialInstance, out var materialInstance))
             {
                 context.MaterialMap[baseMaterialInstance] = materialInstance = ObjectCloner.DeepCloneObject(baseMaterialInstance)!;
             }
+
             var material = new CPlugCrystal.Material
             {
                 MaterialUserInst = materialInstance,
@@ -1451,6 +1450,7 @@ public class ItemCompiler
                         material,
                         parentPosition,
                         parentRotation);
+                    materialInstance.SurfacePhysicId = shape.SurfaceMaterialIds.FirstOrDefault(MaterialId.Concrete);
                 }
                 else
                     continue;
@@ -1766,9 +1766,7 @@ public class ItemCompiler
         surfMesh.Vertices = [];
         surfMesh.Triangles = [];
         surface.Surf = surfMesh;
-        var chunk = surface.GetChunk<Chunk0900C003>();
-        if (chunk!.U02!.Length == 0)
-            chunk.U02 = [0];
+        ChunkSafeItemOperations.SetSurfaceGameplayId(surface, 0u);
         bool hasTriggerShape = false;
 
         foreach (var entity in entities)

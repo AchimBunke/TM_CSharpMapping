@@ -63,9 +63,9 @@ public sealed class MaterialXml
 
     [XmlAttribute("GameplayId")]
     public string? GameplayIdValue { get; set; }
-    public CPlugMaterialUserInst.GameplayId GameplayId
+    public CPlugSurface.GameplayId GameplayId
     {
-        get => Enum.TryParse(typeof(CPlugMaterialUserInst.GameplayId), GameplayIdValue, out var result) ? (CPlugMaterialUserInst.GameplayId)result : CPlugMaterialUserInst.GameplayId.None;
+        get => Enum.TryParse(typeof(CPlugSurface.GameplayId), GameplayIdValue, out var result) ? (CPlugSurface.GameplayId)result : CPlugSurface.GameplayId.None;
         set => GameplayIdValue = value.ToString();
     }
     public bool OverrideGameplayId => GameplayIdValue != null;

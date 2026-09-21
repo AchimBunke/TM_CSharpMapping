@@ -19,7 +19,7 @@ public class DMaterial
     public string SurfaceIdValue { get; set; } = "";
     public CPlugSurface.MaterialId SurfaceId => Enum.Parse<CPlugSurface.MaterialId>(SurfaceIdValue);
     public string GameplayIdValue { get; set; } = "";
-    public CPlugMaterialUserInst.GameplayId GameplayId => Enum.Parse<CPlugMaterialUserInst.GameplayId>(GameplayIdValue);
+    public CPlugSurface.GameplayId GameplayId => Enum.Parse<CPlugSurface.GameplayId>(GameplayIdValue);
  
 
     public List<DMaterialUvLayer> UvLayers { get; set; } = [];

@@ -111,7 +111,7 @@ internal class FbxMaterialConverter
         var mat = ObjectCloner.DeepCloneObject(_materialTemplate)!;
         mat.Link = "";
         mat.IsUsingGameMaterial = true;
-        mat.SurfaceGameplayId = CPlugMaterialUserInst.GameplayId.None;
+        mat.SurfaceGameplayId = CPlugSurface.GameplayId.None;
         mat.SurfacePhysicId = CPlugSurface.MaterialId.NotCollidable;
         return mat;
     }

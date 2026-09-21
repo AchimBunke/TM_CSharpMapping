@@ -63,8 +63,7 @@ public class ItemTriggerEffectConverter
     static void ConvertEffect(ushort gameplay, NPlugTrigger_SSpecial triggerSpecial)
     {
         var surface = triggerSpecial.TriggerShape!;
-        var chunk = surface.Chunks.Get<CPlugSurface.Chunk0900C003>()!;
-        chunk.U02 = [gameplay];
+        ChunkSafeItemOperations.SetSurfaceGameplayId(surface, gameplay);
     }
 
     static void ConvertCommonItemEntityModelToCPlugPrefab(CGameItemModel item)

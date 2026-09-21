@@ -1,4 +1,6 @@
 ﻿using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Plug;
+using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items;
 
@@ -35,4 +37,20 @@ public static class ChunkSafeItemOperations
             item.Flags = (CGameCtnCollector.ECollectorFlags)16;
         }
     } 
+
+
+    public static void SetSurfaceGameplayId(CPlugSurface surface, LegacyGameplayId gameplayId)
+        => SetSurfaceGameplayId(surface, (ushort)gameplayId);
+    public static void SetSurfaceGameplayId(CPlugSurface surface, ushort gameplayId)
+    {
+        var chunk = surface.GetChunk<Chunk0900C003>();
+        chunk.U04 = [gameplayId];
+    }
+    public static ushort GetSurfaceGameplayId(CPlugSurface surface)
+    {
+        var chunk = surface.GetChunk<Chunk0900C003>();
+        if (chunk?.U04?.Length > 0)
+            return chunk.U04[0];
+        return 0;
+    }
 }
