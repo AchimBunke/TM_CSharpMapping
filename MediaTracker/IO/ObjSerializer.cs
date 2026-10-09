@@ -245,10 +245,11 @@ public static class ObjSerializer
 
         subObjects.Add(current);
 
-        vList = new();
-        tList = new();
-        cList = new();
-        vertexMap = new();
+        vList.Clear();
+        tList.Clear();
+        cList.Clear();
+        vertexMap.Clear();
+        colorMap.Clear();
     }
 
 

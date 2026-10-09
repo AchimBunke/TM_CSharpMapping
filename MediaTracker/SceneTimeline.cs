@@ -72,6 +72,8 @@ public record BlockTemplates(
     public CGameCtnMediaBlockCameraPath GetEmptyPathCameraBlock() => (ObjectCloner.DeepCloneObject(PathCamera))!;
     public CGameCtnMediaBlockCameraOrbital GetEmptyOrbitalCameraBlock() => (ObjectCloner.DeepCloneObject(OrbitalCamera))!;
 
+    public static BlockTemplates Create() => MediaTrackerUtils.CreateBlockTemplates();
+
 }
 
 
