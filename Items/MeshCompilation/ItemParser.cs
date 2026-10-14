@@ -323,7 +323,8 @@ public class ItemParser
                     {
                         Positions = posArr,
                         Indices = idxArr,
-                        SurfaceMaterialIds = Enumerable.Repeat(mat.SurfacePhysicId, idxArr.Length / 3).ToArray()
+                        SurfaceMaterialIds = Enumerable.Repeat(mat.SurfacePhysicId, idxArr.Length / 3).ToArray(),
+                        SurfaceGameplayIds = Enumerable.Repeat(mat.SurfaceGameplayId, idxArr.Length / 3).ToArray()
                     };
                     int key = normalizedItem.ShapePool.Count;
                     normalizedItem.ShapePool.Add(key, shape);
@@ -339,7 +340,8 @@ public class ItemParser
                     {
                         Positions = posArr,
                         Indices = idxArr,
-                        SurfaceMaterialIds = Enumerable.Repeat(mat.SurfacePhysicId, idxArr.Length / 3).ToArray()
+                        SurfaceMaterialIds = Enumerable.Repeat(mat.SurfacePhysicId, idxArr.Length / 3).ToArray(),
+                        SurfaceGameplayIds = Enumerable.Repeat(mat.SurfaceGameplayId, idxArr.Length / 3).ToArray()
                     };
                     int key = normalizedItem.ShapePool.Count;
                     normalizedItem.ShapePool.Add(key, shape);
@@ -636,14 +638,17 @@ public class ItemParser
         ParseSolid2Model(staticObjectModel.Mesh, model, normalizedItem, staticObjectModel.IsMeshCollidable);
 
         // staticShape
-        if (staticObjectModel.Shape is null)
+        var shape = staticObjectModel.GetShape();
+        if (shape is null)
             return ToolResult.Success(nameof(ItemParser)); // early return if no shape
+
+        model.GameplayMainDir = shape.Surf?.GameplayMainDir ?? new Vec3(0, 0, 1);
 
         var shapeRef = new ShapeRef()
         {
             Role = ShapeRole.Static,
         };
-        var shapeResult = ParseShape(staticObjectModel.Shape, shapeRef, normalizedItem);
+        var shapeResult = ParseShape(shape, shapeRef, normalizedItem);
         if (shapeResult.IsFailure)
             return shapeResult;
         model.Shapes.Add(shapeRef);
@@ -690,28 +695,34 @@ public class ItemParser
         ParseSolid2Model(dynamicObjectModel.Mesh, model, normalizedItem, meshIsCollisionSource: false);
 
         // staticShape
-        if (dynamicObjectModel.StaticShape is not null)
+        var staticShape = dynamicObjectModel.GetStaticShape();
+        if (staticShape is not null)
         {
             var staticShapeRef = new ShapeRef()
             {
                 Role = ShapeRole.Static,
             };
-            var shapeResult = ParseShape(dynamicObjectModel.StaticShape, staticShapeRef, normalizedItem);
+            model.GameplayMainDir = staticShape.Surf?.GameplayMainDir ?? new Vec3(0, 0, 1);
+
+            var shapeResult = ParseShape(staticShape, staticShapeRef, normalizedItem);
             if (shapeResult.IsFailure)
                 return shapeResult;
             model.Shapes.Add(staticShapeRef);
         }
 
         // dynamicShape
-        if (dynamicObjectModel.DynaShape is not null)
+        var dynaShape = dynamicObjectModel.GetDynaShape();
+        if (dynaShape is not null)
         {
             var dynamicShapeRef = new ShapeRef()
             {
                 Role = ShapeRole.Dynamic,
             };
-            var shapeResult = ParseShape(dynamicObjectModel.DynaShape, dynamicShapeRef, normalizedItem);
+            model.GameplayMainDir = dynaShape.Surf?.GameplayMainDir ?? new Vec3(0, 0, 1);
+            var shapeResult = ParseShape(dynaShape, dynamicShapeRef, normalizedItem);
             if (shapeResult.IsFailure)
                 return shapeResult;
+
             model.Shapes.Add(dynamicShapeRef);
         }
 
@@ -1039,6 +1050,7 @@ public class ItemParser
         // prepare arrays
         normalizedShape.Indices = new int[mesh.Triangles!.Length * 3];
         normalizedShape.SurfaceMaterialIds = new CPlugSurface.MaterialId[mesh.Triangles.Length];
+        normalizedShape.SurfaceGameplayIds = new GameplayId[mesh.Triangles.Length];
 
         for (int i = 0; i < mesh.Triangles.Length; i++)
         {
@@ -1049,6 +1061,7 @@ public class ItemParser
 
             // material id for collision surfaces
             normalizedShape.SurfaceMaterialIds[i] = (MaterialId)triangle.U02;
+            normalizedShape.SurfaceGameplayIds[i] = (GameplayId)triangle.U03;
         }
     }
 

@@ -54,7 +54,7 @@ internal class NodeDefGroup
     public Vec3? GameplayMainDir { get; set; }
     public EWaypointType? WaypointType { get; set; }
     public bool? WaypointNoRespawn { get; set; }
-    public Vector3 AnchorPosition { get; set; } = Vector3.Zero;
+    public Vector3? AnchorPosition { get; set; }
     public string? RotationAnchorNode{ get; set; } = null;
     public CPlugSpawnModelHolder? WaypointSpawnModel { get; set; }
 
@@ -85,7 +85,7 @@ internal class NodeGrouper
         _movingConfig = itemConfig.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => new MovingParameter
         {
             KinematicConstraint = MovingGroupConfig.ToKinematicConstraint(mg.KinematicMovement),
-            InstanceParams = MovingGroupConfig.ToInstanceParams(mg.KinematicModelConfig),
+            InstanceParams = MovingGroupConfig.ToInstanceParams(mg.KinematicModel),
             ParentMovingGroupId = mg.ParentMovingGroupId,
             RotationAnchorNode = mg.RotationAnchorNode,
         });
@@ -185,8 +185,8 @@ internal class NodeGrouper
             bool hasGroup = !string.IsNullOrEmpty(node.NodeConfig.MovingGroup);
             string key = isSingle || !hasGroup
                 ? $"{(isSingle ? "single" : "moving")}_{isolatedCounter++}"
-                : $"{node.NodeConfig.MovingGroup}";
-            return new BucketInfo { Key = key, Type = ModelType.Dynamic, MovingGroup = node.NodeConfig.MovingGroup };
+                : $"{node.NodeConfig.MovingGroup}_{node.NodeConfig.GameplayMainDir}";
+            return new BucketInfo { Key = key, Type = ModelType.Dynamic, MovingGroup = node.NodeConfig.MovingGroup , GameplayMainDir = node.NodeConfig.GameplayMainDir };
         }
 
         {
@@ -196,8 +196,8 @@ internal class NodeGrouper
             else if (_itemConfig.ConversionOptions.HasFlag(ItemConversionOptions.SkipStaticItemGrouping))
                 key = $"static_{isolatedCounter++}";
             else
-                key = $"static";
-            return new BucketInfo { Key = key, Type = ModelType.Static };
+                key = $"static_{node.NodeConfig.GameplayMainDir}";
+            return new BucketInfo { Key = key, Type = ModelType.Static, GameplayMainDir = node.NodeConfig.GameplayMainDir };
         }
     }
 

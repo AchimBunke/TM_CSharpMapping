@@ -24,15 +24,28 @@ public enum ItemConversionOptions
 }
 public class ItemConfig
 {
+    [JsonPropertyName("Version")] 
+    public int Version { get; set; } = 1;
+
+
+    [JsonPropertyName("Type")]
     public string Type { get; init; } = "StaticObject";
+
+    [JsonPropertyName("Collection")]
     public string Collection { get; init; } = "Stadium";
+
+    [JsonPropertyName("AuthorName")]
     public string AuthorName { get; set; } = "";
 
+    [JsonPropertyName("Name")]
     public string? Name { get; set; } = null;
+
+    [JsonPropertyName("Description")]
     public string? Description { get; set; } = null;
 
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Waypoint")]
     public Waypoint? Waypoint
     {
         get; set;
@@ -40,28 +53,37 @@ public class ItemConfig
 
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public PlacementConfig? PlacementParams
+    [JsonPropertyName("Placement")]
+    public PlacementConfig? Placement
     {
         get; set;
     }
 
+    [JsonPropertyName("Scale")]
     public float Scale { get; set; } = 1.0f;
 
-    public List<MaterialConfig> MaterialConfiguration { get; set; } = new List<MaterialConfig>();
+    [JsonPropertyName("Materials")]
+    public List<MaterialConfig> Materials { get; set; } = new List<MaterialConfig>();
 
-    public List<MeshConfig> MeshConfiguration { get; set; } = new List<MeshConfig>();
+    [JsonPropertyName("Meshes")]
+    public List<MeshConfig> Meshes { get; set; } = new List<MeshConfig>();
 
+    [JsonPropertyName("Lights")]
     public List<LightConfig> Lights { get; set; } = new List<LightConfig>();
 
+    [JsonPropertyName("MovingGroups")]
     public List<MovingGroupConfig> MovingGroups { get; set; } = new List<MovingGroupConfig>();
 
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("LodParameters")]
     public LodParameters? LodParameters
     {
         get; set;
     }
 
+    [JsonPropertyName("ConversionOptions")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public ItemConversionOptions ConversionOptions
     {
         get; set;
@@ -113,13 +135,22 @@ public class ItemConfig
 
 public class Waypoint
 {
+    [JsonPropertyName("Type")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public EWaypointType Type { get; set; } = EWaypointType.Checkpoint;
+
+    [JsonPropertyName("NoRespawn")]
     public bool NoRespawn
     {
         get; set;
     }
+    [JsonPropertyName("DefaultGravitySpawn")]
     public Vec3? DefaultGravitySpawn { get; set; } = new Vec3(0, -1, 0);
+
+    [JsonPropertyName("TorqueX")]
     public float? TorqueX { get; set; } = 0;
+
+    [JsonPropertyName("TorqueDuration")]
     public int? TorqueDuration { get; set; } = 0;
 }
 
@@ -129,25 +160,32 @@ public class LodParameters
     /// <summary>
     /// Mismatch between distance value and actual ingame distance (value = 100 => 200 units ingame)
     /// </summary>
+    [JsonPropertyName("MaxLodDistances")]
     public List<float> MaxLodDistances { get; set; } = [];
 }
 
 public class MovingGroupConfig
 {
+    [JsonPropertyName("MovingGroupId")]
     public string MovingGroupId
     {
         get; set;
     } = string.Empty;
+
+    [JsonPropertyName("ParentMovingGroupId")]
     public string? ParentMovingGroupId { get; set; } = null;
-    /// <summary>
-    /// Trackmania space so blenderSpace => (X, Z, -Y)
-    /// </summary>
+
+    [JsonPropertyName("RotationAnchorNode")]
     public string? RotationAnchorNode { get; set; } = null;
+
+    [JsonPropertyName("KinematicMovement")]
     public KinematicMovement KinematicMovement
     {
         get; set;
     } = new KinematicMovement();
-    public KinematicModelConfig KinematicModelConfig
+
+    [JsonPropertyName("KinematicModel")]
+    public KinematicModelConfig KinematicModel
     {
         get; set;
     } = new KinematicModelConfig();
@@ -225,8 +263,8 @@ public class MovingGroupConfig
             ShaderTcDataTransSub = new TransSubTextureIn()
             {
                 NbSubTexture = kinematicMovementConfig.MovingTexture?.SubTextures ?? 0,
-                NbSubTexturePerLine = kinematicMovementConfig.MovingTexture?.SubTexturePerLine ?? 0,
-                NbSubTexturePerColumn = kinematicMovementConfig.MovingTexture?.SubTexturePerColumn ?? 0,
+                NbSubTexturePerLine = kinematicMovementConfig.MovingTexture?.SubTexturesPerLine ?? 0,
+                NbSubTexturePerColumn = kinematicMovementConfig.MovingTexture?.SubTexturesPerColumn ?? 0,
                 TopToBottom = kinematicMovementConfig.MovingTexture?.TopToBottom ?? false
             },
             ShaderTcAnimFunc = kinematicMovementConfig.MovingTexture?.TextureAnims.Select(sf =>
@@ -274,8 +312,8 @@ public class MovingGroupConfig
             MovingTexture = kinematicConstraint.ShaderTcType == NPlugDyna_SKinematicConstraint.EShaderTcType.TransSubTexture ? new MovingTextureConfig
             {
                 SubTextures = kinematicConstraint.ShaderTcDataTransSub.NbSubTexture,
-                SubTexturePerLine = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerLine,
-                SubTexturePerColumn = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerColumn,
+                SubTexturesPerLine = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerLine,
+                SubTexturesPerColumn = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerColumn,
                 TopToBottom = kinematicConstraint.ShaderTcDataTransSub.TopToBottom,
                 TextureAnims = kinematicConstraint.ShaderTcAnimFunc?.Select(sf => new TextureAnim
                 {
@@ -290,35 +328,51 @@ public class MovingGroupConfig
 }
 public class KinematicMovement
 {
+    [JsonPropertyName("TransAxis")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public EAxis TransAxis
     {
         get; set;
     }
+
+    [JsonPropertyName("TransMin")]
     public float TransMin
     {
         get; set;
     }
+
+    [JsonPropertyName("TransMax")]
     public float TransMax
     {
         get; set;
     }
+
+    [JsonPropertyName("RotAxis")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public EAxis RotAxis
     {
         get; set;
     }
+
+    [JsonPropertyName("AngleMinDeg")]
     public float AngleMinDeg
     {
         get; set;
     }
+
+    [JsonPropertyName("AngleMaxDeg")]
     public float AngleMaxDeg
     {
         get; set;
     }
 
-  
+    [JsonPropertyName("TranslationAnims")]
     public List<SubAnimFunc> TranslationAnims { get; set; } = [];
+
+    [JsonPropertyName("RotationAnims")]
     public List<SubAnimFunc> RotationAnims { get; set; } = [];
 
+    [JsonPropertyName("MovingTexture")]
     public MovingTextureConfig? MovingTexture{ get; set; }
 
 
@@ -329,50 +383,80 @@ public class MovingTextureConfig
     /// <summary>
     /// Number of subtextures.. if anims contains texture ids that are not in the range of 0 to SubTextures-1, the last texture will be used instead. (e.g. SubTextures = 4, anims contains texture id 5, then texture id 3 will be used)
     /// </summary>
+    [JsonPropertyName("SubTextures")]
     public int SubTextures { get; set; }
+
     /// <summary>
     /// Number of subtextures per line in the texture atlas. (e.g. 4x4 atlas, SubTexturePerLine = 4, SubTexturePerColumn = 4)
     /// </summary>
-    public int SubTexturePerLine { get; set; }
+    [JsonPropertyName("SubTexturesPerLine")]
+    public int SubTexturesPerLine { get; set; }
+
     /// <summary>
     /// Number of subtextures per column in the texture atlas. (e.g. 4x4 atlas, SubTexturePerLine = 4, SubTexturePerColumn = 4)
     /// </summary>
-    public int SubTexturePerColumn { get; set; }
+    [JsonPropertyName("SubTexturesPerColumn")]
+    public int SubTexturesPerColumn { get; set; }
+
     /// <summary>
     /// If true, the texture indexes are counted from top to bottom, otherwise from bottom to top. 
     /// </summary>
+    [JsonPropertyName("TopToBottom")]
     public bool TopToBottom { get; set; }
 
+    [JsonPropertyName("TextureAnims")]
     public List<TextureAnim> TextureAnims { get; set; } = [];
 
 }
 public class TextureAnim
 {
+    [JsonPropertyName("Duration")]
     public uint Duration { get; set; }
+
+    [JsonPropertyName("TextureID")]
     public int TextureID { get; set; }
 }
 
 public class KinematicModelConfig
 {
+    [JsonPropertyName("CastStaticShadow")]
     public bool CastStaticShadow { get; set; }
+
+    [JsonPropertyName("IsKinematic")]
     public bool IsKinematic { get; set; } = true;
+
+    [JsonPropertyName("PeriodicSc")]
     public float PeriodicSc { get; set; } = 1;
+
+    [JsonPropertyName("PeriodicScMax")]
     public float PeriodicScMax { get; set; } = -1;
+
+    [JsonPropertyName("Phase01")]
     public float Phase01 { get; set; } = -1;
+
+    [JsonPropertyName("Phase01Max")]
     public float Phase01Max { get; set; } = -1;
+
+    [JsonPropertyName("TextureId")]
     public int TextureId { get; set; } = 0;
 }
 
 public class SubAnimFunc
 {
+    [JsonPropertyName("Ease")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public AnimEase Ease
     {
         get; set;
     }
+
+    [JsonPropertyName("Reverse")]
     public bool Reverse
     {
         get; set;
     }
+
+    [JsonPropertyName("Duration")]
     public uint Duration
     {
         get; set;
@@ -381,45 +465,69 @@ public class SubAnimFunc
 
 public class LightConfig
 {
+    [JsonPropertyName("Name")]
     public string Name
     {
         get; set;
     } = string.Empty;
+
+    [JsonPropertyName("Type")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public MeshCompilation.LightType? Type
     {
         get; set;
     }
+
+    [JsonPropertyName("Color")]
     public System.Drawing.Color Color
     {
         get; set;
     }
+
+    [JsonPropertyName("Intensity")]
     public float Intensity
     {
         get; set;
     }
+
+    [JsonPropertyName("Distance")]
     public float Distance
     {
         get; set;
     }
+
+    [JsonPropertyName("NightOnly")]
     public bool NightOnly
     {
         get; set;
     }
+
+    [JsonPropertyName("PointEmissionRadius")]
     public float PointEmissionRadius
     {
         get; set;
     }
+
+    [JsonPropertyName("PointEmissionLength")]
     public float PointEmissionLength
     {
         get; set;
     }
+
+    [JsonPropertyName("SpotInnerAngle")]
     public float SpotInnerAngle { get; set; } = 40;
+
+    [JsonPropertyName("SpotOuterAngle")]
     public float SpotOuterAngle { get; set; } = 60;
-    public float SpotEmissionSizeX
+
+    [JsonPropertyName("SpotEmissionRadius")]
+    public float SpotEmissionRadius
     {
         get; set;
     }
-    public float SpotEmissionSizeY
+
+    [JsonPropertyName("SpotEmissionLength")]
+    public float SpotEmissionLength
     {
         get; set;
     }
@@ -427,56 +535,54 @@ public class LightConfig
 
 public class PlacementConfig
 {
+    [JsonPropertyName("YawOnly")]
     public bool YawOnly { get; set; }
+
+    [JsonPropertyName("NotOnObject")]
     public bool NotOnObject { get; set; }
-    public bool AutoRotation
-    {
-        get; set;
-    }
-    public bool SwitchPivotManually
-    {
-        get; set;
-    }
-    public Vec3? CubeCenter
-    {
-        get; set;
-    }
-    public float CubeSize
-    {
-        get; set;
-    }
-    public float GridSnapHStep
-    {
-        get; set;
-    }
-    public float GridSnapVStep
-    {
-        get; set;
-    }
-    public float GridSnapHOffset
-    {
-        get; set;
-    }
-    public float GridSnapVOffset
-    {
-        get; set;
-    }
-    public float FlyVStep
-    {
-        get; set;
-    }
-    public float FlyVOffset
-    {
-        get; set;
-    }
-    public float PivotSnapDistance
-    {
-        get; set;
-    } = 0;
+
+    [JsonPropertyName("AutoRotation")]
+    public bool AutoRotation { get; set; }
+
+    [JsonPropertyName("SwitchPivotManually")]
+    public bool SwitchPivotManually { get; set; }
+
+    [JsonPropertyName("CubeCenter")]
+    public Vec3? CubeCenter { get; set; }
+
+    [JsonPropertyName("CubeSize")]
+    public float CubeSize { get; set; }
+
+    [JsonPropertyName("GridSnapHStep")]
+    public float GridSnapHStep { get; set; }
+
+    [JsonPropertyName("GridSnapVStep")]
+    public float GridSnapVStep { get; set; }
+
+    [JsonPropertyName("GridSnapHOffset")]
+    public float GridSnapHOffset { get; set; }
+
+    [JsonPropertyName("GridSnapVOffset")]
+    public float GridSnapVOffset { get; set; }
+
+    [JsonPropertyName("FlyVStep")]
+    public float FlyVStep { get; set; }
+
+    [JsonPropertyName("FlyVOffset")]
+    public float FlyVOffset { get; set; }
+
+    [JsonPropertyName("PivotSnapDistance")]
+    public float PivotSnapDistance { get; set; } = 0;
+
+    [JsonPropertyName("PivotPositions")]
     public List<Vec3>? PivotPositions { get; set; } = [];
+
+    [JsonPropertyName("PivotRotations")]
     public List<Quat>? PivotRotations { get; set; } = [];
 
+    [JsonPropertyName("PlacementClass")]
     public PlacementClass? PlacementClass { get; set; }
+
 
     public static CGameItemPlacementParam ToPlacementParam(PlacementConfig? placementConfig)
     {
@@ -575,7 +681,8 @@ public class PlacementConfig
                         FillAlign = (FillAlign)pl.FillAlign,
                         UseFillAlign = pl.FillDir == 1 ? true : false,
                         NormedPos = pl.NormedPos,
-                        OnlyOnGroups = pl.OnlyOnGroups?.ToList() ?? new List<string>()
+                        OnlyOnGroups = pl.OnlyOnGroups?.ToList() ?? new List<string>(),
+                        Altitude = pl.Altitude
                     };
                 }).ToList() ?? new List<PlacementPatchLayout>(),
             };
@@ -588,39 +695,58 @@ public class PlacementConfig
 
 public class PlacementClass
 {
+    [JsonPropertyName("SizeGroup")]
     public string? SizeGroup { get; set; } = null;
+
+    [JsonPropertyName("CompatibleGroupsIds")]
     public List<string>? CompatibleGroupsIds { get; set; } = [];
+
+    [JsonPropertyName("AlwaysUp")]
     public bool AlwaysUp { get; set; } = false;
+
+    [JsonPropertyName("AlignToInterior")]
     public bool AlignToInterior { get; set; } = false;
+
+    [JsonPropertyName("AlignToWorldDir")]
     public bool AlignToWorldDir { get; set; } = false;
+
+    [JsonPropertyName("WorldDir")]
     public Vec3? WorldDir { get; set; } = null;
+
+    [JsonPropertyName("PatchLayouts")]
     public List<PlacementPatchLayout>? PatchLayouts { get; set; } = [];
+
+    [JsonPropertyName("GroupCurPatchLayouts")]
     public List<int>? GroupCurPatchLayouts { get; set; } = [];
 }
 
 public class PlacementPatchLayout
 {
-    /// <summary>
-    /// 0 for automatic count depending on spacing
-    /// </summary>
+    /// <summary>0 for automatic count depending on spacing</summary>
+    [JsonPropertyName("ItemCount")]
     public int ItemCount { get; set; }
-    /// <summary>
-    /// Space between items
-    /// </summary>
+
+    /// <summary>Space between items</summary>
+    [JsonPropertyName("ItemSpacing")]
     public float ItemSpacing { get; set; }
+
+    [JsonPropertyName("FillAlign")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public FillAlign FillAlign { get; set; } = FillAlign.Center;
+
+    [JsonPropertyName("UseFillAlign")]
     public bool UseFillAlign { get; set; } = true;
-    /// <summary>
-    /// Horizontal Position along patch width
-    /// </summary>
+
+    /// <summary>Horizontal position along patch width</summary>
+    [JsonPropertyName("NormedPos")]
     public float NormedPos { get; set; } = 0.5f;
-    /// <summary>
-    /// For which patchgroups this config applies
-    /// </summary>
+
+    /// <summary>For which patch groups this config applies</summary>
+    [JsonPropertyName("OnlyOnGroups")]
     public List<string>? OnlyOnGroups { get; set; } = [];
-    /// <summary>
-    /// Height over patch
-    /// </summary>
+
+    /// <summary>Height over patch</summary>
+    [JsonPropertyName("Altitude")]
     public float Altitude { get; set; } = 0;
 }
 

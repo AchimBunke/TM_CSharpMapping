@@ -1,4 +1,5 @@
 using System.Numerics;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
 
@@ -12,6 +13,7 @@ namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
 public interface ISceneImporter
 {
     ImportedScene Import(Stream stream);
+    void FixConfigAxes(ItemConfig config);
 }
 
 public class ImportedScene

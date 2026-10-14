@@ -1,7 +1,11 @@
 
+using GBX.NET;
+using GBX.NET.Engines.Meta;
 using Silk.NET.Assimp;
+using System.Drawing.Drawing2D;
 using System.Numerics;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using Matrix4x4 = System.Numerics.Matrix4x4;
 
@@ -29,7 +33,7 @@ public class SilkAssimpSceneImporter : ISceneImporter
             0,0,0,1) *
        
         Matrix4x4.CreateScale(new Vector3(0.01f, 0.01f, 0.01f));
-    public  ImportedScene Import(Stream stream)
+    public ImportedScene Import(Stream stream)
     {
         using var context = Assimp.GetApi();
 
@@ -576,6 +580,73 @@ public class SilkAssimpSceneImporter : ISceneImporter
     //}
 
 
+    /// <summary>
+    /// Fix all provided axis/position offsets that are pure vectors as they are assumed to be in the original coordinate space and need to be transformed into GBX space.
+    /// </summary>
+    /// <param name="itemConfig"></param>
+    public void FixConfigAxes(ItemConfig itemConfig)
+    {
+        Matrix4x4 GbxCoordinateSpaceFixup = new Matrix4x4
+        (
+              1f, 0f, 0f, 0f,
+              0f, 0f, -1f, 0f,
+              0f, 1f, 0f, 0f,
+              0f, 0f, 0f, 1f
+        );
+        if(itemConfig.Waypoint != null)
+        {
+            if(itemConfig.Waypoint.DefaultGravitySpawn.HasValue)
+                itemConfig.Waypoint.DefaultGravitySpawn = Vector3.Transform(itemConfig.Waypoint.DefaultGravitySpawn.Value, GbxCoordinateSpaceFixup);
+        }
+        if (itemConfig.Placement != null)
+        {
+            if (itemConfig.Placement.CubeCenter.HasValue)
+                itemConfig.Placement.CubeCenter = Vector3.Transform(itemConfig.Placement.CubeCenter.Value, GbxCoordinateSpaceFixup);
+            if (itemConfig.Placement.PivotPositions != null)
+            {
+                for (int i = 0; i < itemConfig.Placement.PivotPositions.Count; ++i) 
+                    itemConfig.Placement.PivotPositions[i] = Vector3.Transform(itemConfig.Placement.PivotPositions[i], GbxCoordinateSpaceFixup);
+            }
+            if (itemConfig.Placement.PivotRotations != null)
+            {
+                Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(GbxCoordinateSpaceFixup);
+                for (int i = 0; i < itemConfig.Placement.PivotRotations.Count; ++i)
+                    itemConfig.Placement.PivotRotations[i] = Quaternion.Multiply(matrixRotation, itemConfig.Placement.PivotRotations[i]);
+            }
+            if(itemConfig.Placement.PlacementClass != null)
+            {
+                if(itemConfig.Placement.PlacementClass.WorldDir.HasValue)
+                    itemConfig.Placement.PlacementClass.WorldDir = Vector3.Transform(itemConfig.Placement.PlacementClass.WorldDir.Value, GbxCoordinateSpaceFixup);
+            }
+        }
+        foreach(var meshConfig in itemConfig.Meshes)
+        {
+            if(meshConfig.GameplayMainDir.HasValue)
+                meshConfig.GameplayMainDir = Vector3.Transform(meshConfig.GameplayMainDir.Value, GbxCoordinateSpaceFixup);
+        }
+        foreach (var movingGroup in itemConfig.MovingGroups)
+        {
+            movingGroup.KinematicMovement.TransAxis = movingGroup.KinematicMovement.TransAxis switch
+            {
+                NPlugDyna_SKinematicConstraint.EAxis.X => NPlugDyna_SKinematicConstraint.EAxis.X,
+                NPlugDyna_SKinematicConstraint.EAxis.Y => NPlugDyna_SKinematicConstraint.EAxis.Z,
+                NPlugDyna_SKinematicConstraint.EAxis.Z => NPlugDyna_SKinematicConstraint.EAxis.Y,
+            };
+            movingGroup.KinematicMovement.RotAxis = movingGroup.KinematicMovement.RotAxis switch
+            {
+                NPlugDyna_SKinematicConstraint.EAxis.X => NPlugDyna_SKinematicConstraint.EAxis.X,
+                NPlugDyna_SKinematicConstraint.EAxis.Y => NPlugDyna_SKinematicConstraint.EAxis.Z,
+                NPlugDyna_SKinematicConstraint.EAxis.Z => NPlugDyna_SKinematicConstraint.EAxis.Y,
+            };
+
+            if(movingGroup.KinematicMovement.TransAxis == NPlugDyna_SKinematicConstraint.EAxis.Z)
+            {
+                movingGroup.KinematicMovement.TransMin = -movingGroup.KinematicMovement.TransMin;
+                movingGroup.KinematicMovement.TransMax = -movingGroup.KinematicMovement.TransMax;
+            }
+            //TODO: also rotate min/max
+        }
+    }
 }
 
 

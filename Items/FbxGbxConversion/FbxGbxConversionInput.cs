@@ -172,7 +172,7 @@ public record FbxGbxConversionInput : IDisposable
                 },
                 NoRespawn = false,
             } : null,
-            PlacementParams = new PlacementConfig()
+            Placement = new PlacementConfig()
             {
                 GridSnapHStep = itemXml.GridSnap?.HStep ?? 0f,
                 GridSnapHOffset = itemXml.GridSnap?.HOffset ?? 0f,
@@ -188,7 +188,7 @@ public record FbxGbxConversionInput : IDisposable
                 PivotPositions = itemXml.Pivots?.Select(p => p.GetPosition()).ToList(),
             },
             Scale = meshParamsXml.Scale,
-            MaterialConfiguration = meshParamsXml.Materials.Select(m => new MaterialConfig
+            Materials = meshParamsXml.Materials.Select(m => new MaterialConfig
             {
                 Name = m.Name,
                 Link = m.Link,
@@ -208,8 +208,8 @@ public record FbxGbxConversionInput : IDisposable
                 PointEmissionLength = l.PointEmissionLength,
                 SpotInnerAngle = l.SpotInnerAngle,
                 SpotOuterAngle = l.SpotOuterAngle,
-                SpotEmissionSizeX = l.SpotEmissionSizeX,
-                SpotEmissionSizeY = l.SpotEmissionSizeY
+                SpotEmissionRadius = l.SpotEmissionSizeX,
+                SpotEmissionLength = l.SpotEmissionSizeY
             }).ToList(),
             ConversionOptions = itemConversionOptions,
 

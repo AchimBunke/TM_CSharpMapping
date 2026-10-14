@@ -57,8 +57,8 @@ internal class FbxLightConverter
             PointEmissionLength = lightConfig.PointEmissionLength,
             SpotInnerAngle = lightConfig.SpotInnerAngle,
             SpotOuterAngle = lightConfig.SpotOuterAngle,
-            SpotEmissionSizeX = lightConfig.SpotEmissionSizeX,
-            SpotEmissionSizeY = lightConfig.SpotEmissionSizeY,
+            SpotEmissionSizeX = lightConfig.SpotEmissionRadius,
+            SpotEmissionSizeY = lightConfig.SpotEmissionLength,
             Color = new GBX.NET.Vec3(lightConfig.Color.R / 255f, lightConfig.Color.G / 255f, lightConfig.Color.B / 255f)
         };
         var c = lightUserModel.CreateChunk<CPlugLightUserModel.Chunk090F9000>();

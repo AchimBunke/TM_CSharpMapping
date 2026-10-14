@@ -75,7 +75,7 @@ internal class FbxMeshConverter
     /// and computes a per-group anchor transform (position + rotation) that will become the group's
     /// EntityRef.Position/Rotation. Node geometry is later expressed relative to this anchor instead of world space.
     /// </summary>
-    public static ToolResult<List<NodeDefGroup>> GroupNodes(List<NodeDef> nodes, List<NodeDef> allSceneNodes, List<SocketDef> sockets, FbxGbxConversionInput config)
+    public static ToolResult<List<NodeDefGroup>> GroupNodes(List<NodeDef> nodes, IEnumerable<ImportedNode> allSceneNodes, List<SocketDef> sockets, FbxGbxConversionInput config)
     {
         var lods = config.ItemConfig.LodParameters?.MaxLodDistances ?? [];
 
@@ -113,9 +113,7 @@ internal class FbxMeshConverter
                 ? null
                 : group.RelativeMovingParentGroupId;
             if (!string.IsNullOrEmpty(group.RotationAnchorNode))
-                group.AnchorPosition = allSceneNodes.FirstOrDefault(n => n.NodeConfig.Name == group.RotationAnchorNode)!.GlobalTransform.Translation;
-            else
-                group.AnchorPosition = Vector3.Zero;
+                group.AnchorPosition = allSceneNodes.FirstOrDefault(n => n.Name == group.RotationAnchorNode)!.GlobalTransform.Translation;
         }
 
         if (sockets.Count > 0)
@@ -141,8 +139,8 @@ internal class FbxMeshConverter
     /// </summary>
     public static (System.Numerics.Vector3 Position, System.Numerics.Quaternion Rotation) ComputeGroupAnchor(NodeDefGroup group)
     {
-        if (group.AnchorPosition != Vector3.Zero)
-            return (group.AnchorPosition, System.Numerics.Quaternion.Identity);
+        if (group.AnchorPosition.HasValue)
+            return (group.AnchorPosition.Value, System.Numerics.Quaternion.Identity);
 
         if (group.Nodes.Count == 0)
             return (Vector3.Zero, System.Numerics.Quaternion.Identity);
@@ -348,7 +346,7 @@ internal class FbxMeshConverter
 
     internal static ToolResult<MeshConfig> FindMeshConfigForMesh(string meshName, FbxGbxConversionInput config)
     {
-        var meshConfig = config.ItemConfig.MeshConfiguration.FirstOrDefault(m => m!.Name == meshName, null);
+        var meshConfig = config.ItemConfig.Meshes.FirstOrDefault(m => m!.Name == meshName, null);
         bool configFromMeshName = config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames);
         if (meshConfig is null && !configFromMeshName)
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig, meshName);

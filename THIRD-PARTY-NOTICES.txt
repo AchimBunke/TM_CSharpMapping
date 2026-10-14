@@ -1,0 +1,15 @@
+THIRD-PARTY NOTICES
+
+This project uses the following third-party packages:
+
+- GBX.NET — MIT License
+  https://github.com/BigBang1112/gbx-net
+
+- GBX.NET.LZO — GNU General Public License v3.0
+  https://github.com/BigBang1112/gbx-net
+
+- SixLabors.ImageSharp — Apache License 2.0
+  https://github.com/SixLabors/ImageSharp
+
+- Silk.NET.Assimp — MIT License
+  https://github.com/dotnet/Silk.NET

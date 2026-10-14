@@ -365,8 +365,7 @@ public class ItemCompiler
         var collidable = instances.Where(i => i.Instance.Collidable).ToList();
         var staticCollidableInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRole.Static) == ShapeRole.Static).ToList();
 
-
-        var surface = GetOrCreateSurface(item, staticCollidableInstances, buildSettings);
+        var surface = GetOrCreateSurface(item, staticCollidableInstances, gameplayId: LegacyGameplayId.None, gameplayMainDir: cluster.GameplayMainDir.HasValue ? cluster.GameplayMainDir.Value : new Vector3(0, 0, 1), trigger: false, buildSettings);
         staticObject.Shape = surface;
 
         return ToolResult.Success(staticObject, nameof(ItemCompiler));
@@ -428,10 +427,10 @@ public class ItemCompiler
         if (dynamicInstances.Count == 0)
             return ToolResult.Fail(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingDynaCollisionShape);
 
-        var staticSurface = GetOrCreateSurface(item, staticInstances, buildSettings);
+        var staticSurface = GetOrCreateSurface(item, staticInstances, gameplayId: LegacyGameplayId.None, gameplayMainDir: cluster.GameplayMainDir.HasValue ? cluster.GameplayMainDir.Value : new Vector3(0, 0, 1), trigger: false, buildSettings);
         dyna.StaticShape = staticSurface;
 
-        var dynamicSurface = GetOrCreateSurface(item, dynamicInstances, buildSettings);
+        var dynamicSurface = GetOrCreateSurface(item, dynamicInstances, gameplayId: LegacyGameplayId.None, gameplayMainDir: cluster.GameplayMainDir.HasValue ? cluster.GameplayMainDir.Value : new Vector3(0, 0, 1), trigger: false, buildSettings);
         dyna.DynaShape = dynamicSurface;
 
         return ToolResult.Success(dyna, nameof(ItemCompiler));
@@ -774,8 +773,7 @@ public class ItemCompiler
 
 
 
-    CPlugSurface? GetOrCreateSurface(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> collidableInstances, BuildSettings buildSettings)
-        => GetOrCreateSurface(item, collidableInstances, LegacyGameplayId.None, new Vec3(0, 0, 1), false, buildSettings);
+
     CPlugSurface? GetOrCreateSurface(
         NormalizedItem item,
         List<(Guid Id, InstanceSettings Instance)> triggerInstances,
@@ -937,18 +935,21 @@ public class ItemCompiler
             ReadOnlySpan<Vec3> sourcePositions;
             ReadOnlySpan<int> sourceIndices;
             ReadOnlySpan<MaterialId> surfaceMaterialIds;
+            ReadOnlySpan<GameplayId> surfaceGameplayIds;
             NormalizedMesh normMesh;
             if ((normMesh = geometrySource as NormalizedMesh) != null)
             {
                 sourcePositions = normMesh.Positions.AsSpan();
                 sourceIndices = normMesh.Indices.AsSpan();
                 surfaceMaterialIds = default;
+                surfaceGameplayIds = default;
             }
             else if (geometrySource is NormalizedShape normShape)
             {
                 sourcePositions = normShape.Positions.AsSpan();
                 sourceIndices = normShape.Indices.AsSpan();
                 surfaceMaterialIds = normShape.SurfaceMaterialIds.AsSpan();
+                surfaceGameplayIds = normShape.SurfaceGameplayIds.AsSpan();
             }
             else
             {
@@ -976,6 +977,14 @@ public class ItemCompiler
                     materialId = normMesh.Material.SurfacePhysicId;
                 else
                     materialId = MaterialId.Concrete;
+                GameplayId surfaceGameplayId = GameplayId.None;
+                if(!surfaceGameplayIds.IsEmpty)
+                    surfaceGameplayId = surfaceGameplayIds[i / 3];
+                else if (normMesh is not null)
+                    surfaceGameplayId = normMesh.Material.SurfaceGameplayId;
+                else
+                    surfaceGameplayId = GameplayId.None;
+
                 triangles.Add(new CPlugSurface.Mesh.Triangle
                 {
                     Indices = new Int3(
@@ -984,7 +993,7 @@ public class ItemCompiler
                         localPositionToGlobalPosition[sourceIndices[i + 2]]),
                     SurfaceIndex = 0,
                     U02 = trigger ? (byte)0 : (byte)materialId,
-                    U03 = 0
+                    U03 = trigger ? (byte)0 : (byte)surfaceGameplayId,
                 });
             }
         }
@@ -1451,6 +1460,8 @@ public class ItemCompiler
                         parentPosition,
                         parentRotation);
                     materialInstance.SurfacePhysicId = shape.SurfaceMaterialIds.FirstOrDefault(MaterialId.Concrete);
+                    materialInstance.SurfaceGameplayId = shape.SurfaceGameplayIds.FirstOrDefault(GameplayId.None);
+
                 }
                 else
                     continue;

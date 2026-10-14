@@ -54,6 +54,9 @@ public static class NormalizedItemValidator
         if(shape.SurfaceMaterialIds.Length != shape.Indices.Length / 3)
             return ToolResult.Fail(nameof(NormalizedItemValidator), ErrorCodes.NormalizedItemValidator.ValidationError, "Shape has mismatched surface material IDs");
 
+        if(shape.SurfaceGameplayIds.Length != shape.Indices.Length / 3)
+            return ToolResult.Fail(nameof(NormalizedItemValidator), ErrorCodes.NormalizedItemValidator.ValidationError, "Shape has mismatched surface gameplay IDs");
+
         return ToolResult.Success(nameof(NormalizedItemValidator));
     }
 

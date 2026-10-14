@@ -57,6 +57,7 @@ public class FbxGbxConverter
         {
             var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
             scene = importer.Import(conversionInput.Fbx);
+            importer.FixConfigAxes(conversionInput.ItemConfig);
         }
         catch (Exception e)
         {
@@ -77,9 +78,11 @@ public class FbxGbxConverter
         if (materialResults.IsFailure)
             return ToolResult.Fail(materialResults);
 
-        var nodeResults = FbxMeshConverter.ExtractMeshNodes(scene, config);
-        if (nodeResults.IsFailure)
-            return ToolResult.Fail(nodeResults);
+        var allSceneNodes = scene.CollectNodes();
+
+        var meshNodeResults = FbxMeshConverter.ExtractMeshNodes(scene, config);
+        if (meshNodeResults.IsFailure)
+            return ToolResult.Fail(meshNodeResults);
 
         var socketResults = FbxMeshConverter.ExtractSockets(scene, config);
         if (socketResults.IsFailure)
@@ -91,9 +94,9 @@ public class FbxGbxConverter
         if (lightResults.IsFailure)
             return ToolResult.Fail(lightResults);
 
-        var nodes = FilterAndApplySpecialMeshItems(scene, nodeResults.Value, materialResults.Value);
+        var nodes = FilterAndApplySpecialMeshItems(scene, meshNodeResults.Value, materialResults.Value);
 
-        var groupResults = FbxMeshConverter.GroupNodes(nodes, nodeResults.Value, socketResults.Value, config);
+        var groupResults = FbxMeshConverter.GroupNodes(nodes, allSceneNodes, socketResults.Value, config);
         if (groupResults.IsFailure)
             return ToolResult.Fail(groupResults);
 
@@ -120,6 +123,12 @@ public class FbxGbxConverter
             groupIndexToAnchorPosition[i] = anchorPos;
             groupIndexToAnchorRotation[i] = anchorRot;
 
+            if(group.GameplayMainDir.HasValue)
+            {
+                Vector3 mainDir = group.GameplayMainDir.Value;
+                var rotationAdjustedGameplayDir = Vector3.Transform(mainDir, Quaternion.Inverse(anchorRot));
+                group.GameplayMainDir = rotationAdjustedGameplayDir;
+            }
             var model = new NormalizedModel
             {
                 Type = group.Type,
@@ -234,7 +243,7 @@ public class FbxGbxConverter
     }
     CGameItemPlacementParam CreatePlacementParameters(FbxGbxConversionInput config)
     {
-        return PlacementConfig.ToPlacementParam(config.ItemConfig.PlacementParams);
+        return PlacementConfig.ToPlacementParam(config.ItemConfig.Placement);
     }
 
     List<NodeDef> FilterAndApplySpecialMeshItems(ImportedScene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)

@@ -30,8 +30,13 @@ internal class FbxMaterialConverter
         foreach (var mat in scene.Materials)
         {
             var customMatResult = ConvertMaterial(mat, config);
-            if (customMatResult.IsFailure && !config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.IgnoreMeshesWithInvalidMaterials))
-                return ToolResult.Fail(customMatResult);
+            if (customMatResult.IsFailure)
+            {
+                if(!config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.IgnoreMeshesWithInvalidMaterials) && mat.Name != "DefaultMaterial")
+                {
+                    return ToolResult.Fail(customMatResult);
+                }
+            }
             customMaterial.Add(customMatResult.Value);
         }
         return ToolResult.Success(customMaterial, nameof(FbxGbxConverter));
@@ -118,7 +123,7 @@ internal class FbxMaterialConverter
 
     bool TryFindMaterialConfig(string matName, FbxGbxConversionInput config, out MaterialConfig materialConfig)
     {
-        materialConfig = config.ItemConfig.MaterialConfiguration.FirstOrDefault(i => i!.Name == matName, null)!;
+        materialConfig = config.ItemConfig.Materials.FirstOrDefault(i => i!.Name == matName, null)!;
         return materialConfig is not null;
     }
 
@@ -128,13 +133,13 @@ internal class FbxMaterialConverter
     public Dictionary<CPlugMaterialUserInst, int> RebuildMaterials(List<CPlugMaterialUserInst> materials, ItemConfig itemConfig, out List<ImportedMaterial> importedMaterials)
     {
         Dictionary<CPlugMaterialUserInst, int> materialIndices = new Dictionary<CPlugMaterialUserInst, int>();
-        itemConfig.MaterialConfiguration = [];
+        itemConfig.Materials = [];
         importedMaterials = [];
         foreach (var mat in materials)
         {
             var result = RebuildMaterial(mat);
 
-            itemConfig.MaterialConfiguration.Add(result.MaterialConfig);
+            itemConfig.Materials.Add(result.MaterialConfig);
             materialIndices.Add(mat, importedMaterials.Count);
             importedMaterials.Add(result.Material);
         }

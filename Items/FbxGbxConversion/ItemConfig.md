@@ -14,16 +14,18 @@ The root object of the configuration file.
 
 | Field                   | Type                   | Default          | Description                                                             |
 | ----------------------- | ---------------------- | ---------------- | ----------------------------------------------------------------------- |
+| `Version`               | `int`                  | `1`              | Configuration format version. |
+| `Type`                  | `string`               | `StaticObject`   | Dont change this! |
+| `Collection`            | `string`               | `Stadium`        | Dont change this! |
 | `AuthorName`            | `string`               | `""`             | Name of the item author.                                                |
 | `Name`                  | `string?`              | `null`           | Optional name of the item.                                              |
 | `Description`           | `string?`              | `null`           | Optional description of the item.                                       |
 | `Waypoint`              | `Waypoint?`            | `null`           | Optional waypoint configuration.                                        |
-| `PivotsPositions`       | `PivotPosition[]?`     | `null`           | Optional list of pivot positions.                                       |
-| `PivotRotations`        | `PivotRotation[]?`     | `null`           | Optional list of pivot rotations.                                       |
-| `PlacementParams`       | `PlacementParameters?` | `null`           | Optional parameters controlling item placement in the editor.           |
+| `Placement`             | `PlacementParameters?` | `null`           | Optional parameters controlling item placement in the editor.           |
 | `Scale`                 | `float`                | `1.0`            | Global scale applied to the item.                                       |
-| `MaterialConfiguration` | `MaterialConfig[]`     | `[]`             | Material definitions and their corresponding FBX/GBX material mappings. Required for each used material |
-| `MeshConfiguration`     | `MeshConfig[]`         | `[]`             | Configuration for individual nodes in the FBX.                          |
+| `Materials`               | `MaterialConfig[]`     | `[]`             | Material definitions and their corresponding FBX/GBX material mappings. Required for each used material |
+| `Meshes`                  | `MeshConfig[]`         | `[]`             | Configuration for individual nodes in the FBX.                          |
+| `MovingGroups`          | `MovingGroupConfig[]`  | `[]`             | Moving-group configurations. |
 | `Lights`                | `LightConfig[]`        | `[]`             | Light definitions to generate with the item.                            |
 | `LodParameters`         | `LodParameters?`       | `null`           | Optional LOD configuration. Required if meshes define LODs.                                             |
 
@@ -73,7 +75,7 @@ Defines placement snapping and layout attached to items such as on track borders
 | Field                  | Type                      | Default | Description                                                                |
 | ---------------------- | ------------------------- | ------- | -------------------------------------------------------------------------- |
 | `SizeGroup`            | `string?`                 | `null`  | Size category used to determine compatibility with placement groups.       |
-| `CompatibleGroupsIds`  | `PlacementPatchGroups[]?` | `[]`    | Groups on which this item can be placed.                                   |
+| `CompatibleGroupsIds`  | `string[]?` | `[]`    | Groups on which this item can be placed.                                   |
 | `AlwaysUp`             | `bool`                    | `false` | Keeps the item oriented upright regardless of the surface normal.          |
 | `AlignToInterior`      | `bool`                    | `false` | Makes the item face toward the interior of the group.                      |
 | `AlignToWorldDir`      | `bool`                    | `false` | Aligns the item according to the configured world direction.               |
@@ -94,7 +96,7 @@ Defines how multiple items are distributed within a placement patch.
 | `FillAlign`    | `FillAlign`               | `0`     | Controls how the items are aligned within the available patch space.                         |
 | `UseFillAlign` | `bool`                    | `true`  | If false Fill align is ignored and center is used.                                         |
 | `NormedPos`    | `float`                   | `0.5`   | Normalized horizontal position along the patch width. `0` is one side, `1` the other.        |
-| `OnlyOnGroups` | `PlacementPatchGroups[]?` | `[]`    | Restricts this layout to the specified patch groups.                                         |
+| `OnlyOnGroups` | `string[]?` | `[]`    | Restricts this layout to the specified patch groups.                                         |
 | `Altitude`     | `float`                   | `0`     | Vertical offset above the patch.                                                             |
 
 
@@ -163,8 +165,8 @@ Defines conversion behavior for an individual mesh.
 | `WaypointType`  | `EWaypointType?`    | `null`  | Optional waypoint type assigned to the mesh.                                                 |
 | `MovingGroup`   | `string?`           | `null`  | Optional moving group identifier for meshes that belong to a moving object/group.            |
 | `Lods`          | `int[]`             | `[]`    | LOD indices pointing to the global MaxLodDistances.                             |
-| `GameplayMainDir`| `Vec3?`            | `null`  | Optional main direction vector for trigger purposes.                                 |
-| `LightmapSize`  | `int?`              | `null`  | Optional override size for the mesh. Multiple meshes merged together will use the max value of all lightmap sizes (also includes generated lightmap sizes) |
+| `GameplayMainDir`| `Vec3?`            | `null`  | Optional main direction vector for trigger and effect purposes.                                 |
+| `LightmapSize`  | `float?`              | `null`  | Optional override size for the mesh. Multiple meshes merged together will use the max value of all lightmap sizes (also includes generated lightmap sizes) |
 
 ### `Lods`
 
@@ -270,8 +272,8 @@ Defines a light generated as part of the GBX item.
 | `PointEmissionLength` | `float`     | `0`     | Length of point-light emission.        |
 | `SpotInnerAngle`      | `float`     | `40`    | Inner cone angle for spot lights.      |
 | `SpotOuterAngle`      | `float`     | `60`    | Outer cone angle for spot lights.      |
-| `SpotEmissionSizeX`   | `float`     | `0`     | X dimension of the spot emission area. |
-| `SpotEmissionSizeY`   | `float`     | `0`     | Y dimension of the spot emission area. |
+| `SpotEmissionRadius`   | `float`     | `0`     | Radius of the spot emission area. |
+| `SpotEmissionLength`   | `float`     | `0`     | Length of the spot emission area. |
 
 Fields specific to point or spot lights only have an effect when the corresponding `Type` is used.
 
@@ -284,9 +286,10 @@ Defines the moving parameters for a specific moving group.
 | Field                  | Type                   | Default | Description                                                                                                      |
 | ---------------------- | ---------------------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
 | `MovingGroupId`        | `string`               | —       | Identifier of the moving group.                                                                                  |
+| `ParentMovingGroupId`  | `string?`               | `null` | Optional parent moving-group identifier. This group will attach its movement to the parent group if specified, but doesn't offer any collisions.|
+| `RotationAnchorNode`   | `string?`              | `null`  | Rotation anchor for that group. All nodes within this moving group will rotate around this node.                                                                |
 | `KinematicMovement`    | `KinematicMovement`    | —       | Defines the translation, rotation, and optional texture animation of the moving group.                           |
-| `KinematicModelConfig` | `KinematicModelConfig` | —       | Defines general runtime parameters of the kinematic model, such as periodic scaling, phase, and shadow behavior. |
-| `RotationAnchorNode`   | `string?`              | `null`  | Rotation anchor for that group. All nodes will rotate around this node.                                                                |
+| `KinematicModel`       | `KinematicModelConfig` | —       | Defines general runtime parameters of the kinematic model, such as periodic scaling, phase, and shadow behavior. |
 
 ---
 
@@ -339,9 +342,9 @@ Defines an animated texture using a texture atlas/subtexture layout.
 
 | Field                   | Type            | Default | Description                                                    |
 | ----------------------- | --------------- | ------- | -------------------------------------------------------------- |
-| `NbSubTexture`          | `int`           | `0`     | Total number of subtextures in the texture atlas.              |
-| `NbSubTexturePerLine`   | `int`           | `0`     | Number of subtextures per horizontal row.                      |
-| `NbSubTexturePerColumn` | `int`           | `0`     | Number of subtextures per vertical column.                     |
+| `SubTextures`          | `int`           | `0`     | Total number of subtextures in the texture atlas.              |
+| `SubTexturesPerLine`   | `int`           | `0`     | Number of subtextures per horizontal row.                      |
+| `SubTexturesPerColumn` | `int`           | `0`     | Number of subtextures per vertical column.                     |
 | `TopToBottom`           | `bool`          | `false` | Determines whether subtextures are indexed from top to bottom. |
 | `TextureAnims`          | `TextureAnim[]` | `[]`    | Sequence of texture frames displayed during the animation. ! Max. 12 anims possible !     |
 
