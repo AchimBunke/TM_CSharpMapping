@@ -1096,7 +1096,7 @@ public class ItemParser
         if (commonItemEntityModel.TriggerShape is null || commonItemEntityModel.TriggerShape is not CPlugSurface surface)
             return ToolResult.Success(nameof(ItemParser)); // early return if no triggershape
 
-        bool isWaypoint = normalizedItem.WaypointType == EWaypointType.None;
+        bool isWaypoint = normalizedItem.WaypointType != EWaypointType.None;
         var triggerModel = new NormalizedModel()
         {
             Type = isWaypoint ? ModelType.Trigger_Waypoint : ModelType.Trigger_Special,

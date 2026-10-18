@@ -1,5 +1,7 @@
-﻿using System.Drawing;
+﻿using GBX.NET;
+using System.Drawing;
 using System.Numerics;
+using Color = System.Drawing.Color;
 
 namespace TM_GenericMapping.Common;
 
@@ -65,6 +67,10 @@ public static class ColorUtils
         public Vector4 ToVector4()
         {
             return new Vector4(c.R / 255f, c.G / 255f, c.B / 255f, c.A / 255f);
+        }
+        public Vec3 ToVec3()
+        {
+            return new Vec3(c.R / 255f, c.G / 255f, c.B / 255f);
         }
 
         public Vector4 RGBAToHSVA()

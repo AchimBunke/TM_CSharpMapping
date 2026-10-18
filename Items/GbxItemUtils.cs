@@ -5,12 +5,13 @@ using GBX.NET.Engines.Plug;
 using System.Numerics;
 using System.Reflection;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.MeshCompilation;
 using TmEssentials;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 
-namespace TM_GenericMapping.Items.MeshCompilation;
+namespace TM_GenericMapping.Items;
 
 public static class GbxItemUtils
 {
@@ -345,6 +346,16 @@ public static class GbxItemUtils
         if(instanceSetting.LightTypeOverride.HasValue)
             c.U01 = (int)instanceSetting.LightTypeOverride.Value;
         return lightModel;
+    }
+    public static LightType GetLightTypeFromLightUserModel(CPlugLightUserModel lightUserModel)
+    {
+        var c = lightUserModel.GetChunk<CPlugLightUserModel.Chunk090F9000>()!;
+        return c.U01 switch
+        {
+            0 => LightType.Point,
+            1 => LightType.Spot,
+            _=> throw new InvalidOperationException($"Unknown light type {c.U01} in CPlugLightUserModel"),
+        };
     }
 
 
