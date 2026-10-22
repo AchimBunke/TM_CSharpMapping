@@ -47,9 +47,14 @@ public static class ItemPlacementUtils
 
     public enum FillAlign
     {
-        Start = -1,
         Center = 0,
-        End = 1
+        Begin = 1,
+        End = 2,
+    }
+    public enum FillDir
+    {
+        U,
+        V,
     }
 
     public static void SetItemPlacementClass(CGameItemPlacementParam placementParam, NPlugItemPlacement_SClass placementClass)

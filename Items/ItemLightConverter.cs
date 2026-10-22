@@ -1,9 +1,12 @@
-﻿using GBX.NET.Engines.GameData;
+﻿using GBX.NET;
+using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Graphic;
 using GBX.NET.Engines.Plug;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using TM_GenericMapping.Common;
+using Color = System.Drawing.Color;
 
 namespace TM_GenericMapping.Items;
 
@@ -78,10 +81,12 @@ public static class ItemLightHelper
 
         var cPlugLight = light.U03;
         cPlugLight.NightOnly = lightUserModel.NightOnly;
+        cPlugLight.GetChunk<CPlugLight.Chunk0901D004>().U04 = lightUserModel.NightOnly ? 1 : 0;
 
         var gxLight = cPlugLight.Light;
         gxLight.Color = lightUserModel.Color;
         gxLight.Intensity = lightUserModel.Intensity;
+
 
         if (gxLight is GxLightPoint lp)
             FillLightPointFromLightUserModel(lightUserModel, lp);
@@ -198,11 +203,73 @@ public static class ItemLightHelper
                     spot.AngleOuterShadow = 20;
                 }
                 break;
+            case LightType.Ambient:
+                {
+                    var ambient = new GxLightAmbient();
+                    light = ambient;
+
+                    var c1 = ambient.CreateChunk<GxLightAmbient.Chunk04005000>();
+                    ambient.ShadeMinY = 0; //Probably a hemisphere - style ambient
+                    ambient.ShadeMaxY = 0;
+                }
+                break;
+            case LightType.Directional:
+                {
+                    
+                    var dir = new GxLightDirectional();
+                    light = dir;
+
+                    var c1 = dir.CreateChunk<GxLightDirectional.Chunk04007001>();
+                    var c2 = dir.CreateChunk<GxLightDirectional.Chunk04007002>();
+                    var c3 = dir.CreateChunk<GxLightDirectional.Chunk04007003>();
+                    var c4 = dir.CreateChunk<GxLightDirectional.Chunk04007004>();
+                    var c5 = dir.CreateChunk<GxLightDirectional.Chunk04007005>();
+
+                    dir.UseBoundaryHint = false;
+                    dir.BoundaryHintPos = new Vec3(0, 0, 0);//Likely a hint for the region the light matters in, used to fit shadow maps or cull. The position would be the center of that region.
+                    dir.DazzleAngleMax = 0; // A glare effect when the camera looks toward the light.
+                    dir.DazzleIntensity = 0;
+                    dir.DblSidedRGB = Color.White.ToVec3(); // Probably the color applied to back faces of double-sided or translucent geometry, such as foliage or thin cloth.
+                    dir.ReverseRGB = Color.White.ToVec3(); // A fake fill or bounce light coming from the opposite direction of the main light, with its own color and intensity. This is a common trick to avoid fully black shadowed sides.
+                    dir.ReverseIntens = 0;
+                    dir.EmittAngularSize = 0; // The angular size of the light source as seen from the surface (like the sun's disc). It probably controls soft-shadow penumbra width.
+                    dir.FlareAngularSize = 0; // The angular size of the lens flare or sun disc visual, as opposed to the physical emitter size used for shadows.
+                }
+                break;
+            case LightType.Frustum:
+                {
+                    var frustum = new GxLightFrustum();
+                    light = frustum;
+
+                    var c1 = frustum.CreateChunk<GxLightFrustum.Chunk0400A004>();
+                    c1.U01 = 0;
+                    c1.U02 = 0;
+                    c1.U03 = 0;
+                    c1.U04 = 0;
+                    c1.U05 = 0;
+                    c1.U06 = 0;
+                    c1.U07 = 0;
+                    c1.U08 = 0;
+
+                    var c2 = frustum.CreateChunk<GxLightFrustum.Chunk0400A006>();
+                    c2.U01 = false;
+                    c2.U02 = new BoxAligned();
+                    c2.U03 = 0;
+                }
+                break;
 
             default:
                 throw new NotImplementedException("Light type not supported");
         }
-        if (light.TryCreateChunk<GxLight.Chunk0400100A>(out var c))
+        if (light.TryCreateChunk<GxLight.Chunk04001009>(out var cl1))
+        {
+            // noop
+        }
+        if (light.TryCreateChunk<GxLight.Chunk04001008>(out var cl2))
+        {
+            // noop
+        }
+        if (light.TryCreateChunk<GxLight.Chunk0400100A>(out var cl3))
         {
             // noop
         }
@@ -228,6 +295,7 @@ public static class ItemLightHelper
 
         if (light is GxLightBall lb)
         {
+
             if (lb.TryCreateChunk<GxLightBall.Chunk04002008>(out var c1))
             {
                 // Initialize chunk c1 if needed

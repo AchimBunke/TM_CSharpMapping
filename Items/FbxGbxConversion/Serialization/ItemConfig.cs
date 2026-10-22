@@ -629,7 +629,9 @@ public class PlacementConfig
                             ItemCount = pl.ItemCount,
                             ItemSpacing = pl.ItemSpacing,
                             FillAlign = (int)pl.FillAlign,
-                            FillDir = pl.UseFillAlign ? 1 : 0,
+                            FillDir = (int)pl.FillDir,
+                            U01 = pl.FillOffsetV,
+                            U02 = pl.FillOffsetU,
                             NormedPos = pl.NormedPos,
                             OnlyOnGroups = pl.OnlyOnGroups?.ToArray() ?? Array.Empty<string>(),
                             Altitude = pl.Altitude
@@ -679,7 +681,9 @@ public class PlacementConfig
                         ItemCount = pl.ItemCount,
                         ItemSpacing = pl.ItemSpacing,
                         FillAlign = (FillAlign)pl.FillAlign,
-                        UseFillAlign = pl.FillDir == 1 ? true : false,
+                        FillDir = (FillDir)pl.FillDir,
+                        FillOffsetU = pl.U02,
+                        FillOffsetV = pl.U01,
                         NormedPos = pl.NormedPos,
                         OnlyOnGroups = pl.OnlyOnGroups?.ToList() ?? new List<string>(),
                         Altitude = pl.Altitude
@@ -734,12 +738,29 @@ public class PlacementPatchLayout
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public FillAlign FillAlign { get; set; } = FillAlign.Center;
 
-    [JsonPropertyName("UseFillAlign")]
-    public bool UseFillAlign { get; set; } = true;
+
+    [JsonPropertyName("FillDir")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public FillDir FillDir { get; set; } = FillDir.U;
+
+    /// <summary>
+    /// Horizontal offset for fill alignment
+    /// </summary>
+    [JsonPropertyName("FillOffsetU")]
+    public float FillOffsetU { get; set; } = 0;
+
+    /// <summary>
+    /// Offset for fill alignment in back/front direction (perpendicular to patch plane)
+    /// </summary>
+    [JsonPropertyName("FillOffsetV")]
+    public float FillOffsetV { get; set; } = 0;
+
 
     /// <summary>Horizontal position along patch width</summary>
     [JsonPropertyName("NormedPos")]
     public float NormedPos { get; set; } = 0.5f;
+
+
 
     /// <summary>For which patch groups this config applies</summary>
     [JsonPropertyName("OnlyOnGroups")]

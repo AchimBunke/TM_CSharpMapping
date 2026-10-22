@@ -94,7 +94,9 @@ Defines how multiple items are distributed within a placement patch.
 | `ItemCount`    | `int`                     | `0`     | Number of items placed in the patch. `0` uses as many items as the available spacing allows. |
 | `ItemSpacing`  | `float`                   | `0`     | Space between consecutive items.                                                             |
 | `FillAlign`    | `FillAlign`               | `0`     | Controls how the items are aligned within the available patch space.                         |
-| `UseFillAlign` | `bool`                    | `true`  | If false Fill align is ignored and center is used.                                         |
+| `FillDir`      | `FillDir`                 | `U`  | Direction in which the items are filled within the patch. U = Left/Right, V= Front/Back                                         |
+| `FillOffsetU`  | `float`                   | `0`  | Horizontal offset for fill alignment.                                         |
+| `FillOffsetV`  | `float`                   | `0`  | Offset for fill alignment in back/front direction.                                         |
 | `NormedPos`    | `float`                   | `0.5`   | Normalized horizontal position along the patch width. `0` is one side, `1` the other.        |
 | `OnlyOnGroups` | `string[]?` | `[]`    | Restricts this layout to the specified patch groups.                                         |
 | `Altitude`     | `float`                   | `0`     | Vertical offset above the patch.                                                             |
