@@ -82,6 +82,7 @@ public static class ErrorCodes
     {
         public const string MissingDynaCollisionShape = "ItemCompiler.MissingDynaCollisionShape";
         public const string UnsupportedSurfaceType = "ItemCompiler.UnsupportedSurfaceType";
+        public const string MissingVisibleMesh = "ItemCompiler.MissingVisibleMesh";
     }
 }
 

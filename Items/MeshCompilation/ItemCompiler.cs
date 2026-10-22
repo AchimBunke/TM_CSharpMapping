@@ -140,6 +140,9 @@ public class ItemCompiler
         }
         else
         {
+            if (ItemExtensions.Traverse<CPlugStaticObjectModel>(rootEntResult.Value).Any(so => so.GetMesh() is null))
+                return ToolResult.Fail(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingVisibleMesh); // return error here because common entitymodel allows this
+
             itemTemplate = CreateItemTemplate().Value;
 
 
@@ -355,12 +358,19 @@ public class ItemCompiler
         var meshInstances = instances
             .Where(i => i.Instance.Visible || i.Instance.Kind == RefKind.Light)
             .ToList();
-        var solidResult = GetOrCreateSolid2Model(item, meshInstances, cluster, buildSettings);
-        if (solidResult.IsFailure)
-            return ToolResult.Fail(solidResult);
-        var solid = solidResult.Value;
 
-        staticObject.Mesh = solid;
+        staticObject.Mesh = null;
+        if (meshInstances.Any(i => i.Instance.Visible))
+        {
+            var solidResult = GetOrCreateSolid2Model(item, meshInstances, cluster, buildSettings);
+            if (solidResult.IsFailure)
+                return ToolResult.Fail(solidResult);
+            var solid = solidResult.Value;
+
+            staticObject.Mesh = solid;
+        }
+        else if (meshInstances.Any(i => i.Instance.Kind == RefKind.Light))
+            return ToolResult.Fail(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingVisibleMesh); // lights but no visible mesh => error
 
         var collidable = instances.Where(i => i.Instance.Collidable).ToList();
         var staticCollidableInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRole.Static) == ShapeRole.Static).ToList();
@@ -412,12 +422,20 @@ public class ItemCompiler
         var meshInstances = instances
             .Where(i => i.Instance.Visible || i.Instance.Kind == RefKind.Light)
             .ToList();
-        var solidResult = GetOrCreateSolid2Model(item, meshInstances, cluster, buildSettings);
-        if (solidResult.IsFailure)
-            return ToolResult.Fail(solidResult);
-        var solid = solidResult.Value;
 
-        dyna.Mesh = solid;
+        dyna.Mesh = null;
+        if (meshInstances.Any(i => i.Instance.Visible))
+        {
+            var solidResult = GetOrCreateSolid2Model(item, meshInstances, cluster, buildSettings);
+            if (solidResult.IsFailure)
+                return ToolResult.Fail(solidResult);
+            var solid = solidResult.Value;
+
+            dyna.Mesh = solid;
+        }
+        else 
+            return ToolResult.Fail(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingVisibleMesh); // no visible mesh => error
+
 
         var collidable = instances.Where(i => i.Instance.Collidable).ToList();
 
@@ -1796,7 +1814,10 @@ public class ItemCompiler
                     return ToolResult.Fail(result);
             }
         }
-        if (commonEntityModel.StaticObject.Mesh.CustomMaterials.Length > 0)
+
+        if (!commonEntityModel.StaticObject.Mesh.Visuals!.Any())
+            commonEntityModel.StaticObject.Mesh = null;
+        else if (commonEntityModel.StaticObject.Mesh.CustomMaterials.Length > 0)
             commonEntityModel.StaticObject.Mesh.Materials = null;
 
         if (IsMeshCollidable(buildSettings))
@@ -1887,39 +1908,45 @@ public class ItemCompiler
     {
         if (position == Vector3.Zero && rotation == Quaternion.Identity)
             return ToolResult.Success(None.Value, nameof(ItemCompiler));
-        foreach (var visual in staticObject.Mesh?.Visuals ?? [])
+        var mesh = staticObject.GetMesh();
+        if(mesh is not null)
         {
-            foreach (var vertexStream in visual.VertexStreams)
+            foreach (var visual in mesh.Visuals ?? [])
             {
-                vertexStream.Positions = vertexStream.Positions.Select(p => (position + Vector3.Transform(p, rotation)).ToVec3()).ToArray();
-                vertexStream.Normals = vertexStream.Normals.Select(n => Vector3.Transform(n, rotation).ToVec3()).ToArray();
-                var tangentUs = GbxItemUtils.GetTangentUs(vertexStream);
-                if (tangentUs != null)
-                    GbxItemUtils.SetTangentUs(vertexStream, tangentUs.Select(t => Vector3.Transform(t, rotation).ToVec3()).ToArray());
+                foreach (var vertexStream in visual.VertexStreams)
+                {
+                    vertexStream.Positions = vertexStream.Positions.Select(p => (position + Vector3.Transform(p, rotation)).ToVec3()).ToArray();
+                    vertexStream.Normals = vertexStream.Normals.Select(n => Vector3.Transform(n, rotation).ToVec3()).ToArray();
+                    var tangentUs = GbxItemUtils.GetTangentUs(vertexStream);
+                    if (tangentUs != null)
+                        GbxItemUtils.SetTangentUs(vertexStream, tangentUs.Select(t => Vector3.Transform(t, rotation).ToVec3()).ToArray());
 
-                var tangentVs = GbxItemUtils.GetTangentVs(vertexStream);
-                if (tangentVs != null)
-                    GbxItemUtils.SetTangentVs(vertexStream, tangentVs.Select(t => Vector3.Transform(t, rotation).ToVec3()).ToArray());
+                    var tangentVs = GbxItemUtils.GetTangentVs(vertexStream);
+                    if (tangentVs != null)
+                        GbxItemUtils.SetTangentVs(vertexStream, tangentVs.Select(t => Vector3.Transform(t, rotation).ToVec3()).ToArray());
+                }
+                visual.BoundingBox = GbxItemUtils.BuildBoxAligned(visual);
             }
-            visual.BoundingBox = GbxItemUtils.BuildBoxAligned(visual);
-        }
-        if(staticObject.Mesh?.LightUserModels?.Length > 0)
-        {
-            var skel = staticObject.Mesh.Skel!;
-            var sockets = GbxItemUtils.ParseSockets(skel);
-            foreach(var s in sockets)
+            if (mesh.LightUserModels?.Length > 0)
             {
-                var currentRot = s.U02.GetRotationQuaternion();
-                var curPos = s.U02.GetPosition();
-                var newRot = currentRot * Quaternion.Inverse(rotation);
-                var newPos = position + Vector3.Transform(curPos, rotation);
-                s.U02 = Iso4Utils.IsoFromTransform(newPos, newRot);
+                var skel = mesh.Skel!;
+                var sockets = GbxItemUtils.ParseSockets(skel);
+                foreach (var s in sockets)
+                {
+                    var currentRot = s.U02.GetRotationQuaternion();
+                    var curPos = s.U02.GetPosition();
+                    var newRot = currentRot * Quaternion.Inverse(rotation);
+                    var newPos = position + Vector3.Transform(curPos, rotation);
+                    s.U02 = Iso4Utils.IsoFromTransform(newPos, newRot);
+                }
+                mesh.Skel = GbxItemUtils.CreateSkel(sockets);
             }
-            staticObject.Mesh.Skel = GbxItemUtils.CreateSkel(sockets);
         }
-        if (staticObject.Shape is not null)
+  
+        var shape = staticObject.Shape;
+        if (shape is not null)
         {
-            TransformSurface(staticObject.Shape, position, rotation);
+            TransformSurface(shape, position, rotation);
         }
         return ToolResult.Success(nameof(ItemCompiler));
     }
@@ -1934,11 +1961,18 @@ public class ItemCompiler
 
     void MergeStaticObject(CPlugStaticObjectModel target, CPlugStaticObjectModel staticObject)
     {
-        MergeSolid2Model(target.Mesh!, staticObject.Mesh!);
-        if(target.Shape is null)
+        var targetMesh = target.GetMesh();
+        var staticObjectMesh = staticObject.GetMesh();
+        if(targetMesh is null)
+            target.Mesh = staticObject.Mesh;
+        else if (staticObjectMesh is not null)
+            MergeSolid2Model(targetMesh, staticObjectMesh);
+        var shape = target.GetShape();
+        var staticObjectShape = staticObject.GetShape();
+        if (shape is null)
             target.Shape = staticObject.Shape;
-        else if (staticObject.Shape is not null)
-            MergeSurface(target.Shape, staticObject.Shape);
+        else if (staticObjectShape is not null)
+            MergeSurface(shape, staticObjectShape);
     }
     void MergeSolid2Model(CPlugSolid2Model target, CPlugSolid2Model solid2Model)
     {

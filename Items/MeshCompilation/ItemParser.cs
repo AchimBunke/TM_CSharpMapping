@@ -632,10 +632,9 @@ public class ItemParser
         entityRef.ModelKey = key.GetHashCode();
 
         // mesh
-        if(staticObjectModel.Mesh is null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingMesh);
-
-        ParseSolid2Model(staticObjectModel.Mesh, model, normalizedItem, staticObjectModel.IsMeshCollidable);
+        var mesh = staticObjectModel.GetMesh();
+        if (mesh is not null)
+            ParseSolid2Model(mesh, model, normalizedItem, staticObjectModel.IsMeshCollidable);
 
         // staticShape
         var shape = staticObjectModel.GetShape();
@@ -689,10 +688,9 @@ public class ItemParser
         entityRef.DynaObjectModelParams = ent.Params as NPlugDynaObjectModel_SInstanceParams;
 
         // mesh
-        if (dynamicObjectModel.Mesh is null)
-            return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingMesh);
-
-        ParseSolid2Model(dynamicObjectModel.Mesh, model, normalizedItem, meshIsCollisionSource: false);
+        var mesh = dynamicObjectModel.GetMesh();
+        if (mesh is not null)
+            ParseSolid2Model(mesh, model, normalizedItem, meshIsCollisionSource: false);
 
         // staticShape
         var staticShape = dynamicObjectModel.GetStaticShape();
