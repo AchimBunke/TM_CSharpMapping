@@ -211,7 +211,7 @@ internal class NodeGrouper
         NodeDefGroup NewGroup(string key) => new NodeDefGroup
         {
             GroupKey = key,
-            OriginalGroupId = bucket.Key,
+            OriginalGroupId = bucket.MovingGroup,
             Type = bucket.Type,
             KinematicConstraint = movingParams?.KinematicConstraint,
             DynaObjectModelParams = movingParams?.InstanceParams,

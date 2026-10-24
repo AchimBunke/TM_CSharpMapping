@@ -173,12 +173,15 @@ public class FbxGbxConverter
             var group = groups[i];
             if (!string.IsNullOrEmpty(group.RelativeMovingParentGroupId))
             {
-                var parentIndex = groups
-                    .Select((g, idx) => (g, idx))
-                    .Where(t => t.g.Type == ModelType.Dynamic)
-                    .FirstOrDefault(t => t.g.OriginalGroupId == group.RelativeMovingParentGroupId).idx;
-
-                groupIndexToEntityRef[i].RelativeMovingParentKey = groupIndexToModelKey[parentIndex];
+                for(int groupIdx = 0; groupIdx < groups.Count; groupIdx++)
+                {
+                    if(groups[groupIdx].OriginalGroupId == group.RelativeMovingParentGroupId)
+                    {
+                        var parentIndex = groupIdx;
+                        groupIndexToEntityRef[i].RelativeMovingParentKey = groupIndexToModelKey[parentIndex];
+                        break;
+                    }
+                }
             }
         }
 

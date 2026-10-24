@@ -80,6 +80,7 @@ public sealed class BuildSettings
     {
         var settings = new BuildSettings();
         var clusterByModelKey = new Dictionary<int, Guid>();
+        var pendingParents = new List<(Guid cluster, int parentModelKey)>();
 
         void Visit(NormalizedModel model, EntityRefBase refBase, int modelKey)
         {
@@ -87,7 +88,7 @@ public sealed class BuildSettings
             {
                 clusterKey = Guid.NewGuid();
                 clusterByModelKey[modelKey] = clusterKey;
-
+                
                 var entRef = refBase as EntityRef;
 
                 settings.Clusters[clusterKey] = new ClusterSettings
@@ -99,12 +100,14 @@ public sealed class BuildSettings
                     TriggerGameplayId = model.TriggerGameplayId,
                     KinematicConstraint = entRef?.KinematicConstraint,
                     DynaObjectModelParams = entRef?.DynaObjectModelParams,
-                    RelativeMovingParentCluster = entRef != null && entRef.RelativeMovingParentKey.HasValue && clusterByModelKey.TryGetValue(entRef.RelativeMovingParentKey.Value, out var parentCluster) ? parentCluster : null,
+                    //RelativeMovingParentCluster = entRef != null && entRef.RelativeMovingParentKey.HasValue && clusterByModelKey.TryGetValue(entRef.RelativeMovingParentKey.Value, out var parentCluster) ? parentCluster : null,
                     WaypointSpawnPosition = entRef?.WaypointSpawnPosition,
                     WaypointSpawnRotation = entRef?.WaypointSpawnRotation,
                     GameplayMainDir = model.GameplayMainDir,
 
                 };
+                if (entRef?.RelativeMovingParentKey is int parentKey)
+                    pendingParents.Add((clusterKey, parentKey));
 
                 foreach (var m in model.Meshes)
                     settings.Instances[m.Id] = new InstanceSettings
@@ -148,6 +151,14 @@ public sealed class BuildSettings
 
         var rootKey = item.ModelPool.First(kv => ReferenceEquals(kv.Value, item.Model)).Key;
         Visit(item.Model, null!, rootKey);
+
+        // Second pass: all clusters now exist
+        foreach (var (cluster, parentModelKey) in pendingParents)
+        {
+            if (clusterByModelKey.TryGetValue(parentModelKey, out var parentCluster))
+                settings.Clusters[cluster].RelativeMovingParentCluster = parentCluster;
+        }
+
         return settings;
     }
 }

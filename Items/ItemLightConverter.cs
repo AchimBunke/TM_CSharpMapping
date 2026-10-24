@@ -20,6 +20,11 @@ public enum LightType
     Frustum,
 
 }
+/*
+ * Other fields:
+ * 
+ * 
+ */
 
 public class ItemLightConverter
 {
@@ -81,7 +86,9 @@ public static class ItemLightHelper
 
         var cPlugLight = light.U03;
         cPlugLight.NightOnly = lightUserModel.NightOnly;
-        cPlugLight.GetChunk<CPlugLight.Chunk0901D004>().U04 = lightUserModel.NightOnly ? 1 : 0;
+
+        SetFlags(cPlugLight, sceneLightAlwaysActive: false);
+
 
         var gxLight = cPlugLight.Light;
         gxLight.Color = lightUserModel.Color;
@@ -143,7 +150,6 @@ public static class ItemLightHelper
     public static CPlugLight CreateEmptyCPlugLight(LightType lightType)
     {
         var cplugLight = new CPlugLight();
-        var c002 = cplugLight.CreateChunk<CPlugLight.Chunk0901D002>();
         var c003 = cplugLight.CreateChunk<CPlugLight.Chunk0901D003>();
         c003.Version = 1;
         var c004 = cplugLight.CreateChunk<CPlugLight.Chunk0901D004>();
@@ -151,7 +157,6 @@ public static class ItemLightHelper
         c004.U01 = -1;
         c004.U02 = -1;
         c004.U03 = -1;
-        c004.U04 = 0;
         c004.U05 = -1;
 
         cplugLight.AnimTimerName = "";
@@ -160,6 +165,8 @@ public static class ItemLightHelper
         cplugLight.NightOnly = false;
         cplugLight.ReflectByGround = false;
         cplugLight.SceneLightOnlyWhenTreeVisible = false;
+
+        SetFlags(cplugLight, sceneLightAlwaysActive: false);
 
         cplugLight.Light = CreateGxLight(lightType);
         return cplugLight;
@@ -189,8 +196,8 @@ public static class ItemLightHelper
                     var spot = new GxLightSpot();
 
                     var c1 = spot.CreateChunk<GxLightSpot.Chunk0400B003>();
-                    c1.U01 = 1; // sub-light count X?
-                    c1.U02 = 1; // sub-light count Y?
+                    c1.U01 = 1; // sub-light count X!
+                    c1.U02 = 1; // sub-light count Y!
                     c1.U03 = 0;
                     c1.Version = 1;
 
@@ -260,14 +267,6 @@ public static class ItemLightHelper
 
             default:
                 throw new NotImplementedException("Light type not supported");
-        }
-        if (light.TryCreateChunk<GxLight.Chunk04001009>(out var cl1))
-        {
-            // noop
-        }
-        if (light.TryCreateChunk<GxLight.Chunk04001008>(out var cl2))
-        {
-            // noop
         }
         if (light.TryCreateChunk<GxLight.Chunk0400100A>(out var cl3))
         {
@@ -348,5 +347,15 @@ public static class ItemLightHelper
         return light;
     }
 
+
+    static CPlugLight.Chunk0901D004 GetFlagChunk(CPlugLight light)
+        => light.GetChunk<CPlugLight.Chunk0901D004>();
+    static void SetFlags(CPlugLight light, bool sceneLightAlwaysActive)
+    {
+        int bitmask = 
+            (int)light.Flags | 
+            (sceneLightAlwaysActive ? (1 << 5) : 0);
+        GetFlagChunk(light).U04 = bitmask;
+    }
 
 }
