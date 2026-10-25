@@ -15,9 +15,6 @@ internal class NodeDef
     public required ImportedNode Node { get; set; }
     public Matrix4x4 GlobalTransform { get; set; }
     public required MeshConfig NodeConfig { get; set; }
-
-    public int GroupIndex { get; set; } = -1;
-    public int LodMask { get; set; } = 1;
 }
 
 internal class SocketDef

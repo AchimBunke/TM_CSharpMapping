@@ -1,4 +1,6 @@
 using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Scene;
+using Silk.NET.Assimp;
 using Silk.NET.Maths;
 using System.Numerics;
 using TM_GenericMapping.Common;
@@ -6,6 +8,7 @@ using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.Game.CGameCtnChallenge;
 using static GBX.NET.Engines.Plug.CPlugCrystal;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
@@ -52,55 +55,41 @@ public class FbxGbxConverter
 
     public ToolResult<NormalizedItem> ConvertToNormalizedItem(FbxGbxConversionInput conversionInput)
     {
-        ImportedScene scene;
-        try
-        {
+        var sceneResult = ImportScene(conversionInput);
+        if (sceneResult.IsFailure)
+            return ToolResult.Fail(sceneResult);
+
+        return ConvertToNormalizedItem(sceneResult.Value, conversionInput);
+    }
+
+    ToolResult<ImportedScene> ImportScene(FbxGbxConversionInput conversionInput)
+    {
+        try 
+        { 
             var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
-            scene = importer.Import(conversionInput.Fbx);
+            var scene = importer.Import(conversionInput.Fbx);
             importer.FixConfigAxes(conversionInput.ItemConfig);
+            return ToolResult.Success(scene, nameof(FbxGbxConverter));
         }
         catch (Exception e)
         {
-            return ToolResult.Fail<NormalizedItem>(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.FbxParsingError, e);
+            return ToolResult.Fail<ImportedScene>(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.FbxParsingError, e);
         }
-
-        return ConvertToNormalizedItem(scene, conversionInput);
     }
-
     protected virtual ISceneImporter CreateSceneImporter(float scale) => new SilkAssimpSceneImporter(scale);
 
     ToolResult<NormalizedItem> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config)
     {
         var item = new NormalizedItem();
 
-        var materialConverter = new FbxMaterialConverter(config.MaterialLibrary);
-        var materialResults = materialConverter.ExtractMaterials(scene, config);
-        if (materialResults.IsFailure)
-            return ToolResult.Fail(materialResults);
-
-        var allSceneNodes = scene.CollectNodes();
-
-        var meshNodeResults = FbxMeshConverter.ExtractMeshNodes(scene, config);
-        if (meshNodeResults.IsFailure)
-            return ToolResult.Fail(meshNodeResults);
-
-        var socketResults = FbxMeshConverter.ExtractSockets(scene, config);
-        if (socketResults.IsFailure)
-            return ToolResult.Fail(socketResults);
-        if (socketResults.Value.Count > 1)
-            return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MultipleSocketsNotSupported);
-
-        var lightResults = FbxLightConverter.ExtractLights(scene, config);
-        if (lightResults.IsFailure)
-            return ToolResult.Fail(lightResults);
-
-        var nodes = FilterAndApplySpecialMeshItems(scene, meshNodeResults.Value, materialResults.Value);
-
-        var groupResults = FbxMeshConverter.GroupNodes(nodes, allSceneNodes, socketResults.Value, config);
-        if (groupResults.IsFailure)
-            return ToolResult.Fail(groupResults);
-
-        var groups = groupResults.Value;
+        var res = ExtractAndGroupFbxData(scene, config, 
+            out var groups, 
+            out var lights, 
+            out var sockets, 
+            out var nodes, 
+            out var materials);
+        if (res.IsFailure)
+            return ToolResult.Fail(res);
 
         // Root container model that references every group as a child EntityRef.
         var rootModel = new NormalizedModel { Type = ModelType.Container };
@@ -185,18 +174,68 @@ public class FbxGbxConverter
             }
         }
 
-        var meshResult = FbxMeshConverter.ExtractMeshes(scene, groups, materialResults.Value, nodes, config, item,
+        var meshResult = FbxMeshConverter.ExtractMeshes(scene, groups, materials, nodes, config, item,
             groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
         if (meshResult.IsFailure)
             return ToolResult.Fail(meshResult);
 
-        AssignLightsToGroups(item, lightResults.Value, groups, groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
+        AssignLightsToGroups(item, lights, groups, groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
 
         SetMetaData(item, config);
 
         item.PlacementParam = CreatePlacementParameters(config);
 
         return ToolResult.Success(item, nameof(FbxGbxConverter));
+    }
+
+    ToolResult<None> ExtractAndGroupFbxData(
+        ImportedScene scene,
+        FbxGbxConversionInput config,
+        out List<NodeDefGroup> groups,
+        out List<LightDef> lights,
+        out List<SocketDef> sockets,
+        out List<NodeDef> nodes,
+        out List<MaterialDef> materials)
+    {
+        groups = [];
+        lights = [];
+        sockets = [];
+        nodes = [];
+        materials = [];
+
+        var materialConverter = new FbxMaterialConverter(config.MaterialLibrary);
+        var materialResults = materialConverter.ExtractMaterials(scene, config);
+        if (materialResults.IsFailure)
+            return ToolResult.Fail(materialResults);
+        materials = materialResults.Value;
+
+        var allSceneNodes = scene.CollectNodes();
+
+        var meshNodeResults = FbxMeshConverter.ExtractMeshNodes(scene, config);
+        if (meshNodeResults.IsFailure)
+            return ToolResult.Fail(meshNodeResults);
+
+        var socketResults = FbxMeshConverter.ExtractSockets(scene, config);
+        if (socketResults.IsFailure)
+            return ToolResult.Fail(socketResults);
+        if (socketResults.Value.Count > 1)
+            return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MultipleSocketsNotSupported);
+        sockets = socketResults.Value;
+
+        var lightResults = FbxLightConverter.ExtractLights(scene, config);
+        if (lightResults.IsFailure)
+            return ToolResult.Fail(lightResults);
+        lights = lightResults.Value;
+
+        nodes = FilterAndApplySpecialMeshItems(scene, meshNodeResults.Value, materialResults.Value);
+
+        var groupResults = FbxMeshConverter.GroupNodes(nodes, allSceneNodes, socketResults.Value, config);
+        if (groupResults.IsFailure)
+            return ToolResult.Fail(groupResults);
+        groups = groupResults.Value;
+
+        return ToolResult.Success(nameof(FbxGbxConverter));
+
     }
 
     void AssignLightsToGroups(
@@ -263,5 +302,36 @@ public class FbxGbxConverter
         }
 
         return nodesWithMesh;
+    }
+
+
+    public ToolResult<FbxGbxPlanReport> PlanConversion(FbxGbxConversionInput conversionInput, CompileOptions? compileOptions = null)
+    {
+        var sceneResult = ImportScene(conversionInput);
+        if (sceneResult.IsFailure)
+            return ToolResult.Fail(sceneResult);
+        var scene = sceneResult.Value;
+
+        var res = ExtractAndGroupFbxData(scene, conversionInput,
+              out var groups,
+              out var lights,
+              out var sockets,
+              out var nodes,
+              out var materials);
+        if (res.IsFailure)
+            return ToolResult.Fail(res);
+
+        nodes = nodes.OrderBy(n => n.Node.Name, StringComparer.Ordinal).ToList();
+        groups = groups.OrderBy(g => g.GroupKey, StringComparer.Ordinal).ToList();
+
+        var report = new FbxGbxPlanReport(1, groups.Select(g => new FbxGbxPlanGroup(
+                g.GroupKey,
+                g.Type.ToString(),
+                g.OriginalGroupId,
+                g.LodDistances.ToArray(),
+                g.Nodes.Select(a => new FbxGbxPlanNode(a.NodeDef.Node.Name, a.LodIndices.ToArray())).ToArray()
+            )).ToArray());
+
+        return ToolResult.Success(report, nameof(FbxGbxConverter));
     }
 }

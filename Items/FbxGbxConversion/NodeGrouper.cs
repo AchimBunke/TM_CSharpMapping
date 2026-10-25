@@ -151,7 +151,7 @@ internal class NodeGrouper
 
             foreach (var node in duplicateNodes)
             {
-                var instanceKey = $"{bucketKey}_instance_{isolatedCounter++}";
+                var instanceKey = $"{bucketKey}_instance_{node.Node.Name}";
                 buckets[instanceKey] = (new BucketInfo { Key = instanceKey, Type = info.Type, MovingGroup = info.MovingGroup, TriggerEffectId = info.TriggerEffectId, GameplayMainDir = info.GameplayMainDir, WaypointType = info.WaypointType}, new List<NodeDef> { node });
             }
         }
@@ -164,19 +164,21 @@ internal class NodeGrouper
 
     private BucketInfo Classify(NodeDef node, ref int isolatedCounter)
     {
+        string Isolated(string prefix) => $"{prefix}_{node.Node.Name}";
+
         var f = node.NodeConfig.MeshFlags;
         bool isSingle = f.HasFlag(MeshFlags.SingleMesh);
         //isSingle = true;
 
         if (f.HasFlag(MeshFlags.TriggerWaypoint))
         {
-            string key = isSingle ? $"single_{isolatedCounter++}" : $"waypoint_{node.NodeConfig.WaypointType?.ToString() ?? string.Empty}";
+            string key = isSingle ? Isolated("single") : $"waypoint_{node.NodeConfig.WaypointType?.ToString() ?? string.Empty}";
             return new BucketInfo { Key = key, Type = ModelType.Trigger_Waypoint, WaypointType = node.NodeConfig.WaypointType };
         }
 
         if (f.HasFlag(MeshFlags.TriggerEffect))
         {
-            string key = isSingle ? $"single_{isolatedCounter++}" : $"trigger_{node.NodeConfig.TriggerEffect.ToString() ?? string.Empty}_{node.NodeConfig.GameplayMainDir}";
+            string key = isSingle ? Isolated("single") : $"trigger_{node.NodeConfig.TriggerEffect.ToString() ?? string.Empty}_{node.NodeConfig.GameplayMainDir}";
             return new BucketInfo { Key = key, Type = ModelType.Trigger_Special, TriggerEffectId = node.NodeConfig.TriggerEffect, GameplayMainDir = node.NodeConfig.GameplayMainDir };
         }
 
@@ -184,7 +186,7 @@ internal class NodeGrouper
         {
             bool hasGroup = !string.IsNullOrEmpty(node.NodeConfig.MovingGroup);
             string key = isSingle || !hasGroup
-                ? $"{(isSingle ? "single" : "moving")}_{isolatedCounter++}"
+                ? Isolated(isSingle ? "single" : "moving")
                 : $"{node.NodeConfig.MovingGroup}_{node.NodeConfig.GameplayMainDir}";
             return new BucketInfo { Key = key, Type = ModelType.Dynamic, MovingGroup = node.NodeConfig.MovingGroup , GameplayMainDir = node.NodeConfig.GameplayMainDir };
         }
@@ -192,9 +194,9 @@ internal class NodeGrouper
         {
             string key;
             if (isSingle)
-                key = $"single_{isolatedCounter++}";
+                key = Isolated("single");
             else if (_itemConfig.ConversionOptions.HasFlag(ItemConversionOptions.SkipStaticItemGrouping))
-                key = $"static_{isolatedCounter++}";
+                key = Isolated("static");
             else
                 key = $"static_{node.NodeConfig.GameplayMainDir}";
             return new BucketInfo { Key = key, Type = ModelType.Static, GameplayMainDir = node.NodeConfig.GameplayMainDir };

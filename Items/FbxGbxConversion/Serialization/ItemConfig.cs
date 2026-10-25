@@ -3,6 +3,7 @@ using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
 using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TM_GenericMapping.Common;
@@ -580,6 +581,13 @@ public class PlacementConfig
     [JsonPropertyName("PivotRotations")]
     public List<Quat>? PivotRotations { get; set; } = [];
 
+    [JsonPropertyName("MagnetPositions")]
+    public List<Vec3> MagnetPositions { get; set; } = [];
+    
+    [JsonPropertyName("MagnetRotations")]
+    public List<Quat> MagnetRotations { get; set; } = [];
+
+
     [JsonPropertyName("PlacementClass")]
     public PlacementClass? PlacementClass { get; set; }
 
@@ -609,6 +617,7 @@ public class PlacementConfig
             placementParams.PivotSnapDistance = placementConfig.PivotSnapDistance;
             placementParams.PivotPositions = placementConfig.PivotPositions?.ToArray() ?? Array.Empty<Vec3>();
             placementParams.PivotRotations = placementConfig.PivotRotations?.ToArray() ?? Array.Empty<Quat>();
+            ItemPlacementUtils.SetItemPlacementMagnets(placementParams, placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) => new MagnetLoc { Position = pos, PitchYawRoll = rot.ToPitchYawRoll() * MathUtils.Rad2Deg }).ToList());
 
             if (placementConfig.PlacementClass != null)
             {
@@ -662,6 +671,8 @@ public class PlacementConfig
             PivotSnapDistance = placementParam.PivotSnapDistance,
             PivotPositions = placementParam.PivotPositions?.ToList() ?? new List<Vec3>(),
             PivotRotations = placementParam.PivotRotations?.ToList() ?? new List<Quat>(),
+            MagnetPositions = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => m.Position).ToList(),
+            MagnetRotations = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => Quaternion.CreateFromYawPitchRollDegrees(m.PitchYawRoll.Y, m.PitchYawRoll.X, m.PitchYawRoll.Z).ToQuat()).ToList(),
         };
         if (placementParam.PlacementClass != null)
         {

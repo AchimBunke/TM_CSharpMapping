@@ -2,6 +2,7 @@
 using GBX.NET;
 using GBX.NET.Engines.Meta;
 using Silk.NET.Assimp;
+using Silk.NET.Core;
 using System.Drawing.Drawing2D;
 using System.Numerics;
 using TM_GenericMapping.Common;
@@ -613,7 +614,19 @@ public class SilkAssimpSceneImporter : ISceneImporter
                 for (int i = 0; i < itemConfig.Placement.PivotRotations.Count; ++i)
                     itemConfig.Placement.PivotRotations[i] = Quaternion.Multiply(matrixRotation, itemConfig.Placement.PivotRotations[i]);
             }
-            if(itemConfig.Placement.PlacementClass != null)
+            if (itemConfig.Placement.MagnetPositions != null)
+            {
+                for (int i = 0; i < itemConfig.Placement.MagnetPositions.Count; ++i)
+                    itemConfig.Placement.MagnetPositions[i] = Vector3.Transform(itemConfig.Placement.MagnetPositions[i], GbxCoordinateSpaceFixup);
+            }
+            if (itemConfig.Placement.MagnetRotations != null)
+            {
+                Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(GbxCoordinateSpaceFixup);
+                for (int i = 0; i < itemConfig.Placement.MagnetRotations.Count; ++i)
+                    itemConfig.Placement.MagnetRotations[i] = Quaternion.Multiply(matrixRotation, itemConfig.Placement.MagnetRotations[i]);
+            }
+
+            if (itemConfig.Placement.PlacementClass != null)
             {
                 if(itemConfig.Placement.PlacementClass.WorldDir.HasValue)
                     itemConfig.Placement.PlacementClass.WorldDir = Vector3.Transform(itemConfig.Placement.PlacementClass.WorldDir.Value, GbxCoordinateSpaceFixup);
