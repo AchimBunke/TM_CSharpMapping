@@ -117,6 +117,7 @@ public class ItemConfig
         WriteIndented = true,
         Converters = {
             new Vec3Converter(),
+            new QuaternionJsonConverter(),
             new JsonStringEnumConverter(),
             new ColorJsonConverter(),
             new PlacementParameterConverter(),
@@ -579,13 +580,13 @@ public class PlacementConfig
     public List<Vec3>? PivotPositions { get; set; } = [];
 
     [JsonPropertyName("PivotRotations")]
-    public List<Quat>? PivotRotations { get; set; } = [];
+    public List<Quaternion>? PivotRotations { get; set; } = [];
 
     [JsonPropertyName("MagnetPositions")]
     public List<Vec3> MagnetPositions { get; set; } = [];
     
     [JsonPropertyName("MagnetRotations")]
-    public List<Quat> MagnetRotations { get; set; } = [];
+    public List<Quaternion> MagnetRotations { get; set; } = [];
 
 
     [JsonPropertyName("PlacementClass")]
@@ -616,8 +617,17 @@ public class PlacementConfig
             placementParams.FlyVOffset = placementConfig.FlyVOffset;
             placementParams.PivotSnapDistance = placementConfig.PivotSnapDistance;
             placementParams.PivotPositions = placementConfig.PivotPositions?.ToArray() ?? Array.Empty<Vec3>();
-            placementParams.PivotRotations = placementConfig.PivotRotations?.ToArray() ?? Array.Empty<Quat>();
-            ItemPlacementUtils.SetItemPlacementMagnets(placementParams, placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) => new MagnetLoc { Position = pos, PitchYawRoll = rot.ToPitchYawRoll() * MathUtils.Rad2Deg }).ToList());
+            placementParams.PivotRotations = placementConfig.PivotRotations?.Select(q=>q.ToQuat().Fixed()).ToArray() ?? Array.Empty<Quat>();
+            ItemPlacementUtils.SetItemPlacementMagnets(placementParams,
+                placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) =>
+                {
+                    var pyr = rot.ToPitchYawRoll() * MathUtils.Rad2Deg;
+                    return new MagnetLoc
+                    {
+                        Position = pos,
+                        PitchYawRoll = new Vec3(pyr.X, pyr.Y, -pyr.Z)
+                    };
+                }).ToList());
 
             if (placementConfig.PlacementClass != null)
             {
@@ -652,6 +662,7 @@ public class PlacementConfig
         }
         return placementParamsTemplate;
     }
+
     public static PlacementConfig FromPlacementParam(CGameItemPlacementParam placementParam)
     {
         var placementConfig = new PlacementConfig
@@ -670,9 +681,9 @@ public class PlacementConfig
             FlyVOffset = placementParam.FlyVOffset,
             PivotSnapDistance = placementParam.PivotSnapDistance,
             PivotPositions = placementParam.PivotPositions?.ToList() ?? new List<Vec3>(),
-            PivotRotations = placementParam.PivotRotations?.ToList() ?? new List<Quat>(),
+            PivotRotations = placementParam.PivotRotations?.Select(q=>q.ToQuaternion()).ToList() ?? new List<Quaternion>(),
             MagnetPositions = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => m.Position).ToList(),
-            MagnetRotations = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => Quaternion.CreateFromYawPitchRollDegrees(m.PitchYawRoll.Y, m.PitchYawRoll.X, m.PitchYawRoll.Z).ToQuat()).ToList(),
+            MagnetRotations = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => Quaternion.CreateFromYawPitchRollDegrees(m.PitchYawRoll.Y, m.PitchYawRoll.X, m.PitchYawRoll.Z)).ToList(),
         };
         if (placementParam.PlacementClass != null)
         {
@@ -1420,5 +1431,46 @@ public sealed class NPlugDynaObjectModel_SInstanceParamsConverter
         };
 
         return value;
+    }
+}
+
+public sealed class QuaternionJsonConverter : JsonConverter<Quaternion>
+{
+    public override Quaternion Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+            throw new JsonException("Expected object for Quaternion");
+
+        float x = 0, y = 0, z = 0, w = 1;
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+                return new Quaternion(x, y, z, w);
+
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            var name = reader.GetString();
+            reader.Read();
+            var value = reader.GetSingle();
+            switch (name?.ToUpperInvariant())
+            {
+                case "X": x = value; break;
+                case "Y": y = value; break;
+                case "Z": z = value; break;
+                case "W": w = value; break;
+            }
+        }
+        throw new JsonException("Unexpected end of Quaternion object");
+    }
+
+    public override void Write(Utf8JsonWriter writer, Quaternion value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteNumber("X", value.X);
+        writer.WriteNumber("Y", value.Y);
+        writer.WriteNumber("Z", value.Z);
+        writer.WriteNumber("W", value.W);
+        writer.WriteEndObject();
     }
 }

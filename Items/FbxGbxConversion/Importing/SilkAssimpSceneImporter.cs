@@ -610,9 +610,14 @@ public class SilkAssimpSceneImporter : ISceneImporter
             }
             if (itemConfig.Placement.PivotRotations != null)
             {
+                // Conjugate (q' = C^-1 * q * C). Swapped relative to the other direction
+                // (C * q * C^-1) because that produced the correct rotation axis but the
+                // opposite rotation direction/sign (e.g. -63 deg about Y must become
+                // +63 deg about Z, not -63 deg about Z).
                 Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(GbxCoordinateSpaceFixup);
+                Quaternion matrixRotationInv = Quaternion.Conjugate(matrixRotation);
                 for (int i = 0; i < itemConfig.Placement.PivotRotations.Count; ++i)
-                    itemConfig.Placement.PivotRotations[i] = Quaternion.Multiply(matrixRotation, itemConfig.Placement.PivotRotations[i]);
+                    itemConfig.Placement.PivotRotations[i] = Quaternion.Normalize(Quaternion.Multiply(Quaternion.Multiply(matrixRotationInv, itemConfig.Placement.PivotRotations[i]), matrixRotation));
             }
             if (itemConfig.Placement.MagnetPositions != null)
             {
@@ -622,8 +627,12 @@ public class SilkAssimpSceneImporter : ISceneImporter
             if (itemConfig.Placement.MagnetRotations != null)
             {
                 Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(GbxCoordinateSpaceFixup);
+                Quaternion matrixRotationInv = Quaternion.Conjugate(matrixRotation);
+                Quaternion localFix = Quaternion.CreateFromAxisAngle(Vector3.UnitX, -MathF.PI / 2); // magnet/pivot local forward: +Y -> +Z
+
+                Quaternion Fix(Quaternion q) => Quaternion.Normalize(q * localFix);
                 for (int i = 0; i < itemConfig.Placement.MagnetRotations.Count; ++i)
-                    itemConfig.Placement.MagnetRotations[i] = Quaternion.Multiply(matrixRotation, itemConfig.Placement.MagnetRotations[i]);
+                    itemConfig.Placement.MagnetRotations[i] = Fix(itemConfig.Placement.MagnetRotations[i]);
             }
 
             if (itemConfig.Placement.PlacementClass != null)

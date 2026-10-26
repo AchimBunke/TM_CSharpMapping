@@ -64,27 +64,25 @@ public static class QuaternionUtils
 
         public Vector3 ToYawPitchRoll()
         {
-            Vector3 result;
-            Quaternion q = quaternion;
+            Quaternion q = Quaternion.Normalize(quaternion);
 
-            // Pitch (X-axis rotation)
             float sinp = 2f * (q.W * q.X - q.Y * q.Z);
-            if (MathF.Abs(sinp) >= 1f)
-                result.Y = MathF.CopySign(MathF.PI / 2f, sinp); // clamp
+            float pitch, yaw, roll;
+
+            if (MathF.Abs(sinp) > 0.99999f)   // gimbal lock: pin yaw, put all remaining rotation into roll
+            {
+                pitch = MathF.CopySign(MathF.PI / 2f, sinp);
+                yaw = 0f;
+                roll = MathF.Atan2(-2f * (q.X * q.Y - q.Z * q.W), 1f - 2f * (q.Y * q.Y + q.Z * q.Z));
+            }
             else
-                result.Y = MathF.Asin(sinp);
+            {
+                pitch = MathF.Asin(sinp);
+                yaw = MathF.Atan2(2f * (q.W * q.Y + q.Z * q.X), 1f - 2f * (q.X * q.X + q.Y * q.Y));
+                roll = MathF.Atan2(2f * (q.W * q.Z + q.X * q.Y), 1f - 2f * (q.Z * q.Z + q.X * q.X));
+            }
 
-            // Yaw (Y-axis rotation)
-            float siny_cosp = 2f * (q.W * q.Y + q.Z * q.X);
-            float cosy_cosp = 1f - 2f * (q.X * q.X + q.Y * q.Y);
-            result.X = MathF.Atan2(siny_cosp, cosy_cosp);
-
-            // Roll (Z-axis rotation)
-            float sinr_cosp = 2f * (q.W * q.Z + q.X * q.Y);
-            float cosr_cosp = 1f - 2f * (q.Z * q.Z + q.X * q.X);
-            result.Z = MathF.Atan2(sinr_cosp, cosr_cosp);
-
-            return new Vector3(result.X, result.Y, result.Z); // (yaw, pitch, roll)
+            return new Vector3(yaw, pitch, roll); // (yaw, pitch, roll)
         }
         public Vector3 ToPitchYawRoll()
         {
@@ -105,12 +103,22 @@ public static class QuaternionUtils
         {
             return new Quat(quaternion.X, quaternion.Y, quaternion.Z, quaternion.W);
         }
+      
     }
     extension(Quat quat)
     {
         public Quaternion ToQuaternion()
         {
             return new Quaternion(quat.X, quat.Y, quat.Z, quat.W);
+        }
+        public Vec3 ToYawPitchRoll()
+        {
+            var pyr = quat.ToPitchYawRoll();
+            return new Vec3(pyr.Y, pyr.X, pyr.Z); // (yaw, pitch, roll)
+        }
+        public Quat Fixed()
+        {
+            return new Quat(quat.W, quat.X, quat.Y, quat.Z);
         }
     }
 
