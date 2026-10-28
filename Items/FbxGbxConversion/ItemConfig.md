@@ -54,6 +54,9 @@ Defines how an item can be positioned.
 | `NotOnObject`         | `bool`            | `false` | Prevents the item from being placed on objects.                                   |
 | `AutoRotation`        | `bool`            | `false` | Automatically rotates the item according to the placement surface.                |
 | `SwitchPivotManually` | `bool`            | `false` | Allows the placement pivot to be switched manually.                               |
+| `GhostMode`           | `bool`            | `true`  | Enables ghost mode for the item during placement.                |
+| `HasPath`             | `bool`            | `false` | Enables PathMode for the item. Not sure what it does                |
+| `IsFreelyAnchorable`  | `bool`            | `true`  | Indicates whether the item can be freely anchored or only on pivots.                |
 | `CubeCenter`          | `Vec3?`           | `null`  | Center position of the placement/snap cube.                                       |
 | `CubeSize`            | `float`           | `0`     | Size of the placement/snap cube.                                                  |
 | `GridSnapHStep`       | `float`           | `0`     | Horizontal grid snapping step.                                                    |

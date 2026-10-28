@@ -537,6 +537,9 @@ public class LightConfig
 
 public class PlacementConfig
 {
+    [JsonPropertyName("IsFreelyAnchorable")]
+    public bool IsFreelyAnchorable { get; set; } = true;
+
     [JsonPropertyName("YawOnly")]
     public bool YawOnly { get; set; }
 
@@ -548,6 +551,12 @@ public class PlacementConfig
 
     [JsonPropertyName("SwitchPivotManually")]
     public bool SwitchPivotManually { get; set; }
+
+    [JsonPropertyName("GhostMode")]
+    public bool GhostMode { get; set; } = true;
+
+    [JsonPropertyName("HasPath")]// not sure what it does
+    public bool HasPath { get; set; }
 
     [JsonPropertyName("CubeCenter")]
     public Vec3? CubeCenter { get; set; }
@@ -607,6 +616,9 @@ public class PlacementConfig
             placementParams.NotOnObject = placementConfig.NotOnObject;
             placementParams.AutoRotation = placementConfig.AutoRotation;
             placementParams.SwitchPivotManually = placementConfig.SwitchPivotManually;
+            placementParams.GhostMode = placementConfig.GhostMode;
+            placementParams.HasPath = placementConfig.HasPath;
+            placementParams.IsFreelyAnchorable = placementConfig.IsFreelyAnchorable;
             placementParams.CubeCenter = placementConfig.CubeCenter ?? Vec3.Zero;
             placementParams.CubeSize = placementConfig.CubeSize;
             placementParams.GridSnapHStep = placementConfig.GridSnapHStep;
@@ -671,6 +683,9 @@ public class PlacementConfig
             NotOnObject = placementParam.NotOnObject,
             AutoRotation = placementParam.AutoRotation,
             SwitchPivotManually = placementParam.SwitchPivotManually,
+            GhostMode = placementParam.GhostMode,
+            HasPath = placementParam.HasPath,
+            IsFreelyAnchorable = placementParam.IsFreelyAnchorable,
             CubeCenter = placementParam.CubeCenter,
             CubeSize = placementParam.CubeSize,
             GridSnapHStep = placementParam.GridSnapHStep,

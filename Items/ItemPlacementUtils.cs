@@ -140,4 +140,48 @@ public static class ItemPlacementUtils
         offset += 4;
     }
 
+    private const int GhostModeBit = 5;
+    private const int HasPathBit = 6;
+    private const int IsFreelyAnchorableBit = 0;
+    extension(CGameItemPlacementParam placementParam)
+    {
+
+        public bool GhostMode
+        {
+            get
+            {
+                return (placementParam.Flags & (1 << GhostModeBit)) != 0;
+            }
+            set
+            {
+                if (value) placementParam.Flags |= 1 << GhostModeBit;
+                else placementParam.Flags &= ~(1 << GhostModeBit);
+            }
+        }
+        public bool HasPath
+        {
+            get
+            {
+                return (placementParam.Flags & (1 << HasPathBit)) != 0;
+            }
+            set
+            {
+                if (value) placementParam.Flags |= 1 << HasPathBit;
+                else placementParam.Flags &= ~(1 << HasPathBit);
+            }
+        }
+        public bool IsFreelyAnchorable
+        {
+            get
+            {
+                return (placementParam.Flags & (1 << IsFreelyAnchorableBit)) != 0;
+            }
+            set
+            {
+                if (value) placementParam.Flags |= 1 << IsFreelyAnchorableBit;
+                else placementParam.Flags &= ~(1 << IsFreelyAnchorableBit);
+            }
+        }
+    }
+
 }
