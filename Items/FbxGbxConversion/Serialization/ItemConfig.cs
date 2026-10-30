@@ -533,6 +533,28 @@ public class LightConfig
     {
         get; set;
     }
+
+    [JsonPropertyName("Advanced")]
+    public AdvancedLightConfig? Advanced { get; set; }
+}
+
+public class AdvancedLightConfig
+{
+    [JsonPropertyName("LightingEnabled")]
+    public bool LightingEnabled { get; set; } = true;
+    [JsonPropertyName("SpecularEnabled")]
+    public bool SpecularEnabled { get; set; } = true;
+    [JsonPropertyName("CastShadows")]
+    public bool CastShadows { get; set; } = true;
+
+    [JsonPropertyName("AttenuationTension")]
+    public float AttenuationTension { get; set; } = 0.3f;
+    [JsonPropertyName("AttenuationDerivativeAtZero")]
+    public float AttenuationDerivativeAtZero { get; set; } = -1.5f;
+    [JsonPropertyName("AttenuationHdrRadiusCoefficient")]
+    public float AttenuationHdrRadiusCoefficient { get; set; } = 0.015625f;
+
+    // possibly more but effect not known
 }
 
 public class PlacementConfig
@@ -633,11 +655,12 @@ public class PlacementConfig
             ItemPlacementUtils.SetItemPlacementMagnets(placementParams,
                 placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) =>
                 {
-                    var pyr = rot.ToPitchYawRoll() * MathUtils.Rad2Deg;
+                    var conv = new PyrConvention {  };
+                    var pyr = rot.ToPitchYawRoll(conv);
                     return new MagnetLoc
                     {
                         Position = pos,
-                        PitchYawRoll = new Vec3(pyr.X, pyr.Y, -pyr.Z)
+                        PitchYawRoll = new Vec3(-pyr.X, pyr.Y, pyr.Z)
                     };
                 }).ToList());
 

@@ -96,7 +96,7 @@ public class ItemCompiler
     CompileContext compileContext;
     ItemCompilerSettings _settings;
     Ident _ident;
-
+    ItemLightConverter _lightConverter = new();
 
     public ItemCompiler() : this(new()) { }
     public ItemCompiler(ItemCompilerSettings settings)
@@ -104,6 +104,7 @@ public class ItemCompiler
         _settings = settings;
         _ident = new Ident("", 26, _settings.Author ?? "TM_CSharpMapping");
         compileContext = new();
+        _lightConverter = new ItemLightConverter();
     }
 
     public ToolResult<CGameItemModel> Compile(NormalizedItem item, BuildSettings buildSettings, CompileOptions compileOptions)
@@ -487,6 +488,7 @@ public class ItemCompiler
         List<CPlugLightUserModel> lightUserModels = [];
         List<Socket> sockets = [];
         List<LightInst> lightInsts = [];
+        List<Light> lights = [];
 
         var visibleInstances = instances
             .Where(i => i.Instance.Visible && (i.Instance.Kind == RefKind.Mesh || i.Instance.Kind == RefKind.Shape));
@@ -538,18 +540,41 @@ public class ItemCompiler
         {
             var refBase = compileContext.GuidToRef[id];
             var lightRef = refBase as LightRef;
-            NormalizedLight light = item.LightPool[lightRef!.LightKey];
+            NormalizedLight normalizedLight = item.LightPool[lightRef!.LightKey];
 
-            var lightInst = new LightInst() { ModelIndex = lightUserModels.Count, SocketIndex = sockets.Count };
-            lightInsts.Add(lightInst);
-
-            lightUserModels.Add(GbxItemUtils.CreateLightUserModel(light, instance));
-            sockets.Add(new Socket()
+            if (cluster.RequiresComplexLightDefinition)
             {
-                U01 = -1,
-                U02 = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
-                Name = light.Name
-            });
+                Light light;
+                if(normalizedLight.Light == null)
+                {
+                    var fakeSocket = new Socket()
+                    {
+                        U01 = -1,
+                        U02 = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
+                        Name = normalizedLight.Name
+                    };
+                    light = _lightConverter.ConvertLight(normalizedLight.LightModel!, fakeSocket);
+                }
+                else
+                {
+                    light = ObjectCloner.DeepCloneObject(normalizedLight.Light)!;
+                }
+
+                lights.Add(light);
+            }
+            else
+            {
+                var lightInst = new LightInst() { ModelIndex = lightUserModels.Count, SocketIndex = sockets.Count };
+                lightInsts.Add(lightInst);
+
+                lightUserModels.Add(GbxItemUtils.CreateLightUserModel(normalizedLight, instance));
+                sockets.Add(new Socket()
+                {
+                    U01 = -1,
+                    U02 = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
+                    Name = normalizedLight.Name
+                });
+            }
 
         }
 
@@ -566,6 +591,7 @@ public class ItemCompiler
             var skel = GbxItemUtils.CreateSkel(sockets);
             solid.Skel = skel;
         }
+        solid.Lights = lights.ToArray();
 
         solid.LodMaxDistAtFov90 = cluster.LODDistances;
         solid.PreLightGenerator = preLightGen;
@@ -1941,6 +1967,17 @@ public class ItemCompiler
                 }
                 mesh.Skel = GbxItemUtils.CreateSkel(sockets);
             }
+            if(mesh.Lights?.Length > 0)
+            {
+                foreach(var l in mesh.Lights)
+                {
+                    var currentRot = l.U05.GetRotationQuaternion();
+                    var curPos = l.U05.GetPosition();
+                    var newRot = currentRot * Quaternion.Inverse(rotation);
+                    var newPos = position + Vector3.Transform(curPos, rotation);
+                    l.U05 = Iso4Utils.IsoFromTransform(newPos, newRot);
+                }
+            }
         }
   
         var shape = staticObject.Shape;
@@ -2000,24 +2037,46 @@ public class ItemCompiler
         target.ShadedGeoms = [.. target.ShadedGeoms ?? [], .. solid2Model.ShadedGeoms ?? []];
 
         // lights if any
-        int lightModelOffset = target.LightUserModels?.Length ?? 0;
-        foreach (var l in solid2Model.LightInsts ?? [])
-        {
-            l.ModelIndex += lightModelOffset;
-            l.SocketIndex += lightModelOffset;
-        }
-        target.LightInsts = [.. target.LightInsts ?? [], .. solid2Model.LightInsts ?? []];
-        target.LightUserModels = [.. target.LightUserModels ?? [], .. solid2Model.LightUserModels ?? []];
-        if(target.LightInsts.Length > 0)
-        {
-            var sockets = target.Skel != null ? GbxItemUtils.ParseSockets(target.Skel) : [];
-            sockets.AddRange(solid2Model.Skel != null ? GbxItemUtils.ParseSockets(solid2Model.Skel) : []);
-            target.Skel = GbxItemUtils.CreateSkel(sockets);
-        }
+        MergeLights(target, solid2Model);
+
         target.PreLightGenerator = GbxItemUtils.MergePreLightGenerator(target.PreLightGenerator, solid2Model.PreLightGenerator);
         target.FileWriteTime = DateTime.Now;
 
     }
+    void MergeLights(CPlugSolid2Model target, CPlugSolid2Model solid2Model)
+    {
+        bool targetHasPlugLights = target.Lights?.Length > 0;
+        bool solid2ModelHasPlugLights = solid2Model.Lights?.Length > 0;
+
+        if (targetHasPlugLights)
+            _lightConverter.ConvertLightUserModels(solid2Model);
+        if(solid2ModelHasPlugLights)
+            _lightConverter.ConvertLightUserModels(target);
+
+        if (targetHasPlugLights || solid2ModelHasPlugLights)
+        {
+            target.Lights = [.. target.Lights ?? [], .. solid2Model.Lights ?? []];
+        }
+        else
+        {
+            int lightModelOffset = target.LightUserModels?.Length ?? 0;
+            foreach (var l in solid2Model.LightInsts ?? [])
+            {
+                l.ModelIndex += lightModelOffset;
+                l.SocketIndex += lightModelOffset;
+            }
+            target.LightInsts = [.. target.LightInsts ?? [], .. solid2Model.LightInsts ?? []];
+            target.LightUserModels = [.. target.LightUserModels ?? [], .. solid2Model.LightUserModels ?? []];
+            if (target.LightInsts.Length > 0)
+            {
+                var sockets = target.Skel != null ? GbxItemUtils.ParseSockets(target.Skel) : [];
+                sockets.AddRange(solid2Model.Skel != null ? GbxItemUtils.ParseSockets(solid2Model.Skel) : []);
+                target.Skel = GbxItemUtils.CreateSkel(sockets);
+            }
+        }
+
+    }
+
     void MergeSurface(CPlugSurface target, CPlugSurface surface)
     {
         if (target.Surf is not CPlugSurface.Mesh targetMesh || surface.Surf is not CPlugSurface.Mesh surfaceMesh)

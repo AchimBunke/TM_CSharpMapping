@@ -580,6 +580,39 @@ public class SilkAssimpSceneImporter : ISceneImporter
     //    }
     //}
 
+    /// Rotation to apply to a quaternion authored with a different rest arrow, so it
+    /// can be fed to ToPitchYawRoll:   R_target = R_source * RestFix
+    /// sourceRest = where the arrow points at identity in the source app (Blender: +Z)
+    /// targetRest = where the arrow points at (0,0,0) in the target (Trackmania: -Y)
+    /// twistDeg   = extra spin about the arrow, because the rest direction alone doesn't fix roll.
+    static Quaternion RestFix(Vector3 sourceRest, Vector3 targetRest, float twistDeg = 0)
+    {
+        Vector3 a = Vector3.Normalize(targetRest), b = Vector3.Normalize(sourceRest);
+        float d = Vector3.Dot(a, b);
+        Quaternion arc;
+        if (d < -0.999999f)   // opposite: pick any perpendicular axis
+        {
+            Vector3 axis = Vector3.Cross(a, Math.Abs(a.X) < 0.9f ? Vector3.UnitX : Vector3.UnitY);
+            arc = Quaternion.CreateFromAxisAngle(Vector3.Normalize(axis), MathF.PI);
+        }
+        else
+        {
+            Vector3 c = Vector3.Cross(a, b);
+            arc = Quaternion.Normalize(new Quaternion(c.X, c.Y, c.Z, 1 + d));
+        }
+        var twist = Quaternion.CreateFromAxisAngle(a, twistDeg * MathF.PI / 180f);
+        return Quaternion.Normalize(arc * twist);   // twist first, then arc
+    }
+
+    /// Full "Fix": optional world-axis remap (conjugation) followed by the rest-pose fix.
+    /// worldRemap: rotation taking source world axes to target world axes (null = same axes).
+    static Quaternion Fix(Quaternion q, Vector3 sourceRest, Vector3 targetRest,
+                                 float twistDeg = 0, Quaternion? worldRemap = null)
+    {
+        if (worldRemap is Quaternion w)
+            q = w * q * Quaternion.Conjugate(w);
+        return Quaternion.Normalize(q * RestFix(sourceRest, targetRest, twistDeg));
+    }
 
     /// <summary>
     /// Fix all provided axis/position offsets that are pure vectors as they are assumed to be in the original coordinate space and need to be transformed into GBX space.
@@ -626,13 +659,10 @@ public class SilkAssimpSceneImporter : ISceneImporter
             }
             if (itemConfig.Placement.MagnetRotations != null)
             {
-                Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(GbxCoordinateSpaceFixup);
-                Quaternion matrixRotationInv = Quaternion.Conjugate(matrixRotation);
-                Quaternion localFix = Quaternion.CreateFromAxisAngle(Vector3.UnitX, -MathF.PI / 2); // magnet/pivot local forward: +Y -> +Z
-
-                Quaternion Fix(Quaternion q) => Quaternion.Normalize(q * localFix);
+                var blenderRest = Vector3.UnitZ;
+                var tmRest = -Vector3.UnitY;
                 for (int i = 0; i < itemConfig.Placement.MagnetRotations.Count; ++i)
-                    itemConfig.Placement.MagnetRotations[i] = Fix(itemConfig.Placement.MagnetRotations[i]);
+                    itemConfig.Placement.MagnetRotations[i] = Fix(itemConfig.Placement.MagnetRotations[i], blenderRest, tmRest, 0);
             }
 
             if (itemConfig.Placement.PlacementClass != null)

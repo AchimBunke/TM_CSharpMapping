@@ -284,6 +284,23 @@ Fields specific to point or spot lights only have an effect when the correspondi
 
 ---
 
+## AdvancedLightConfig
+
+Defines advanced light parameters for a GBX item. These properties are not easily edited with editor++.
+Some fields may have unknown effects and are not fully documented. In the future there may be more advanced light parameters added to the configuration.
+
+| Field                          | Type    | Default | Description                                                                 |
+| ------------------------------ | ------- | ------- | --------------------------------------------------------------------------- |
+| `LightingEnabled`              | `bool`  | `true`  | Enables or disables lighting.                                               |
+| `SpecularEnabled`              | `bool`  | `true` | Enables or disables specular highlights.                                   |
+| `CastShadows`                  | `bool`  | `true`  | Enables or disables shadow casting.                                         |
+| `Inverted`                     | `bool`  | `false` | Inverts the light direction.                                               |
+| `AttenuationTension`           | `float` | `0.3`   | Controls the tension of light attenuation. Effectively controlling light falloff curve.                                  |
+| `AttenuationDerivativeAtZero`  | `float` | `-1.5`  | Derivative of the attenuation function at zero distance. Effectively controlling light falloff curve.                |
+| `AttenuationHdrRadiusCoefficient` | `float` | `0.015625` | Coefficient for HDR radius attenuation.                                     |
+
+---
+
 ## `MovingGroupConfig`
 
 Defines the moving parameters for a specific moving group.

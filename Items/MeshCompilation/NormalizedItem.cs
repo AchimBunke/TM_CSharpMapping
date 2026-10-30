@@ -56,7 +56,8 @@ public class NormalizedShape
 }
 public class NormalizedLight
 {
-    public CPlugLightUserModel LightModel { get; set; } = null!;
+    public CPlugLightUserModel? LightModel { get; set; } = null!;
+    public Light? Light { get; set; } = null;
     public string Name { get; set; } = string.Empty;
 }
 

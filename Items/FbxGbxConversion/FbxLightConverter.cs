@@ -1,10 +1,13 @@
+using GBX.NET.Engines.Graphic;
 using GBX.NET.Engines.Plug;
+using GBX.NET.Inputs;
 using System.Numerics;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.Plug.CPlugSkel;
 using Quaternion = System.Numerics.Quaternion;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
@@ -35,10 +38,11 @@ internal class FbxLightConverter
         return ToolResult.Success(lights, nameof(FbxLightConverter));
     }
 
-    static (NormalizedLight Light, Vector3 Position, Quaternion Rotation) ConvertLight(ImportedLight light, LightConfig lightConfig)
+    static (NormalizedLight Light, Vector3 Position, Quaternion Rotation) ConvertLight(ImportedLight importedLight, LightConfig lightConfig)
     {
         var normalizedLight = new NormalizedLight();
-        MeshCompilation.LightType lightType = light.Type switch
+
+        MeshCompilation.LightType lightType = importedLight.Type switch
         {
             ImportedLightType.Directional => MeshCompilation.LightType.Point,
             ImportedLightType.Point => MeshCompilation.LightType.Point,
@@ -46,7 +50,7 @@ internal class FbxLightConverter
             ImportedLightType.Area => MeshCompilation.LightType.Area,
             _ => MeshCompilation.LightType.Point,
         };
-        if(lightConfig.Type.HasValue)
+        if (lightConfig.Type.HasValue)
             lightType = lightConfig.Type.Value;
         var lightUserModel = new CPlugLightUserModel
         {
@@ -68,10 +72,39 @@ internal class FbxLightConverter
         normalizedLight.LightModel = lightUserModel;
         normalizedLight.Name = lightConfig.Name;
 
-        Matrix4x4.Decompose(light.GlobalTransform, out _, out var nodeRotation, out var translation);
+        Matrix4x4.Decompose(importedLight.GlobalTransform, out _, out var nodeRotation, out var translation);
 
         var rotation = nodeRotation;
         var position = translation;
+
+        if (lightConfig.Advanced is not null)
+        {
+            var advancedLightConfig = lightConfig.Advanced;
+            ItemLightConverter itemLightConverter = new();
+            var fakeSocket = new Socket()
+            {
+                U01 = -1,
+                U02 = Iso4Utils.IsoFromTransform(position, rotation),
+                Name = normalizedLight.Name
+            };
+            var light = itemLightConverter.ConvertLight(lightUserModel, fakeSocket);
+
+            var cplugLight = light.U03!;
+            var gxlight = cplugLight.Light!;
+
+            gxlight.DoLighting = advancedLightConfig.LightingEnabled;
+            gxlight.DoSpecular = advancedLightConfig.SpecularEnabled;
+            gxlight.IsShadowGen = advancedLightConfig.CastShadows;
+            if(gxlight is GxLightBall gxBall)
+            {
+                gxBall.AttHyper2DerivAt0 = advancedLightConfig.AttenuationDerivativeAtZero;
+                gxBall.AttHyper2Tension = advancedLightConfig.AttenuationTension;
+                ItemLightHelper.SetAttHdrRadiusCoef(gxBall, advancedLightConfig.AttenuationHdrRadiusCoefficient);
+            }
+
+            normalizedLight.LightModel = null;
+            normalizedLight.Light = light;
+        }
 
         return (normalizedLight, position, rotation);
     }

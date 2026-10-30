@@ -2,12 +2,9 @@
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MetaNotPersistent;
-using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
-using System.ComponentModel;
 using System.Numerics;
 using System.Reflection;
-using System.Xml.Linq;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Messaging;
 using static GBX.NET.Engines.GameData.CGameItemModel;
@@ -893,6 +890,26 @@ public class ItemParser
                 normalizedModel.Lights.Add(lightRef);
             }
         }
+        else if(solid2Model.Lights?.Length > 0)
+        {
+            foreach(var l in solid2Model.Lights)
+            {
+                l.U05.Deconstruct(out var rot, out var xyz);
+                var m = new Matrix4x4(
+                   rot.XX, rot.XY, rot.XZ, 0,
+                   rot.YX, rot.YY, rot.YZ, 0,
+                   rot.ZX, rot.ZY, rot.ZZ, 0,
+                   0, 0, 0, 1);
+
+                var lightRef = new LightRef()
+                {
+                    Position = xyz,
+                    Rotation = Quaternion.CreateFromRotationMatrix(m),
+                };
+                ParseLight(l, lightRef, normalizedItem);
+                normalizedModel.Lights.Add(lightRef);
+            }
+        }
     }
     ToolResult<None> ParseIndexedTriangles(
         CPlugVisualIndexedTriangles visual,
@@ -1000,6 +1017,18 @@ public class ItemParser
         var normalizedLight = new NormalizedLight
         {
             LightModel = ObjectCloner.DeepCloneObject(lightModel)!,
+            Name = $"Light_{key}",
+        };
+
+        normalizedItem.LightPool.Add(key.GetHashCode(), normalizedLight);
+        lightRef.LightKey = key.GetHashCode();
+    }
+    void ParseLight(CPlugSolid2Model.Light light, LightRef lightRef, NormalizedItem normalizedItem)
+    {
+        var key = normalizedItem.LightPool.Count.ToString();
+        var normalizedLight = new NormalizedLight
+        {
+            Light = ObjectCloner.DeepCloneObject(light)!,
             Name = $"Light_{key}",
         };
 

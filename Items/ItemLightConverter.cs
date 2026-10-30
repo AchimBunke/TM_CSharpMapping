@@ -36,16 +36,22 @@ public class ItemLightConverter
     public void ConvertLightUserModels(CPlugSolid2Model model)
     {
         List<CPlugSolid2Model.Light> lights = [];
-
-        var socket = GbxItemUtils.ParseSockets(model.Skel!)?.FirstOrDefault();
-        foreach (var customLight in model.LightUserModels ?? [])
+        if(model.LightInsts?.Length == 0 || model.Skel is null)
+            return;
+        var sockets = GbxItemUtils.ParseSockets(model.Skel!);
+        foreach (var lightInst in model.LightInsts ?? [])
         {
-            if(socket == null)
+            if (sockets == null || lightInst.SocketIndex >= sockets.Count)
                 throw new Exception("No socket found for light user model conversion.");
+            var socket = sockets[lightInst.SocketIndex];
+
+            var customLight = model.LightUserModels[lightInst.ModelIndex];
+
             var light = ConvertLight(customLight, socket);
             lights.Add(light);
         }
         model.LightUserModels = [];
+        model.LightInsts = [];
         model.Lights = lights.ToArray();
     }
 
@@ -66,7 +72,7 @@ public class ItemLightConverter
         }
     }
 
-    CPlugSolid2Model.Light ConvertLight(CPlugLightUserModel lightUserModel, CPlugSkel.Socket socket)
+    public CPlugSolid2Model.Light ConvertLight(CPlugLightUserModel lightUserModel, CPlugSkel.Socket socket)
     {
         var desiredLightType = GbxItemUtils.GetLightTypeFromLightUserModel(lightUserModel);
         var light = ItemLightHelper.CreateEmptyLight(desiredLightType);
@@ -356,6 +362,12 @@ public static class ItemLightHelper
             (int)light.Flags | 
             (sceneLightAlwaysActive ? (1 << 5) : 0);
         GetFlagChunk(light).U04 = bitmask;
+    }
+
+    public static void SetAttHdrRadiusCoef(GxLightBall lightBall, float coefficient)
+    {
+        lightBall.TryCreateChunk<GxLightBall.Chunk0400200A>(out var c3);
+        c3.U01 = coefficient;
     }
 
 }

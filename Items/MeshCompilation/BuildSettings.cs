@@ -39,6 +39,7 @@ public sealed class InstanceSettings
     public LightType? LightTypeOverride { get; set; }
 }
 
+
 public sealed class ClusterSettings
 {
     public ModelType Type { get; set; }
@@ -60,6 +61,9 @@ public sealed class ClusterSettings
     /// if model is originally shared across multiple entities, this cluster is detached from the original entity and chnages will apply only to this node
     /// </summary>
     public bool Detached { get; set; }
+
+    // are there real CPLugLights in this cluster.. else tm will generate them for use and we use custom light definitions
+    public bool RequiresComplexLightDefinition { get; set; } = false;
 }
 
 public sealed class VariantSetting
@@ -126,14 +130,26 @@ public sealed class BuildSettings
 
                 foreach (var l in model.Lights)
                 {
-                    LightType type = item.LightPool[l.LightKey].LightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>().U01 switch
+                    var lightRef = item.LightPool[l.LightKey];
+                    LightType? lightType;
+                    if (lightRef.LightModel != null)
                     {
-                        0 => LightType.Point,
-                        1 => LightType.Spot,
-                        2 => LightType.Area,
-                        _ => LightType.Point,
-                    };
-                    settings.Instances[l.Id] = new InstanceSettings { Kind = RefKind.Light, ClusterKey = clusterKey, LightTypeOverride = type };
+                        lightType = lightRef.LightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>().U01 switch
+                        {
+                            0 => LightType.Point,
+                            1 => LightType.Spot,
+                            2 => LightType.Area,
+                            _ => LightType.Point,
+                        };
+                    }
+                    else
+                    {
+                        settings.Clusters[clusterKey].RequiresComplexLightDefinition = true;
+                        lightType = null;
+                    }
+                   
+                    
+                    settings.Instances[l.Id] = new InstanceSettings { Kind = RefKind.Light, ClusterKey = clusterKey, LightTypeOverride = lightType };
                 }
 
                 foreach (var child in model.Children)
