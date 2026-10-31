@@ -659,10 +659,8 @@ public class SilkAssimpSceneImporter : ISceneImporter
             }
             if (itemConfig.Placement.MagnetRotations != null)
             {
-                var blenderRest = Vector3.UnitZ;
-                var tmRest = -Vector3.UnitY;
                 for (int i = 0; i < itemConfig.Placement.MagnetRotations.Count; ++i)
-                    itemConfig.Placement.MagnetRotations[i] = Fix(itemConfig.Placement.MagnetRotations[i], blenderRest, tmRest, 0);
+                    itemConfig.Placement.MagnetRotations[i] = new Vec3(itemConfig.Placement.MagnetRotations[i].X - 90, itemConfig.Placement.MagnetRotations[i].Z, -itemConfig.Placement.MagnetRotations[i].Y);
             }
 
             if (itemConfig.Placement.PlacementClass != null)

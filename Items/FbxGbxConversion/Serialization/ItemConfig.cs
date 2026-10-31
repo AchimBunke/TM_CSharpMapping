@@ -640,7 +640,7 @@ public class PlacementConfig
     public List<Vec3> MagnetPositions { get; set; } = [];
     
     [JsonPropertyName("MagnetRotations")]
-    public List<Quaternion> MagnetRotations { get; set; } = [];
+    public List<Vec3> MagnetRotations { get; set; } = [];
 
 
     [JsonPropertyName("PlacementClass")]
@@ -679,11 +679,11 @@ public class PlacementConfig
                 placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) =>
                 {
                     var conv = new PyrConvention {  };
-                    var pyr = rot.ToPitchYawRoll(conv);
+                    var pyr = rot;
                     return new MagnetLoc
                     {
                         Position = pos,
-                        PitchYawRoll = new Vec3(-pyr.X, pyr.Y, pyr.Z)
+                        PitchYawRoll = new Vec3(pyr.X, pyr.Y, pyr.Z)
                     };
                 }).ToList());
 
@@ -744,7 +744,7 @@ public class PlacementConfig
             PivotPositions = placementParam.PivotPositions?.ToList() ?? new List<Vec3>(),
             PivotRotations = placementParam.PivotRotations?.Select(q=>q.ToQuaternion()).ToList() ?? new List<Quaternion>(),
             MagnetPositions = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => m.Position).ToList(),
-            MagnetRotations = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => Quaternion.CreateFromYawPitchRollDegrees(m.PitchYawRoll.Y, m.PitchYawRoll.X, m.PitchYawRoll.Z)).ToList(),
+            MagnetRotations = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => m.PitchYawRoll).ToList(),
         };
         if (placementParam.PlacementClass != null)
         {
