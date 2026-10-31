@@ -63,6 +63,9 @@ public class ItemConfig
     [JsonPropertyName("Scale")]
     public float Scale { get; set; } = 1.0f;
 
+    [JsonPropertyName("ScaleOptions")]
+    public ScaleConfig? ScaleOptions { get; set; }
+
     [JsonPropertyName("Materials")]
     public List<MaterialConfig> Materials { get; set; } = new List<MaterialConfig>();
 
@@ -134,6 +137,26 @@ public class ItemConfig
     };
 }
 
+public class ScaleConfig
+{
+    [JsonPropertyName("ScaleAnimationDistance")]
+    public bool ScaleAnimationDistance { get; set; } = false;
+    [JsonPropertyName("ScaleAnimationTime")]
+    public bool ScaleAnimationTime { get; set; } = false;
+
+    [JsonPropertyName("ScalePivots")]
+    public bool ScalePivots { get; set; } = true;
+
+    [JsonPropertyName("ScaleMagnets")]
+    public bool ScaleMagnets { get; set; } = true;
+    
+    [JsonPropertyName("ScaleLightRadius")]
+    public bool ScaleLightRadius { get; set; } = true;
+
+    [JsonPropertyName("ScaleLightmapSizeOverrides")]
+    public bool ScaleLightmapSizeOverrides { get; set; } = true;
+
+}
 
 public class Waypoint
 {

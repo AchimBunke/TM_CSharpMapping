@@ -1,15 +1,9 @@
 using GBX.NET.Engines.GameData;
-using GBX.NET.Engines.Scene;
-using Silk.NET.Assimp;
-using Silk.NET.Maths;
 using System.Numerics;
-using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
-using static GBX.NET.Engines.Game.CGameCtnChallenge;
-using static GBX.NET.Engines.Plug.CPlugCrystal;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
@@ -69,6 +63,7 @@ public class FbxGbxConverter
             var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
             var scene = importer.Import(conversionInput.Fbx);
             importer.FixConfigAxes(conversionInput.ItemConfig);
+            FixConfigScale(conversionInput.ItemConfig);
             return ToolResult.Success(scene, nameof(FbxGbxConverter));
         }
         catch (Exception e)
@@ -304,7 +299,68 @@ public class FbxGbxConverter
         return nodesWithMesh;
     }
 
+    void FixConfigScale(ItemConfig itemConfig)
+    {
+        if (itemConfig.Scale == 1)
+            return;
+        if (itemConfig.ScaleOptions == null)
+            return;
+        var scale = itemConfig.Scale;
+        var scaleOptions = itemConfig.ScaleOptions;
 
+        if (scaleOptions.ScaleMagnets)
+        {
+            for (int i = 0; i < itemConfig.Placement?.MagnetPositions?.Count; i++)
+                itemConfig.Placement.MagnetPositions[i] = Vector3.Multiply(itemConfig.Placement.MagnetPositions[i], scale);
+        }
+        if (scaleOptions.ScalePivots)
+        {
+            for (int i = 0; i < itemConfig.Placement?.PivotPositions?.Count; i++)
+                itemConfig.Placement.PivotPositions[i] = Vector3.Multiply(itemConfig.Placement.PivotPositions[i], scale);
+        }
+        if (scaleOptions.ScaleAnimationDistance)
+        {
+            foreach(var mg in itemConfig.MovingGroups)
+            {
+                if (mg.KinematicMovement is null)
+                    continue;
+                mg.KinematicMovement.TransMin = mg.KinematicMovement.TransMin * scale;
+                mg.KinematicMovement.TransMax = mg.KinematicMovement.TransMax * scale;
+            }
+        }
+        if (scaleOptions.ScaleAnimationTime)
+        {
+            foreach (var mg in itemConfig.MovingGroups)
+            {
+                if (mg.KinematicMovement is null)
+                    continue;
+                foreach(var anim in mg.KinematicMovement.TranslationAnims)
+                {
+                    anim.Duration = (uint)(anim.Duration * scale);
+                }
+                foreach (var anim in mg.KinematicMovement.RotationAnims)
+                {
+                    anim.Duration = (uint)(anim.Duration * scale);
+                }
+            }
+        }
+        if (scaleOptions.ScaleLightRadius)
+        {
+            foreach (var light in itemConfig.Lights)
+            {
+                light.Distance = light.Distance * scale;
+            }
+        }
+        if (scaleOptions.ScaleLightmapSizeOverrides)
+        {
+           foreach(var mesh in itemConfig.Meshes)
+           {
+                if(mesh.LightmapSize.HasValue)
+                    mesh.LightmapSize = mesh.LightmapSize * scale;
+           }
+        }
+
+    }
     public ToolResult<FbxGbxPlanReport> PlanConversion(FbxGbxConversionInput conversionInput, CompileOptions? compileOptions = null)
     {
         var sceneResult = ImportScene(conversionInput);
