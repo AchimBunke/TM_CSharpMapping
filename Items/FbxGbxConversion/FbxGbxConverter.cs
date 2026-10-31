@@ -342,6 +342,12 @@ public class FbxGbxConverter
                 {
                     anim.Duration = (uint)(anim.Duration * scale);
                 }
+                if (mg.KinematicMovement.MovingTexture is null)
+                    continue;
+                foreach(var t in mg.KinematicMovement.MovingTexture.TextureAnims)
+                {
+                    t.Duration = (uint)(t.Duration * scale);
+                }
             }
         }
         if (scaleOptions.ScaleLightRadius)
