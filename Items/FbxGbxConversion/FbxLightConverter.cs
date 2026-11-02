@@ -23,13 +23,13 @@ internal class LightDef
 
 internal class FbxLightConverter
 {
-    public static ToolResult<List<LightDef>> ExtractLights(ImportedScene scene, FbxGbxConversionInput config)
+    public static ToolResult<List<LightDef>> ExtractLights(ImportedScene scene, ConfigIndex configIndex)
     {
         List<LightDef> lights = new List<LightDef>();
 
         foreach (var light in scene.Lights)
         {
-            if (!TryFindConfigForLight(light.NodeName, config, out var lightConfig))
+            if (!TryFindConfigForLight(light.NodeName, configIndex, out var lightConfig))
                 return ToolResult.Fail(nameof(FbxLightConverter), ErrorCodes.FbxGbxConverter.MissingLightConfig, light.NodeName);
 
             var (normalizedLight, position, rotation) = ConvertLight(light, lightConfig!);
@@ -110,10 +110,9 @@ internal class FbxLightConverter
     }
 
 
-    static bool TryFindConfigForLight(string lightName, FbxGbxConversionInput config, out LightConfig? lightConfig)
+    static bool TryFindConfigForLight(string lightName, ConfigIndex configIndex, out LightConfig? lightConfig)
     {
-        lightConfig = config.ItemConfig.Lights.FirstOrDefault(l => l!.Name == lightName, null);
-        return lightConfig is not null;
+        return configIndex.LightConfigsByName.TryGetValue(lightName, out lightConfig);
     }
 
     static Quaternion FromTo(Vector3 from, Vector3 to)

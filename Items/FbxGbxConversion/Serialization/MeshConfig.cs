@@ -67,6 +67,19 @@ public class MeshConfig
     /// </summary>
     [JsonPropertyName("Lods")]
     public List<int> Lods { get; set; } = [];
+
+
+    public MeshConfig Clone() => new MeshConfig
+    {
+        Name = this.Name,
+        MeshFlags = this.MeshFlags,
+        TriggerEffect = this.TriggerEffect,
+        WaypointType = this.WaypointType,
+        GameplayMainDir = this.GameplayMainDir,
+        MovingGroup = this.MovingGroup,
+        LightmapSize = this.LightmapSize,
+        Lods = [.. this.Lods]
+    };
 }
 
 [Flags]

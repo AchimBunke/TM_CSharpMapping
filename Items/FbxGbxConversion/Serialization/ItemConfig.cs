@@ -78,6 +78,10 @@ public class ItemConfig
     [JsonPropertyName("MovingGroups")]
     public List<MovingGroupConfig> MovingGroups { get; set; } = new List<MovingGroupConfig>();
 
+    [JsonPropertyName("Instances")]
+    public List<InstanceConfig> Instances { get; set; } = new List<InstanceConfig>();
+    [JsonPropertyName("InstanceCollections")]
+    public List<InstanceCollectionConfig> InstanceCollections { get; set; } = new List<InstanceCollectionConfig>();
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("LodParameters")]
@@ -137,6 +141,25 @@ public class ItemConfig
     };
 }
 
+public class InstanceConfig
+{
+    [JsonPropertyName("Name")]
+    public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("Collection")]
+    public string Collection { get; set; } = string.Empty;
+}
+public class InstanceCollectionConfig
+{
+    [JsonPropertyName("Name")]
+    public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("Meshes")]
+    public List<string> Meshes { get; set; } = new List<string>();
+    [JsonPropertyName("Lights")]
+    public List<string> Lights { get; set; } = new List<string>();
+    [JsonPropertyName("Instances")]
+    public List<string> Instances { get; set; } = new List<string>();
+
+}
 public class ScaleConfig
 {
     [JsonPropertyName("ScaleAnimationDistance")]
@@ -559,6 +582,35 @@ public class LightConfig
 
     [JsonPropertyName("Advanced")]
     public AdvancedLightConfig? Advanced { get; set; }
+
+
+    public LightConfig Clone()
+    {
+        return new LightConfig
+        {
+            Name = this.Name,
+            Type = this.Type,
+            Color = this.Color,
+            Intensity = this.Intensity,
+            Distance = this.Distance,
+            NightOnly = this.NightOnly,
+            PointEmissionRadius = this.PointEmissionRadius,
+            PointEmissionLength = this.PointEmissionLength,
+            SpotInnerAngle = this.SpotInnerAngle,
+            SpotOuterAngle = this.SpotOuterAngle,
+            SpotEmissionRadius = this.SpotEmissionRadius,
+            SpotEmissionLength = this.SpotEmissionLength,
+            Advanced = this.Advanced != null ? new AdvancedLightConfig
+            {
+                LightingEnabled = this.Advanced.LightingEnabled,
+                SpecularEnabled = this.Advanced.SpecularEnabled,
+                CastShadows = this.Advanced.CastShadows,
+                AttenuationTension = this.Advanced.AttenuationTension,
+                AttenuationDerivativeAtZero = this.Advanced.AttenuationDerivativeAtZero,
+                AttenuationHdrRadiusCoefficient = this.Advanced.AttenuationHdrRadiusCoefficient
+            } : null
+        };
+    }
 }
 
 public class AdvancedLightConfig

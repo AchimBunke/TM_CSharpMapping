@@ -78,11 +78,11 @@ internal class NodeGrouper
     private readonly IReadOnlyDictionary<string, MovingParameter> _movingConfig;
     private ItemConfig _itemConfig;
 
-    public NodeGrouper(IReadOnlyList<float> globalLodDistances, ItemConfig itemConfig)
+    public NodeGrouper(IReadOnlyList<float> globalLodDistances, ConfigIndex configIndex)
     {
         _globalLodDistances = globalLodDistances;
-        _itemConfig = itemConfig;
-        _movingConfig = itemConfig.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => new MovingParameter
+        _itemConfig = configIndex.ItemConfig;
+        _movingConfig = _itemConfig.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => new MovingParameter
         {
             KinematicConstraint = MovingGroupConfig.ToKinematicConstraint(mg.KinematicMovement),
             InstanceParams = MovingGroupConfig.ToInstanceParams(mg.KinematicModel),

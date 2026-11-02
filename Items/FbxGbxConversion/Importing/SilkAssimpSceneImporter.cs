@@ -12,28 +12,61 @@ using Matrix4x4 = System.Numerics.Matrix4x4;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion.Importing;
 
-/// <summary>
-/// Assimp-backed implementation of <see cref="ISceneImporter"/>. This is the single place that
-/// knows about Assimp types, coordinate space, unit scale (currently cm -&gt; m), and axis conventions.
-/// If the import library is ever swapped, only a new <see cref="ISceneImporter"/> implementation
-/// needs to be written - the rest of the conversion pipeline works exclusively against the
-/// neutral <see cref="ImportedScene"/> DTOs.
-/// </summary>
 public class SilkAssimpSceneImporter : ISceneImporter
 {
+    // =====================================================================
+    //  COORDINATE SPACE CONFIGURATION
+    //  This block is the ONLY place you need to touch to change the target
+    //  axes. Everything below (meshes, nodes, lights, FixConfigAxes) derives
+    //  from it.
+    // =====================================================================
+
+    // Where each Blender axis ends up in the target (TM editor) space.
+    static readonly Vector3 BlenderXInTarget = new(1f, 0f, 0f);   // Blender +X
+    static readonly Vector3 BlenderYInTarget = new(0f, 0f, -1f);  // Blender +Y (forward)
+    static readonly Vector3 BlenderZInTarget = new(0f, 1f, 0f);   // Blender +Z (up)
+
+    // Row-vector matrix (System.Numerics):  v_target = v_blender * BlenderToTarget
+    static readonly Matrix4x4 BlenderToTarget = new(
+        BlenderXInTarget.X, BlenderXInTarget.Y, BlenderXInTarget.Z, 0f,
+        BlenderYInTarget.X, BlenderYInTarget.Y, BlenderYInTarget.Z, 0f,
+        BlenderZInTarget.X, BlenderZInTarget.Y, BlenderZInTarget.Z, 0f,
+        0f, 0f, 0f, 1f);
+
+    // Pure axis permutation/sign matrix -> inverse == transpose.
+    static readonly Matrix4x4 TargetToBlender = Matrix4x4.Transpose(BlenderToTarget);
+
+    // If you ever pick a mirrored basis (det < 0) triangle winding must be flipped.
+    static readonly bool TargetMirrorsHandedness = BlenderToTarget.GetDeterminant() < 0f;
+
+    // ---------------------------------------------------------------------
+    //  What Blender's FBX exporter bakes into every top-level object of the
+    //  file (NOT configurable by you, it's a property of the source files):
+    //  axis conversion (forward -Z, up Y) and units in cm (x100).
+    //  This is deliberately independent of BlenderToTarget: changing your
+    //  target axes must not change how the file is "un-baked".
+    // ---------------------------------------------------------------------
+    const float FileUnitsPerMeter = 100f;
+
+    static readonly Matrix4x4 FbxExporterAxes = new(
+        1f, 0f, 0f, 0f,
+        0f, 0f, -1f, 0f,
+        0f, 1f, 0f, 0f,
+        0f, 0f, 0f, 1f);
+
+    // file world = blenderWorld * FileBake   ->   blenderWorld = file world * FileBakeInverse
+    static readonly Matrix4x4 FileBakeInverse =
+        Matrix4x4.Transpose(FbxExporterAxes) * Matrix4x4.CreateScale(1f / FileUnitsPerMeter);
+
+    // =====================================================================
+
     private readonly float _scale;
+
     public SilkAssimpSceneImporter(float scale)
     {
         _scale = scale;
     }
-    static readonly Matrix4x4 GbxCoordinateSpaceFixup =
-        Matrix4x4.Create(
-            1,0,0,0,
-            0,1,0,0,
-            0,0,1,0,
-            0,0,0,1) *
-       
-        Matrix4x4.CreateScale(new Vector3(0.01f, 0.01f, 0.01f));
+
     public ImportedScene Import(Stream stream)
     {
         using var context = Assimp.GetApi();
@@ -42,62 +75,53 @@ public class SilkAssimpSceneImporter : ISceneImporter
         {
             var store = context.CreatePropertyStore();
 
-            //byte[] key = Encoding.UTF8.GetBytes("AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY\0");
-            //context.SetImportPropertyFloat(
-            //        store,
-            //        "GLOBAL_SCALE_FACTOR",
-            //        0.01f
-            //    );
-           
-
-
-            if (stream.CanSeek)
-                stream.Seek(0, SeekOrigin.Begin);
-
-            using var memory = new MemoryStream();
-            stream.CopyTo(memory);
-            byte[] data = memory.ToArray();
-
-
-            fixed (byte* ptr = data)
+            try
             {
-                PostProcessSteps postProcess =
-                    PostProcessSteps.Triangulate |
-                    PostProcessSteps.CalculateTangentSpace;
+                if (stream.CanSeek)
+                    stream.Seek(0, SeekOrigin.Begin);
 
-                Scene* scene = context.ImportFileFromMemoryWithProperties(
-                    ptr,
-                    (uint)data.Length,
-                    (uint)postProcess,
-                    "fbx", store);
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                byte[] data = memory.ToArray();
 
-                if (scene == null)
+                fixed (byte* ptr = data)
                 {
-                    throw new InvalidOperationException(
-                        $"Assimp failed: {context.GetErrorStringS()}");
+                    PostProcessSteps postProcess =
+                        PostProcessSteps.Triangulate |
+                        PostProcessSteps.CalculateTangentSpace;
+
+                    Scene* scene = context.ImportFileFromMemoryWithProperties(
+                        ptr,
+                        (uint)data.Length,
+                        (uint)postProcess,
+                        "fbx", store);
+
+                    if (scene == null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Assimp failed: {context.GetErrorStringS()}");
+                    }
+
+                    try
+                    {
+                        var importedScene = Convert(context, scene);
+
+                        ApplyCoordinateSpaceFixup(importedScene);
+
+                        return importedScene;
+                    }
+                    finally
+                    {
+                        context.ReleaseImport(scene);
+                    }
                 }
-
-                try
-                {
-                    var importedScene = Convert(context, scene);
-
-                    ApplyGbxCoordinateSpaceFixup(importedScene);
-
-                    return importedScene;
-                }
-                finally
-                {
-                    context.ReleaseImport(scene);
-                }
-
+            }
+            finally
+            {
+                context.ReleasePropertyStore(store);
             }
         }
-
-       
-
-        return null;
     }
-
 
     unsafe object? ExtractMetadataValue(MetadataType type, void* valuePtr)
     {
@@ -128,17 +152,18 @@ public class SilkAssimpSceneImporter : ISceneImporter
                     return new Vector3(vec->X, vec->Y, vec->Z);
                 }
             case MetadataType.Aimetadata:
-                return ExtractMetadataValue((Metadata*)valuePtr); 
+                return ExtractMetadataValue((Metadata*)valuePtr);
             case MetadataType.MetaMax:
                 return null;
             default:
                 throw new NotSupportedException($"Unsupported metadata type: {type}");
         }
     }
+
     unsafe Dictionary<string, object?> ExtractMetadataValue(Metadata* metaData)
     {
         var result = new Dictionary<string, object?>(StringComparer.Ordinal);
-        if(metaData is null)
+        if (metaData is null)
             return result;
         for (uint i = 0; i < metaData->MNumProperties; i++)
         {
@@ -151,6 +176,7 @@ public class SilkAssimpSceneImporter : ISceneImporter
 
         return result;
     }
+
     unsafe ImportedScene Convert(Assimp assimp, Scene* scene)
     {
         if (scene == null)
@@ -160,8 +186,6 @@ public class SilkAssimpSceneImporter : ISceneImporter
 
         // Scene metadata
         var metadata = ExtractMetadataValue(scene->MMetaData);
-
-     
 
         // Meshes
         for (uint i = 0; i < scene->MNumMeshes; i++)
@@ -190,12 +214,7 @@ public class SilkAssimpSceneImporter : ISceneImporter
         // Lights
         if (scene->MNumLights > 0 && scene->MLights != null)
         {
-            var nodesByName = importedScene
-                .CollectNodes()
-                .ToDictionary(
-                    n => n.Name,
-                    n => n,
-                    StringComparer.Ordinal);
+            var nodesByName = BuildNodeLookup(importedScene);
 
             for (uint i = 0; i < scene->MNumLights; i++)
             {
@@ -242,9 +261,14 @@ public class SilkAssimpSceneImporter : ISceneImporter
 
         var metadata = ExtractMetadataValue(node->MMetaData);
 
+        // Assimp: row-major, column vectors. Transpose -> System.Numerics: row vectors.
         Matrix4x4 local = Matrix4x4.Transpose(node->MTransformation);
-        Matrix4x4 global = parentGlobal * local;
-       
+
+        // Row-vector convention: v * local * parent * grandparent ...
+        // (the old `parentGlobal * local` was the column-vector order and only
+        //  happened to work while the parent was the identity.)
+        Matrix4x4 global = local * parentGlobal;
+
         var importedNode = new ImportedNode
         {
             Name = node->MName.ToString(),
@@ -326,15 +350,11 @@ public class SilkAssimpSceneImporter : ISceneImporter
         //
         // Assimp has a fixed number of texture coordinate channels.
         // MTextureCoords[c] == null means that channel doesn't exist.
-
-
         int numTexChannels = 0;
         while (numTexChannels < 8 && mesh->MTextureCoords[numTexChannels] != null)
             numTexChannels++;
 
         var texChannels = new Vector2[numTexChannels][];
-
-
 
         for (int c = 0; c < numTexChannels; c++)
         {
@@ -346,7 +366,6 @@ public class SilkAssimpSceneImporter : ISceneImporter
 
             texChannels[c] = channel;
         }
-
 
         // Vertex colors
         int numColorChannels = 0;
@@ -417,6 +436,7 @@ public class SilkAssimpSceneImporter : ISceneImporter
             Name = GetMaterialName(assimp, material),
         };
     }
+
     unsafe string GetMaterialName(Assimp assimp, Material* material)
     {
         AssimpString name;
@@ -437,267 +457,255 @@ public class SilkAssimpSceneImporter : ISceneImporter
         return string.Empty;
     }
 
+    // =====================================================================
+    //  Coordinate space fixup
+    // =====================================================================
+    //
+    //  Model of the source file (Blender FBX exporter, default settings):
+    //
+    //      file world  =  blenderWorld * FileBake        (row vectors)
+    //
+    //  i.e. mesh vertices are untouched Blender-local data (Blender axes, meters)
+    //  and the axis conversion + cm scale is baked into the top-level objects'
+    //  transforms, so it ends up in the world matrix of EVERY node below them.
+    //
+    //  Target:
+    //      - mesh data carries the axis conversion:  v' = v * C * scale
+    //      - nodes carry no conversion at all; an unrotated Blender object ends up
+    //        with an identity rotation, and a rotation about Blender's up axis
+    //        becomes a rotation about the target's up axis:
+    //
+    //            worldTarget = C^-1 * blenderWorld * C      (translation * scale)
+    //
+    //  Working on WORLD matrices makes this independent of where the exporter put
+    //  the baked conversion; locals are then re-derived from the new worlds, so
+    //  any hierarchy depth works.
+    //
+    //  Assumes the Assimp root node itself is the identity.
 
-
-    static float GetDeterminant3x3(Matrix4x4 m)
+    void ApplyCoordinateSpaceFixup(ImportedScene scene)
     {
-        // Assimp.Matrix4x4 fields are A1..D4 (row-major: A=row1, B=row2, C=row3)
-        return m.M11 * (m.M22 * m.M33 - m.M23 * m.M32)
-             - m.M12 * (m.M21 * m.M33 - m.M23 * m.M31)
-             + m.M13 * (m.M21 * m.M32 - m.M22 * m.M31);
-    }
-
-    static int[] FlipWinding(int[] indices)
-    {
-        var result = new int[indices.Length];
-        for (int i = 0; i < indices.Length; i += 3)
-        {
-            result[i] = indices[i];
-            result[i + 1] = indices[i + 2]; // swap 1 and 2
-            result[i + 2] = indices[i + 1];
-        }
-        return result;
-    }
-
-    void ApplyGbxCoordinateSpaceFixup(ImportedScene scene)
-    {
-        Matrix4x4 SC = new Matrix4x4(
-            100f, 0f, 0f, 0f,
-              0f, 0f, -100f, 0f,
-              0f, 100f, 0f, 0f,
-              0f, 0f, 0f, 1f);
-
-        Matrix4x4 C = new Matrix4x4(
-          1f, 0f, 0f, 0f,
-            0f, 0f, -1f, 0f,
-            0f, 1f, 0f, 0f,
-            0f, 0f, 0f, 1f);
-
-        Matrix4x4.Invert(SC, out Matrix4x4 scInv);
-        scInv *= Matrix4x4.CreateScale(_scale); // scale
-
+        // 1) Mesh data: Blender-local -> target-local (+ import scale)
         foreach (var mesh in scene.Meshes)
         {
             for (int i = 0; i < mesh.Positions.Length; i++)
-                mesh.Positions[i] = Vector3.Transform(mesh.Positions[i], C);
+                mesh.Positions[i] = Vector3.Transform(mesh.Positions[i], BlenderToTarget) * _scale;
 
             for (int i = 0; i < mesh.Normals.Length; i++)
-                mesh.Normals[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Normals[i], C));
+                mesh.Normals[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Normals[i], BlenderToTarget));
 
             if (mesh.Tangents is not null)
                 for (int i = 0; i < mesh.Tangents.Length; i++)
-                    mesh.Tangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Tangents[i], C));
+                    mesh.Tangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Tangents[i], BlenderToTarget));
 
             if (mesh.BiTangents is not null)
                 for (int i = 0; i < mesh.BiTangents.Length; i++)
-                    mesh.BiTangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.BiTangents[i], C));
+                    mesh.BiTangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.BiTangents[i], BlenderToTarget));
+
+            if (TargetMirrorsHandedness)
+                FlipWindingInPlace(mesh.Indices);
         }
 
-
-        // 2) Strip C back out of every node's local transform, then recompute
-        //    globals top-down using the SAME composition your ConvertNode uses.
-        void FixupNode(ImportedNode node, Matrix4x4 parentGlobal)
+        // 2) Nodes (top-down, so the parent's NEW global is known when we do a child)
+        if (scene.RootNode != null)
         {
-            Matrix4x4 l = node.LocalTransform;
-
-            Matrix4x4 linearOnly = l;
-            linearOnly.M41 = linearOnly.M42 = linearOnly.M43 = 0f;
-
-            Matrix4x4 rContainer = scInv * linearOnly;   // conjugates the baked conversion out
-            rContainer.M41 = l.M41 / 100f * _scale;                      // translation cm -> m
-            rContainer.M42 = l.M42 / 100f * _scale;
-            rContainer.M43 = l.M43 / 100f * _scale;
-            rContainer.M44 = 1f;
-
-            node.LocalTransform = rContainer;
-            node.GlobalTransform = parentGlobal * node.LocalTransform;
-           
-            foreach (var child in node.Children)
-                FixupNode(child, node.GlobalTransform);
+            foreach (var child in scene.RootNode.Children)
+                FixupNode(child, Matrix4x4.Identity);
         }
 
-        foreach(var child in scene.RootNode.Children)
-        {
-            FixupNode(child, Matrix4x4.Identity);
-        }
-
-
-
+        // 3) Lights follow their (already fixed) node
+        var nodesByName = BuildNodeLookup(scene);
         foreach (var light in scene.Lights)
         {
-            var node = scene.CollectNodes().FirstOrDefault(n => n.Name == light.NodeName);
-
-
-            Matrix4x4 baseTransform = node.GlobalTransform;
-
-            var lightRotFix = baseTransform;
-            lightRotFix = Matrix4x4.Transpose(lightRotFix);
-            light.GlobalTransform = lightRotFix with
-            {
-                M41 = baseTransform.M41,
-                M42 = baseTransform.M42,
-                M43 = baseTransform.M43
-            };
+            if (nodesByName.TryGetValue(light.NodeName, out var node))
+                light.GlobalTransform = LightGlobalFromNode(node.GlobalTransform);
         }
-    }
-
-    //static void ApplyGbxCoordinateSpaceFixup(ImportedScene scene)
-    //{
-    //    Matrix4x4.Invert(GbxCoordinateSpaceFixup, out var inverseFixup);
-    //    Matrix4x4 normalFixup = Matrix4x4.Transpose(inverseFixup);
-
-    //    foreach (var node in scene.CollectNodes())
-    //    {
-    //        node.LocalTransform = inverseFixup * node.LocalTransform * GbxCoordinateSpaceFixup;
-    //        node.GlobalTransform = inverseFixup * node.GlobalTransform * GbxCoordinateSpaceFixup;
-
-    //    }
-
-    //    foreach (var mesh in scene.Meshes)
-    //    {
-    //        //for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
-    //        //    (mesh.Indices[i + 1], mesh.Indices[i + 2]) = (mesh.Indices[i + 2], mesh.Indices[i + 1]);
-
-    //        for (int i = 0; i < mesh.Positions.Length; i++)
-    //            mesh.Positions[i] = Vector3.Transform(mesh.Positions[i], GbxCoordinateSpaceFixup);
-
-    //        for (int i = 0; i < mesh.Normals.Length; i++)
-    //            mesh.Normals[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Normals[i], normalFixup));
-
-    //        if (mesh.Tangents is not null)
-    //            for (int i = 0; i < mesh.Tangents.Length; i++)
-    //                mesh.Tangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.Tangents[i], GbxCoordinateSpaceFixup));
-
-    //        if (mesh.BiTangents is not null)
-    //            for (int i = 0; i < mesh.BiTangents.Length; i++)
-    //                mesh.BiTangents[i] = Vector3.Normalize(Vector3.TransformNormal(mesh.BiTangents[i], GbxCoordinateSpaceFixup));
-    //    }
-
-    //    foreach (var light in scene.Lights)
-    //    {
-    //        light.Direction = Vector3.Normalize(Vector3.TransformNormal(light.Direction, GbxCoordinateSpaceFixup));
-    //        light.GlobalTransform *= GbxCoordinateSpaceFixup;
-    //    }
-    //}
-
-    /// Rotation to apply to a quaternion authored with a different rest arrow, so it
-    /// can be fed to ToPitchYawRoll:   R_target = R_source * RestFix
-    /// sourceRest = where the arrow points at identity in the source app (Blender: +Z)
-    /// targetRest = where the arrow points at (0,0,0) in the target (Trackmania: -Y)
-    /// twistDeg   = extra spin about the arrow, because the rest direction alone doesn't fix roll.
-    static Quaternion RestFix(Vector3 sourceRest, Vector3 targetRest, float twistDeg = 0)
-    {
-        Vector3 a = Vector3.Normalize(targetRest), b = Vector3.Normalize(sourceRest);
-        float d = Vector3.Dot(a, b);
-        Quaternion arc;
-        if (d < -0.999999f)   // opposite: pick any perpendicular axis
-        {
-            Vector3 axis = Vector3.Cross(a, Math.Abs(a.X) < 0.9f ? Vector3.UnitX : Vector3.UnitY);
-            arc = Quaternion.CreateFromAxisAngle(Vector3.Normalize(axis), MathF.PI);
-        }
-        else
-        {
-            Vector3 c = Vector3.Cross(a, b);
-            arc = Quaternion.Normalize(new Quaternion(c.X, c.Y, c.Z, 1 + d));
-        }
-        var twist = Quaternion.CreateFromAxisAngle(a, twistDeg * MathF.PI / 180f);
-        return Quaternion.Normalize(arc * twist);   // twist first, then arc
-    }
-
-    /// Full "Fix": optional world-axis remap (conjugation) followed by the rest-pose fix.
-    /// worldRemap: rotation taking source world axes to target world axes (null = same axes).
-    static Quaternion Fix(Quaternion q, Vector3 sourceRest, Vector3 targetRest,
-                                 float twistDeg = 0, Quaternion? worldRemap = null)
-    {
-        if (worldRemap is Quaternion w)
-            q = w * q * Quaternion.Conjugate(w);
-        return Quaternion.Normalize(q * RestFix(sourceRest, targetRest, twistDeg));
     }
 
     /// <summary>
-    /// Fix all provided axis/position offsets that are pure vectors as they are assumed to be in the original coordinate space and need to be transformed into GBX space.
+    /// node.GlobalTransform is still in FILE space when this is called for a node
+    /// (nodes are processed parent-first and each node only overwrites itself).
     /// </summary>
-    /// <param name="itemConfig"></param>
+    void FixupNode(ImportedNode node, Matrix4x4 parentTargetGlobal)
+    {
+        Matrix4x4 targetGlobal = Snap(FileGlobalToTarget(node.GlobalTransform));
+
+        if (!Matrix4x4.Invert(parentTargetGlobal, out Matrix4x4 parentInverse))
+            throw new InvalidOperationException(
+                $"Cannot import node '{node.Name}': a parent has a non-invertible transform (zero scale?).");
+
+        // row vectors: global = local * parentGlobal  =>  local = global * parentGlobal^-1
+        node.LocalTransform = Snap(targetGlobal * parentInverse);
+        node.GlobalTransform = targetGlobal;
+
+        foreach (var child in node.Children)
+            FixupNode(child, targetGlobal);
+    }
+
+    /// <summary>File-space world matrix (cm, baked exporter axes) -> target-space world matrix (m).</summary>
+    Matrix4x4 FileGlobalToTarget(Matrix4x4 fileGlobal)
+    {
+        // un-bake the exporter: file world -> Blender world (meters, Blender axes)
+        Matrix4x4 blenderWorld = fileGlobal * FileBakeInverse;
+
+        // conjugate into target axes (row vectors: C^-1 * M * C)
+        Matrix4x4 target = TargetToBlender * blenderWorld * BlenderToTarget;
+
+        // import scale only affects positions; mesh vertices are scaled separately,
+        // node linear parts stay untouched so authored node scale is preserved.
+        target.M41 *= _scale;
+        target.M42 *= _scale;
+        target.M43 *= _scale;
+        target.M44 = 1f;
+
+        return target;
+    }
+
+    /// <summary>
+    /// Kept from the previous version: transposes the rotation part for lights and keeps the
+    /// translation. If lights look wrong at depth > 1, this is the place to look - it depends on
+    /// what your light emitter expects.
+    /// </summary>
+    static Matrix4x4 LightGlobalFromNode(Matrix4x4 nodeGlobal)
+    {
+        Matrix4x4 m = Matrix4x4.Transpose(nodeGlobal);
+        m.M14 = m.M24 = m.M34 = 0f;
+        m.M41 = nodeGlobal.M41;
+        m.M42 = nodeGlobal.M42;
+        m.M43 = nodeGlobal.M43;
+        m.M44 = 1f;
+        return m;
+    }
+
+    static Dictionary<string, ImportedNode> BuildNodeLookup(ImportedScene scene)
+    {
+        var lookup = new Dictionary<string, ImportedNode>(StringComparer.Ordinal);
+        foreach (var n in scene.CollectNodes())
+            lookup.TryAdd(n.Name, n);
+        return lookup;
+    }
+
+    /// <summary>
+    /// Matrix round-trips leave ~1e-7 noise (e.g. cos(90deg)). Snap anything within 1e-5 of an
+    /// integer so "identity rotation" really is identity.
+    /// </summary>
+    static Matrix4x4 Snap(Matrix4x4 m) => new(
+        SnapValue(m.M11), SnapValue(m.M12), SnapValue(m.M13), SnapValue(m.M14),
+        SnapValue(m.M21), SnapValue(m.M22), SnapValue(m.M23), SnapValue(m.M24),
+        SnapValue(m.M31), SnapValue(m.M32), SnapValue(m.M33), SnapValue(m.M34),
+        SnapValue(m.M41), SnapValue(m.M42), SnapValue(m.M43), SnapValue(m.M44));
+
+    static float SnapValue(float v)
+    {
+        float r = MathF.Round(v);
+        return MathF.Abs(v - r) < 1e-5f ? r : v;
+    }
+
+    static void FlipWindingInPlace(int[] indices)
+    {
+        for (int i = 0; i + 2 < indices.Length; i += 3)
+            (indices[i + 1], indices[i + 2]) = (indices[i + 2], indices[i + 1]);
+    }
+
+    // =====================================================================
+    //  Item config
+    // =====================================================================
+
+    /// <summary>
+    /// Fix all provided axis/position offsets that are pure vectors as they are assumed to be in
+    /// the original (Blender) coordinate space and need to be transformed into the target space.
+    /// </summary>
     public void FixConfigAxes(ItemConfig itemConfig)
     {
-        Matrix4x4 GbxCoordinateSpaceFixup = new Matrix4x4
-        (
-              1f, 0f, 0f, 0f,
-              0f, 0f, -1f, 0f,
-              0f, 1f, 0f, 0f,
-              0f, 0f, 0f, 1f
-        );
-        if(itemConfig.Waypoint != null)
+        static Vector3 Fix(Vector3 v) => Vector3.Transform(v, BlenderToTarget);
+
+        if (itemConfig.Waypoint != null)
         {
-            if(itemConfig.Waypoint.DefaultGravitySpawn.HasValue)
-                itemConfig.Waypoint.DefaultGravitySpawn = Vector3.Transform(itemConfig.Waypoint.DefaultGravitySpawn.Value, GbxCoordinateSpaceFixup);
+            if (itemConfig.Waypoint.DefaultGravitySpawn.HasValue)
+                itemConfig.Waypoint.DefaultGravitySpawn = Fix(itemConfig.Waypoint.DefaultGravitySpawn.Value);
         }
         if (itemConfig.Placement != null)
         {
             if (itemConfig.Placement.CubeCenter.HasValue)
-                itemConfig.Placement.CubeCenter = Vector3.Transform(itemConfig.Placement.CubeCenter.Value, GbxCoordinateSpaceFixup);
+                itemConfig.Placement.CubeCenter = Fix(itemConfig.Placement.CubeCenter.Value);
             if (itemConfig.Placement.PivotPositions != null)
             {
-                for (int i = 0; i < itemConfig.Placement.PivotPositions.Count; ++i) 
-                    itemConfig.Placement.PivotPositions[i] = Vector3.Transform(itemConfig.Placement.PivotPositions[i], GbxCoordinateSpaceFixup);
+                for (int i = 0; i < itemConfig.Placement.PivotPositions.Count; ++i)
+                    itemConfig.Placement.PivotPositions[i] = Fix(itemConfig.Placement.PivotPositions[i]);
             }
             if (itemConfig.Placement.PivotRotations != null)
             {
-                // Conjugate (q' = C^-1 * q * C). Swapped relative to the other direction
-                // (C * q * C^-1) because that produced the correct rotation axis but the
-                // opposite rotation direction/sign (e.g. -63 deg about Y must become
-                // +63 deg about Z, not -63 deg about Z).
-                Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(GbxCoordinateSpaceFixup);
+                // Same formula as before, only the matrix now comes from the shared config.
+                // (q' = C^-1 * q * C; the other order gave the right axis but the wrong sign
+                //  for your pipeline.)
+                Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(BlenderToTarget);
                 Quaternion matrixRotationInv = Quaternion.Conjugate(matrixRotation);
                 for (int i = 0; i < itemConfig.Placement.PivotRotations.Count; ++i)
-                    itemConfig.Placement.PivotRotations[i] = Quaternion.Normalize(Quaternion.Multiply(Quaternion.Multiply(matrixRotationInv, itemConfig.Placement.PivotRotations[i]), matrixRotation));
+                    itemConfig.Placement.PivotRotations[i] = Quaternion.Normalize(
+                        Quaternion.Multiply(
+                            Quaternion.Multiply(matrixRotationInv, itemConfig.Placement.PivotRotations[i]),
+                            matrixRotation));
             }
             if (itemConfig.Placement.MagnetPositions != null)
             {
                 for (int i = 0; i < itemConfig.Placement.MagnetPositions.Count; ++i)
-                    itemConfig.Placement.MagnetPositions[i] = Vector3.Transform(itemConfig.Placement.MagnetPositions[i], GbxCoordinateSpaceFixup);
+                    itemConfig.Placement.MagnetPositions[i] = Fix(itemConfig.Placement.MagnetPositions[i]);
             }
             if (itemConfig.Placement.MagnetRotations != null)
             {
+                // NOTE: these Euler angles are hardcoded for the current Y->-Z / Z->Y mapping and
+                // do NOT follow BlenderToTarget. If you change the axes above, this line must be
+                // revisited.
                 for (int i = 0; i < itemConfig.Placement.MagnetRotations.Count; ++i)
-                    itemConfig.Placement.MagnetRotations[i] = new Vec3(itemConfig.Placement.MagnetRotations[i].X - 90, itemConfig.Placement.MagnetRotations[i].Z, -itemConfig.Placement.MagnetRotations[i].Y);
+                    itemConfig.Placement.MagnetRotations[i] = new Vec3(
+                        itemConfig.Placement.MagnetRotations[i].X - 90,
+                        itemConfig.Placement.MagnetRotations[i].Z,
+                        -itemConfig.Placement.MagnetRotations[i].Y);
             }
 
             if (itemConfig.Placement.PlacementClass != null)
             {
-                if(itemConfig.Placement.PlacementClass.WorldDir.HasValue)
-                    itemConfig.Placement.PlacementClass.WorldDir = Vector3.Transform(itemConfig.Placement.PlacementClass.WorldDir.Value, GbxCoordinateSpaceFixup);
+                if (itemConfig.Placement.PlacementClass.WorldDir.HasValue)
+                    itemConfig.Placement.PlacementClass.WorldDir = Fix(itemConfig.Placement.PlacementClass.WorldDir.Value);
             }
         }
-        foreach(var meshConfig in itemConfig.Meshes)
+        foreach (var meshConfig in itemConfig.Meshes)
         {
-            if(meshConfig.GameplayMainDir.HasValue)
-                meshConfig.GameplayMainDir = Vector3.Transform(meshConfig.GameplayMainDir.Value, GbxCoordinateSpaceFixup);
+            if (meshConfig.GameplayMainDir.HasValue)
+                meshConfig.GameplayMainDir = Fix(meshConfig.GameplayMainDir.Value);
         }
         foreach (var movingGroup in itemConfig.MovingGroups)
         {
-            movingGroup.KinematicMovement.TransAxis = movingGroup.KinematicMovement.TransAxis switch
-            {
-                NPlugDyna_SKinematicConstraint.EAxis.X => NPlugDyna_SKinematicConstraint.EAxis.X,
-                NPlugDyna_SKinematicConstraint.EAxis.Y => NPlugDyna_SKinematicConstraint.EAxis.Z,
-                NPlugDyna_SKinematicConstraint.EAxis.Z => NPlugDyna_SKinematicConstraint.EAxis.Y,
-            };
-            movingGroup.KinematicMovement.RotAxis = movingGroup.KinematicMovement.RotAxis switch
-            {
-                NPlugDyna_SKinematicConstraint.EAxis.X => NPlugDyna_SKinematicConstraint.EAxis.X,
-                NPlugDyna_SKinematicConstraint.EAxis.Y => NPlugDyna_SKinematicConstraint.EAxis.Z,
-                NPlugDyna_SKinematicConstraint.EAxis.Z => NPlugDyna_SKinematicConstraint.EAxis.Y,
-            };
+            var km = movingGroup.KinematicMovement;
 
-            if(movingGroup.KinematicMovement.TransAxis == NPlugDyna_SKinematicConstraint.EAxis.Z)
+            var (newTransAxis, transSign) = MapAxis(km.TransAxis);
+            km.TransAxis = newTransAxis;
+            if (transSign < 0f)
             {
-                movingGroup.KinematicMovement.TransMin = -movingGroup.KinematicMovement.TransMin;
-                movingGroup.KinematicMovement.TransMax = -movingGroup.KinematicMovement.TransMax;
+                km.TransMin = -km.TransMin;
+                km.TransMax = -km.TransMax;
             }
-            //TODO: also rotate min/max
+
+            // Only the axis is remapped here (as before). If the source axis maps with a negative
+            // sign, any rotation angle/limits on it flip sign as well.
+            var (newRotAxis, _) = MapAxis(km.RotAxis);
+            km.RotAxis = newRotAxis;
         }
     }
+
+    /// <summary>Maps a source (Blender) axis onto the target axis it lands on, plus the sign.</summary>
+    static (NPlugDyna_SKinematicConstraint.EAxis axis, float sign) MapAxis(NPlugDyna_SKinematicConstraint.EAxis source)
+    {
+        Vector3 image = source switch
+        {
+            NPlugDyna_SKinematicConstraint.EAxis.X => BlenderXInTarget,
+            NPlugDyna_SKinematicConstraint.EAxis.Y => BlenderYInTarget,
+            NPlugDyna_SKinematicConstraint.EAxis.Z => BlenderZInTarget,
+            _ => throw new NotSupportedException($"Unsupported axis: {source}")
+        };
+
+        if (MathF.Abs(image.X) > 0.5f) return (NPlugDyna_SKinematicConstraint.EAxis.X, MathF.Sign(image.X));
+        if (MathF.Abs(image.Y) > 0.5f) return (NPlugDyna_SKinematicConstraint.EAxis.Y, MathF.Sign(image.Y));
+        return (NPlugDyna_SKinematicConstraint.EAxis.Z, MathF.Sign(image.Z));
+    }
 }
-
-
-

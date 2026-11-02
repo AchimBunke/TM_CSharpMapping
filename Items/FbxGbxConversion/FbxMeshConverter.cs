@@ -25,13 +25,13 @@ internal class SocketDef
 
 internal class FbxMeshConverter
 {
-    public static ToolResult<List<NodeDef>> ExtractMeshNodes(ImportedScene scene, FbxGbxConversionInput config)
+    public static ToolResult<List<NodeDef>> ExtractMeshNodes(ImportedScene scene, ConfigIndex configIndex)
     {
         List<NodeDef> nodeDefs = [];
         var nodes = scene.CollectNodes();
         foreach (var node in nodes)
         {
-            var meshConfigResult = FindMeshConfigForMesh(node.Name, config);
+            var meshConfigResult = FindMeshConfigForMesh(node.Name, configIndex);
 
             if (meshConfigResult.IsFailure)
                 continue;
@@ -46,7 +46,7 @@ internal class FbxMeshConverter
         return ToolResult.Success(nodeDefs, nameof(FbxGbxConverter));
     }
 
-    public static ToolResult<List<SocketDef>> ExtractSockets(ImportedScene scene, FbxGbxConversionInput config)
+    public static ToolResult<List<SocketDef>> ExtractSockets(ImportedScene scene, ConfigIndex configIndex)
     {
         List<SocketDef> socketDefs = new List<SocketDef>();
 
@@ -54,14 +54,14 @@ internal class FbxMeshConverter
 
         foreach (var node in nodes)
         {
-            var meshConfigResult = FindMeshConfigForMesh(node.Name, config);
+            var meshConfigResult = FindMeshConfigForMesh(node.Name, configIndex);
             if (meshConfigResult.IsFailure)
                 continue;
 
             var meshConfig = meshConfigResult.Value;
             if (!meshConfig.MeshFlags.HasFlag(MeshFlags.Socket))
                 continue;
-            var spawnModel = ConvertSocket(node, node.GlobalTransform, meshConfig, config);
+            var spawnModel = ConvertSocket(node, node.GlobalTransform, configIndex);
             socketDefs.Add(new SocketDef() { GlobalTransform = node.GlobalTransform, WaypointSpawnModel = spawnModel });
         }
         return ToolResult.Success(socketDefs, nameof(FbxGbxConverter));
@@ -72,13 +72,10 @@ internal class FbxMeshConverter
     /// and computes a per-group anchor transform (position + rotation) that will become the group's
     /// EntityRef.Position/Rotation. Node geometry is later expressed relative to this anchor instead of world space.
     /// </summary>
-    public static ToolResult<List<NodeDefGroup>> GroupNodes(List<NodeDef> nodes, IEnumerable<ImportedNode> allSceneNodes, List<SocketDef> sockets, FbxGbxConversionInput config)
+    public static ToolResult<List<NodeDefGroup>> GroupNodes(List<NodeDef> nodes, IEnumerable<ImportedNode> allSceneNodes, List<SocketDef> sockets, ConfigIndex configIndex)
     {
-        var lods = config.ItemConfig.LodParameters?.MaxLodDistances ?? [];
+        var lods = configIndex.ItemConfig.LodParameters?.MaxLodDistances ?? [];
 
-#if (false)
-        lods = [100, 200, 300];
-#endif
         int maxReferencedLod = nodes
             .Where(n => n.NodeConfig.Lods is { Count: > 0 })
             .SelectMany(n => n.NodeConfig.Lods)
@@ -89,7 +86,7 @@ internal class FbxMeshConverter
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingLodDistanceConfig,
                 $"Mesh config references LOD index {maxReferencedLod}, but ItemConfig.LodParameters.MaxLodDistances only defines {lods.Count} distance(s).");
 
-        var grouper = new NodeGrouper(lods, config.ItemConfig);
+        var grouper = new NodeGrouper(lods, configIndex);
         var groups = grouper.Group(nodes);
 
         for (int i = 0; i < groups.Count; ++i)
@@ -310,7 +307,7 @@ internal class FbxMeshConverter
         return normalizedMesh;
     }
 
-    static CPlugSpawnModel ConvertSocket(ImportedNode node, Matrix4x4 globalTransform, MeshConfig meshConfig, FbxGbxConversionInput config)
+    static CPlugSpawnModel ConvertSocket(ImportedNode node, Matrix4x4 globalTransform, ConfigIndex configIndex)
     {
         var spawnModel = GbxItemUtils.CreateSpawnModel();
 
@@ -321,15 +318,15 @@ internal class FbxMeshConverter
 
         spawnModel.Loc = Iso4Utils.IsoFromTransform(translation, nodeRotation);
 
-        if (config.ItemConfig.Waypoint is null)
+        if (configIndex.ItemConfig.Waypoint is null)
             return spawnModel;
 
-        if (config.ItemConfig.Waypoint.TorqueX.HasValue)
-            spawnModel.TorqueX = config.ItemConfig.Waypoint.TorqueX.Value;
-        if (config.ItemConfig.Waypoint.DefaultGravitySpawn.HasValue)
-            spawnModel.DefaultGravitySpawn = config.ItemConfig.Waypoint.DefaultGravitySpawn.Value;
-        if (config.ItemConfig.Waypoint.TorqueDuration.HasValue)
-            spawnModel.TorqueDuration = TimeInt32.FromMilliseconds(config.ItemConfig.Waypoint.TorqueDuration.Value);
+        if (configIndex.ItemConfig.Waypoint.TorqueX.HasValue)
+            spawnModel.TorqueX = configIndex.ItemConfig.Waypoint.TorqueX.Value;
+        if (configIndex.ItemConfig.Waypoint.DefaultGravitySpawn.HasValue)
+            spawnModel.DefaultGravitySpawn = configIndex.ItemConfig.Waypoint.DefaultGravitySpawn.Value;
+        if (configIndex.ItemConfig.Waypoint.TorqueDuration.HasValue)
+            spawnModel.TorqueDuration = TimeInt32.FromMilliseconds(configIndex.ItemConfig.Waypoint.TorqueDuration.Value);
         return spawnModel;
     }
 
@@ -341,20 +338,17 @@ internal class FbxMeshConverter
                 .Select(v => normalize ? new Vec3(v.X, v.Y, v.Z).GetNormalized() : new Vec3(v.X, v.Y, v.Z));
     }
 
-    internal static ToolResult<MeshConfig> FindMeshConfigForMesh(string meshName, FbxGbxConversionInput config)
+    internal static ToolResult<MeshConfig> FindMeshConfigForMesh(string meshName, ConfigIndex configIndex)
     {
-        var meshConfig = config.ItemConfig.Meshes.FirstOrDefault(m => m!.Name == meshName, null);
-        bool configFromMeshName = config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames);
-        if (meshConfig is null && !configFromMeshName)
+        if(!configIndex.MeshConfigsByName.TryGetValue(meshName, out var meshConfig) && !configIndex.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames))
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig, meshName);
-
-        if (config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames))
-            meshConfig = MeshConfigFromMeshName(meshConfig, meshName, config);
+        if (configIndex.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.MeshConfigFromObjectNames))
+            meshConfig = MeshConfigFromMeshName(meshConfig, meshName, configIndex);
 
         return ToolResult.Success(meshConfig!, nameof(FbxGbxConverter));
     }
 
-    static MeshConfig MeshConfigFromMeshName(MeshConfig? meshConfig, string meshName, FbxGbxConversionInput config)
+    static MeshConfig MeshConfigFromMeshName(MeshConfig? meshConfig, string meshName, ConfigIndex configIndex)
     {
         const string lod0 = "_Lod0";
         const string lod1 = "_Lod1";
@@ -382,7 +376,7 @@ internal class FbxMeshConverter
             meshConfig.MeshFlags |= MeshFlags.TriggerWaypoint;
             meshConfig.MeshFlags |= MeshFlags.NonCollidable;
             meshConfig.MeshFlags |= MeshFlags.Invisible;
-            meshConfig.WaypointType = config.ItemConfig.Waypoint?.Type;
+            meshConfig.WaypointType = configIndex.ItemConfig.Waypoint?.Type;
         }
         if (meshName.Contains(single))
             meshConfig.MeshFlags |= MeshFlags.SingleMesh;

@@ -24,15 +24,15 @@ internal class FbxMaterialConverter
         _materialTemplate = solid2ModelTemplate.CustomMaterials![0].MaterialUserInst!;
     }
 
-    public ToolResult<List<MaterialDef>> ExtractMaterials(ImportedScene scene, FbxGbxConversionInput config)
+    public ToolResult<List<MaterialDef>> ExtractMaterials(ImportedScene scene, ConfigIndex configIndex)
     {
         List<MaterialDef> customMaterial = [];
         foreach (var mat in scene.Materials)
         {
-            var customMatResult = ConvertMaterial(mat, config);
+            var customMatResult = ConvertMaterial(mat, configIndex);
             if (customMatResult.IsFailure)
             {
-                if(!config.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.IgnoreMeshesWithInvalidMaterials) && mat.Name != "DefaultMaterial")
+                if(!configIndex.ItemConfig.ConversionOptions.HasFlag(ItemConversionOptions.IgnoreMeshesWithInvalidMaterials) && mat.Name != "DefaultMaterial")
                 {
                     return ToolResult.Fail(customMatResult);
                 }
@@ -42,12 +42,12 @@ internal class FbxMaterialConverter
         return ToolResult.Success(customMaterial, nameof(FbxGbxConverter));
     }
 
-    ToolResult<MaterialDef> ConvertMaterial(ImportedMaterial mat, FbxGbxConversionInput config)
+    ToolResult<MaterialDef> ConvertMaterial(ImportedMaterial mat, ConfigIndex configIndex)
     {
         var customMat = CreateEmptyMaterialInstance();
         string matName = mat.Name;
 
-        if (!TryFindMaterialConfig(matName, config, out var materialConfig))
+        if (!TryFindMaterialConfig(matName, configIndex, out var materialConfig))
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMaterialConfig, matName);
         bool usingGameMaterial = _materialLibrary.Materials.TryGetValue(materialConfig.Link, out var dMaterial);
 
@@ -121,10 +121,9 @@ internal class FbxMaterialConverter
         return mat;
     }
 
-    bool TryFindMaterialConfig(string matName, FbxGbxConversionInput config, out MaterialConfig materialConfig)
+    bool TryFindMaterialConfig(string matName, ConfigIndex configIndex, out MaterialConfig materialConfig)
     {
-        materialConfig = config.ItemConfig.Materials.FirstOrDefault(i => i!.Name == matName, null)!;
-        return materialConfig is not null;
+        return configIndex.MaterialConfigsByName.TryGetValue(matName, out materialConfig!);
     }
 
     //------------------------------

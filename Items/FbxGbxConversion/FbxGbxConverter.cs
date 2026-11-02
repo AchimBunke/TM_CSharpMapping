@@ -7,6 +7,35 @@ using TM_GenericMapping.Messaging;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
+internal class ConfigIndex
+{
+    public Dictionary<string, MeshConfig> MeshConfigsByName { get; set; } = new Dictionary<string, MeshConfig>();
+    public Dictionary<string, MaterialConfig> MaterialConfigsByName { get; set; } = new Dictionary<string, MaterialConfig>();
+    public Dictionary<string, LightConfig> LightConfigsByName { get; set; } = new Dictionary<string, LightConfig>();
+    public Dictionary<string, InstanceCollectionConfig> InstanceCollectionConfigsByName { get; set; } = new Dictionary<string, InstanceCollectionConfig>();
+    public Dictionary<string, InstanceConfig> InstanceConfigsByName { get; set; } = new Dictionary<string, InstanceConfig>();
+    public Dictionary<string, MovingGroupConfig> MovingGroupConfigsByName { get; set; } = new Dictionary<string, MovingGroupConfig>();
+
+    public ItemConfig ItemConfig { get; set; } = null!;
+
+    private ConfigIndex()
+    {
+    }
+
+    public static ConfigIndex FromItemConfig(ItemConfig config)
+    {
+        var index = new ConfigIndex();
+        index.MeshConfigsByName = config.Meshes.ToDictionary(m => m.Name, m => m);
+        index.MaterialConfigsByName = config.Materials.ToDictionary(m => m.Name, m => m);
+        index.LightConfigsByName = config.Lights.ToDictionary(m => m.Name, m => m);
+        index.InstanceCollectionConfigsByName = config.InstanceCollections.ToDictionary(ic => ic.Name, ic => ic);
+        index.InstanceConfigsByName = config.Instances.ToDictionary(i => i.Name, i => i);
+        index.MovingGroupConfigsByName = config.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => mg);
+        index.ItemConfig = config;
+        return index;
+    }
+}
+
 /// <summary>
 /// Converts FBX scenes into <see cref="NormalizedItem"/>/<see cref="CGameItemModel"/> using the new
 /// position/rotation hierarchy item model. Unlike the legacy <see cref="FbxGbxConverter"/>, mesh vertices
@@ -16,6 +45,7 @@ namespace TM_GenericMapping.Items.FbxGbxConversion;
 /// </summary>
 public class FbxGbxConverter
 {
+
     public ToolResult<CGameItemModel> ConvertToGbx(FbxGbxConversionInput conversionInput, CompileOptions? compileOptions = null)
     {
         var normalizedItemResult = ConvertToNormalizedItem(conversionInput);
@@ -49,14 +79,15 @@ public class FbxGbxConverter
 
     public ToolResult<NormalizedItem> ConvertToNormalizedItem(FbxGbxConversionInput conversionInput)
     {
-        var sceneResult = ImportScene(conversionInput);
+        ConfigIndex configIndex = ConfigIndex.FromItemConfig(conversionInput.ItemConfig);
+        var sceneResult = ImportScene(conversionInput, configIndex);
         if (sceneResult.IsFailure)
             return ToolResult.Fail(sceneResult);
 
-        return ConvertToNormalizedItem(sceneResult.Value, conversionInput);
+        return ConvertToNormalizedItem(sceneResult.Value, conversionInput, configIndex);
     }
 
-    ToolResult<ImportedScene> ImportScene(FbxGbxConversionInput conversionInput)
+    ToolResult<ImportedScene> ImportScene(FbxGbxConversionInput conversionInput, ConfigIndex configIndex)
     {
         try 
         { 
@@ -64,6 +95,9 @@ public class FbxGbxConverter
             var scene = importer.Import(conversionInput.Fbx);
             importer.FixConfigAxes(conversionInput.ItemConfig);
             FixConfigScale(conversionInput.ItemConfig);
+            var res = ResolveInstances(scene, configIndex);
+            if (res.IsFailure)
+                return ToolResult.Fail(res);
             return ToolResult.Success(scene, nameof(FbxGbxConverter));
         }
         catch (Exception e)
@@ -73,11 +107,11 @@ public class FbxGbxConverter
     }
     protected virtual ISceneImporter CreateSceneImporter(float scale) => new SilkAssimpSceneImporter(scale);
 
-    ToolResult<NormalizedItem> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config)
+    ToolResult<NormalizedItem> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config, ConfigIndex configIndex)
     {
         var item = new NormalizedItem();
 
-        var res = ExtractAndGroupFbxData(scene, config, 
+        var res = ExtractAndGroupFbxData(scene, config, configIndex,
             out var groups, 
             out var lights, 
             out var sockets, 
@@ -186,6 +220,7 @@ public class FbxGbxConverter
     ToolResult<None> ExtractAndGroupFbxData(
         ImportedScene scene,
         FbxGbxConversionInput config,
+        ConfigIndex configIndex,
         out List<NodeDefGroup> groups,
         out List<LightDef> lights,
         out List<SocketDef> sockets,
@@ -199,32 +234,32 @@ public class FbxGbxConverter
         materials = [];
 
         var materialConverter = new FbxMaterialConverter(config.MaterialLibrary);
-        var materialResults = materialConverter.ExtractMaterials(scene, config);
+        var materialResults = materialConverter.ExtractMaterials(scene, configIndex);
         if (materialResults.IsFailure)
             return ToolResult.Fail(materialResults);
         materials = materialResults.Value;
 
         var allSceneNodes = scene.CollectNodes();
 
-        var meshNodeResults = FbxMeshConverter.ExtractMeshNodes(scene, config);
+        var meshNodeResults = FbxMeshConverter.ExtractMeshNodes(scene, configIndex);
         if (meshNodeResults.IsFailure)
             return ToolResult.Fail(meshNodeResults);
 
-        var socketResults = FbxMeshConverter.ExtractSockets(scene, config);
+        var socketResults = FbxMeshConverter.ExtractSockets(scene, configIndex);
         if (socketResults.IsFailure)
             return ToolResult.Fail(socketResults);
         if (socketResults.Value.Count > 1)
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MultipleSocketsNotSupported);
         sockets = socketResults.Value;
 
-        var lightResults = FbxLightConverter.ExtractLights(scene, config);
+        var lightResults = FbxLightConverter.ExtractLights(scene, configIndex);
         if (lightResults.IsFailure)
             return ToolResult.Fail(lightResults);
         lights = lightResults.Value;
 
         nodes = FilterAndApplySpecialMeshItems(scene, meshNodeResults.Value, materialResults.Value);
 
-        var groupResults = FbxMeshConverter.GroupNodes(nodes, allSceneNodes, socketResults.Value, config);
+        var groupResults = FbxMeshConverter.GroupNodes(nodes, allSceneNodes, socketResults.Value, configIndex);
         if (groupResults.IsFailure)
             return ToolResult.Fail(groupResults);
         groups = groupResults.Value;
@@ -367,14 +402,83 @@ public class FbxGbxConverter
         }
 
     }
+
+    ToolResult<None> ResolveInstances(ImportedScene scene, ConfigIndex configIndex)
+    {
+        ItemConfig itemConfig = configIndex.ItemConfig;
+
+        void FlattenNestedInstanceCollections(InstanceConfig instanceConfig, List<string> meshes, List<string> lights)
+        {
+            if (!configIndex.InstanceCollectionConfigsByName.TryGetValue(instanceConfig.Collection, out var instanceCollection))
+                return;
+            
+            meshes.AddRange(instanceCollection.Meshes);
+            lights.AddRange(instanceCollection.Lights);
+            foreach (var nestedInstanceName in instanceCollection.Instances)
+            {
+                var nestedInstance = configIndex.InstanceConfigsByName[nestedInstanceName];
+                FlattenNestedInstanceCollections(nestedInstance, meshes, lights);
+            }
+        }
+
+        ToolResult<None> Visit(ImportedNode node)
+        {
+            if (configIndex.InstanceConfigsByName.TryGetValue(node.Name, out var instanceDef))
+            {
+                if (!configIndex.InstanceCollectionConfigsByName.TryGetValue(instanceDef.Collection, out var instanceCollection))
+                    return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingInstanceCollection);
+
+                List<string> flatMeshes = new List<string>();
+                List<string> flatLights = new List<string>();
+                FlattenNestedInstanceCollections(instanceDef, flatMeshes, flatLights);
+
+                foreach (var meshName in flatMeshes)
+                {
+                    var meshNode = node.Children.FirstOrDefault(n => n.Name.StartsWith($"{instanceDef.Name}|{meshName}|"));
+                    if (meshNode is null)
+                        continue; // should not happen
+                    if (!configIndex.MeshConfigsByName.TryGetValue(meshName, out var templateConfig))
+                        return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig);
+                    var newConfig = templateConfig.Clone();
+                    newConfig.Name = meshNode.Name;
+                    // TODO: overrides
+                    configIndex.MeshConfigsByName.Add(newConfig.Name, newConfig);
+                }
+                foreach (var lightName in instanceCollection.Lights)
+                {
+                    var lightNode = node.Children.FirstOrDefault(n => n.Name.StartsWith($"{instanceDef.Name}|{lightName}|"));
+                    if (lightNode is null)
+                        continue; // should not happen
+                    if (!configIndex.LightConfigsByName.TryGetValue(lightName, out var templateConfig))
+                        return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingLightConfig);
+                    var newConfig = templateConfig.Clone();
+                    newConfig.Name = lightNode.Name;
+                    // TODO: overrides
+                    configIndex.LightConfigsByName.Add(newConfig.Name, newConfig);
+                }
+
+            }
+            foreach (var child in node.Children)
+            {
+                var res = Visit(child);
+                if (res.IsFailure)
+                    return res;
+            }
+
+            return ToolResult.Success(nameof(FbxGbxConverter));
+        }
+        return Visit(scene.RootNode);
+    }
+
     public ToolResult<FbxGbxPlanReport> PlanConversion(FbxGbxConversionInput conversionInput, CompileOptions? compileOptions = null)
     {
-        var sceneResult = ImportScene(conversionInput);
+        var configIndex = ConfigIndex.FromItemConfig(conversionInput.ItemConfig);
+        var sceneResult = ImportScene(conversionInput, configIndex);
         if (sceneResult.IsFailure)
             return ToolResult.Fail(sceneResult);
         var scene = sceneResult.Value;
 
-        var res = ExtractAndGroupFbxData(scene, conversionInput,
+        var res = ExtractAndGroupFbxData(scene, conversionInput, configIndex,
               out var groups,
               out var lights,
               out var sockets,
@@ -396,4 +500,6 @@ public class FbxGbxConverter
 
         return ToolResult.Success(report, nameof(FbxGbxConverter));
     }
+
+    
 }
