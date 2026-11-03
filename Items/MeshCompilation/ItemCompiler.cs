@@ -4,6 +4,7 @@ using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
+using GBX.NET.Inputs;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
@@ -16,6 +17,7 @@ using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
+using static GBX.NET.Engines.Plug.CPlugSurface.Mesh;
 using static GBX.NET.Engines.Plug.CPlugVertexStream;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
@@ -425,7 +427,7 @@ public class ItemCompiler
             .ToList();
 
         dyna.Mesh = null;
-        if (meshInstances.Any(i => i.Instance.Visible))
+        if (true)//meshInstances.Any(i => i.Instance.Visible))
         {
             var solidResult = GetOrCreateSolid2Model(item, meshInstances, cluster, buildSettings);
             if (solidResult.IsFailure)
@@ -867,7 +869,6 @@ public class ItemCompiler
 
         return surface;
     }
-
     ToolResult<NPlugTrigger_SWaypoint> GetOrCreateTriggerWaypoint(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
         var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);

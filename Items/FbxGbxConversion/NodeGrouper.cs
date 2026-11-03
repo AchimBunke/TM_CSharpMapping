@@ -77,9 +77,11 @@ internal class NodeGrouper
     /// <summary>Moving-group config loaded by the caller, keyed by MovingGroup id.</summary>
     private readonly IReadOnlyDictionary<string, MovingParameter> _movingConfig;
     private ItemConfig _itemConfig;
+    private readonly ConfigIndex _configIndex;
 
     public NodeGrouper(IReadOnlyList<float> globalLodDistances, ConfigIndex configIndex)
     {
+        _configIndex = configIndex;
         _globalLodDistances = globalLodDistances;
         _itemConfig = configIndex.ItemConfig;
         _movingConfig = _itemConfig.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => new MovingParameter
@@ -110,7 +112,8 @@ internal class NodeGrouper
         foreach (var entry in buckets.Values)
             result.AddRange(SplitByLod(entry.info, entry.nodes));
 
-        return result;
+        // Stable order: statics, dynamics, special triggers, waypoints (enum order of ModelType).
+        return result.OrderBy(g => (int)g.Type).ToList();
     }
 
     /// <summary>
@@ -129,17 +132,26 @@ internal class NodeGrouper
     /// </summary>
     private void SplitDuplicateShapesForInstancing(Dictionary<string, (BucketInfo info, List<NodeDef> nodes)> buckets, ref int isolatedCounter)
     {
+        // Instance-collection nodes (with an original node) are counted across ALL buckets, so an instanced
+        // mesh is isolated even when its occurrences ended up in different buckets than other nodes.
+        var originalCounts = buckets.Values
+            .SelectMany(b => b.nodes)
+            .Select(GetOriginalNodeName)
+            .Where(o => o != null)
+            .GroupBy(o => o!)
+            .ToDictionary(g => g.Key, g => g.Count());
+
         foreach (var bucketKey in buckets.Keys.ToList())
         {
             var (info, nodes) = buckets[bucketKey];
-            if (nodes.Count <= 1)
-                continue;
 
             var shapeCounts = nodes
                 .GroupBy(GetShapeSignature)
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            var duplicateNodes = nodes.Where(n => shapeCounts[GetShapeSignature(n)] > 1).ToList();
+            var duplicateNodes = nodes.Where(n =>
+                (nodes.Count > 1 && shapeCounts[GetShapeSignature(n)] > 1) ||
+                (GetOriginalNodeName(n) is { } orig && originalCounts[orig] > 1)).ToList();
             if (duplicateNodes.Count == 0)
                 continue;
 
@@ -149,18 +161,22 @@ internal class NodeGrouper
             else
                 buckets.Remove(bucketKey);
 
-            foreach (var node in duplicateNodes)
+            // Nodes from the same instance occurrence stay together in one group; others are isolated per node.
+            foreach (var instanceNodes in duplicateNodes.GroupBy(n =>
+                GetOriginalNodeName(n) != null && !string.IsNullOrEmpty(n.NodeConfig.Group) ? n.NodeConfig.Group : n.Node.Name))
             {
-                var instanceKey = $"{bucketKey}_instance_{node.Node.Name}";
-                buckets[instanceKey] = (new BucketInfo { Key = instanceKey, Type = info.Type, MovingGroup = info.MovingGroup, TriggerEffectId = info.TriggerEffectId, GameplayMainDir = info.GameplayMainDir, WaypointType = info.WaypointType}, new List<NodeDef> { node });
+                var instanceKey = $"{bucketKey}_instance_{instanceNodes.Key}";
+                buckets[instanceKey] = (new BucketInfo { Key = instanceKey, Type = info.Type, MovingGroup = info.MovingGroup, TriggerEffectId = info.TriggerEffectId, GameplayMainDir = info.GameplayMainDir, WaypointType = info.WaypointType}, instanceNodes.ToList());
             }
         }
     }
 
     /// <summary>Shape signature identifying nodes that reference the exact same underlying source mesh(es),
     /// making them eligible for instancing/mesh reuse regardless of their individual world transform.</summary>
-    private static string GetShapeSignature(NodeDef node) =>
-        string.Join(",", node.Node.MeshIndices.OrderBy(i => i));
+    private string? GetOriginalNodeName(NodeDef node) =>
+        _configIndex.OriginalNodes.TryGetValue(node.Node.Name, out var original) ? original : null;
+
+    private static string GetShapeSignature(NodeDef node) =>        string.Join(",", node.Node.MeshIndices.OrderBy(i => i));
 
     private BucketInfo Classify(NodeDef node, ref int isolatedCounter)
     {
@@ -168,17 +184,24 @@ internal class NodeGrouper
 
         var f = node.NodeConfig.MeshFlags;
         bool isSingle = f.HasFlag(MeshFlags.SingleMesh);
+
+        string group = string.IsNullOrEmpty(node.NodeConfig.Group) ? string.Empty : node.NodeConfig.Group;
+
         //isSingle = true;
 
         if (f.HasFlag(MeshFlags.TriggerWaypoint))
         {
-            string key = isSingle ? Isolated("single") : $"waypoint_{node.NodeConfig.WaypointType?.ToString() ?? string.Empty}";
+            string key = isSingle ? 
+                Isolated("single") : 
+                $"{group}_waypoint_{node.NodeConfig.WaypointType?.ToString() ?? string.Empty}";
             return new BucketInfo { Key = key, Type = ModelType.Trigger_Waypoint, WaypointType = node.NodeConfig.WaypointType };
         }
 
         if (f.HasFlag(MeshFlags.TriggerEffect))
         {
-            string key = isSingle ? Isolated("single") : $"trigger_{node.NodeConfig.TriggerEffect.ToString() ?? string.Empty}_{node.NodeConfig.GameplayMainDir}";
+            string key = isSingle ? 
+                Isolated("single") :
+                $"{group}_trigger_{node.NodeConfig.TriggerEffect.ToString() ?? string.Empty}_{node.NodeConfig.GameplayMainDir}";
             return new BucketInfo { Key = key, Type = ModelType.Trigger_Special, TriggerEffectId = node.NodeConfig.TriggerEffect, GameplayMainDir = node.NodeConfig.GameplayMainDir };
         }
 
@@ -198,7 +221,7 @@ internal class NodeGrouper
             else if (_itemConfig.ConversionOptions.HasFlag(ItemConversionOptions.SkipStaticItemGrouping))
                 key = Isolated("static");
             else
-                key = $"static_{node.NodeConfig.GameplayMainDir}";
+                key = $"{group}_static_{node.NodeConfig.GameplayMainDir}";
             return new BucketInfo { Key = key, Type = ModelType.Static, GameplayMainDir = node.NodeConfig.GameplayMainDir };
         }
     }
@@ -239,8 +262,10 @@ internal class NodeGrouper
         var nodesWithoutLod = nodes.Where(m => m.NodeConfig.Lods == null || m.NodeConfig.Lods.Count == 0).ToList();
 
         // only indices < K ever need a slot in LodDistances; index == K rides for free on whichever group ends up last
+        // lod i covers [distance[i-1], distance[i]), so every used lod L > 0 also needs threshold L-1 (as its lower boundary)
         var realLods = nodesWithLods
             .SelectMany(m => m.NodeConfig.Lods)
+            .SelectMany(v => v > 0 ? new[] { v - 1, v } : new[] { v })
             .Where(v => v < K)
             .Distinct()
             .OrderBy(x => x)

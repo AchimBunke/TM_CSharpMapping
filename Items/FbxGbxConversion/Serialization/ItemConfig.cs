@@ -147,6 +147,12 @@ public class InstanceConfig
     public string Name { get; set; } = string.Empty;
     [JsonPropertyName("Collection")]
     public string Collection { get; set; } = string.Empty;
+
+    [JsonPropertyName("MovingGroup")]
+    public string? MovingGroup { get; set; } = null;
+
+    [JsonPropertyName("Lods")]
+    public List<int> Lods { get; set; } = [];
 }
 public class InstanceCollectionConfig
 {

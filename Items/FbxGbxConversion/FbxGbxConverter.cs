@@ -16,6 +16,8 @@ internal class ConfigIndex
     public Dictionary<string, InstanceConfig> InstanceConfigsByName { get; set; } = new Dictionary<string, InstanceConfig>();
     public Dictionary<string, MovingGroupConfig> MovingGroupConfigsByName { get; set; } = new Dictionary<string, MovingGroupConfig>();
 
+    public Dictionary<string,string> OriginalNodes { get; set; } = new Dictionary<string, string>();
+
     public ItemConfig ItemConfig { get; set; } = null!;
 
     private ConfigIndex()
@@ -441,7 +443,15 @@ public class FbxGbxConverter
                         return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig);
                     var newConfig = templateConfig.Clone();
                     newConfig.Name = meshNode.Name;
+                    configIndex.OriginalNodes[newConfig.Name] = templateConfig.Name;
                     // TODO: overrides
+                    newConfig.Lods = instanceDef.Lods;
+                    newConfig.Group = instanceDef.Name;
+                    if(!string.IsNullOrEmpty(instanceDef.MovingGroup))
+                        newConfig.MovingGroup = instanceDef.MovingGroup;
+                    if(!string.IsNullOrEmpty(newConfig.MovingGroup))
+                        newConfig.MeshFlags |= MeshFlags.Moving;
+
                     configIndex.MeshConfigsByName.Add(newConfig.Name, newConfig);
                 }
                 foreach (var lightName in instanceCollection.Lights)
@@ -452,6 +462,7 @@ public class FbxGbxConverter
                     if (!configIndex.LightConfigsByName.TryGetValue(lightName, out var templateConfig))
                         return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingLightConfig);
                     var newConfig = templateConfig.Clone();
+                    configIndex.OriginalNodes[newConfig.Name] = templateConfig.Name;
                     newConfig.Name = lightNode.Name;
                     // TODO: overrides
                     configIndex.LightConfigsByName.Add(newConfig.Name, newConfig);
@@ -487,19 +498,35 @@ public class FbxGbxConverter
         if (res.IsFailure)
             return ToolResult.Fail(res);
 
-        nodes = nodes.OrderBy(n => n.Node.Name, StringComparer.Ordinal).ToList();
-        groups = groups.OrderBy(g => g.GroupKey, StringComparer.Ordinal).ToList();
+        //groups = groups.OrderBy(g => g.GroupKey, StringComparer.Ordinal).ToList();
 
         var report = new FbxGbxPlanReport(1, groups.Select(g => new FbxGbxPlanGroup(
                 g.GroupKey,
                 g.Type.ToString(),
-                g.OriginalGroupId,
+                PlannedLightmapSize(g),
                 g.LodDistances.ToArray(),
-                g.Nodes.Select(a => new FbxGbxPlanNode(a.NodeDef.Node.Name, a.LodIndices.ToArray())).ToArray()
+                g.Nodes.Select(a => new FbxGbxPlanNode(
+                    a.NodeDef.Node.Name,
+                    configIndex.OriginalNodes.TryGetValue(a.NodeDef.Node.Name, out var originalName) ? originalName : null,
+                    a.LodIndices.ToArray())).ToArray()
             )).ToArray());
 
         return ToolResult.Success(report, nameof(FbxGbxConverter));
     }
 
-    
+    float? PlannedLightmapSize(NodeDefGroup group)
+    {
+        float? lightmapSize = null;
+        foreach (var node in group.Nodes)
+        {
+            if(node.NodeDef.NodeConfig.LightmapSize.HasValue)
+            {
+                if (lightmapSize.HasValue)
+                    lightmapSize = Math.Max(lightmapSize.Value, node.NodeDef.NodeConfig.LightmapSize.Value);
+                else
+                    lightmapSize = node.NodeDef.NodeConfig.LightmapSize.Value;
+            }
+        }
+        return lightmapSize;
+    }
 }

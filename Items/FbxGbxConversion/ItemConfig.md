@@ -27,6 +27,8 @@ The root object of the configuration file.
 | `Meshes`                  | `MeshConfig[]`         | `[]`             | Configuration for individual nodes in the FBX.                          |
 | `MovingGroups`          | `MovingGroupConfig[]`  | `[]`             | Moving-group configurations. |
 | `Lights`                | `LightConfig[]`        | `[]`             | Light definitions to generate with the item.                            |
+| `Instances`             | `InstanceConfig[]`         | `[]`             | Configuration for used collection_instances, empties                          |
+| `InstanceCollections`   | `InstanceCollectionConfig[]`         | `[]`             | Configuration for collection_instances                         |
 | `LodParameters`         | `LodParameters?`       | `null`           | Optional LOD configuration. Required if meshes define LODs.                                             |
 
 ---
@@ -401,6 +403,30 @@ Defines general parameters of the kinematic model.
 | `Phase01Max`       | `float` | `-1`    | Maximum normalized animation phase. `-1` indicates that no maximum is configured.                          |
 | `TextureId`        | `int`   | `0`     | Texture ID associated with the kinematic model.                                                            |
 
+---
+
+## `InstanceConfig`
+Defines configuration for a collection instance used on an empty node.
+
+| Field              | Type    | Default | Description                                                                                                |
+| ------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `Name` | `string`  | - | Name of the empty node that defines the collection instance.                                                |
+| `Collection` | `string`  | - | Name of the collection instance configuration.                                                |
+
+---
+
+## `InstanceCollectionConfig`
+
+Defines configuration for a collection instance used on an empty node.
+
+| Field              | Type    | Default | Description                                                                                                |
+| ------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `Name`             | `string`| -       | Name of the master collection.                                                |
+| `Meshes`           | `string[]`  | -   | Names of the meshes in the master collection.                                                |
+| `Lights`           | `string[]`  | -   | Names of the lights in the master collection.                                                |
+| `Instances`           | `string[]`  | -   | Names of the empties in the master collection that define further collection instances.                                                |
+
+---
 
 ## Optional Configuration Sections
 

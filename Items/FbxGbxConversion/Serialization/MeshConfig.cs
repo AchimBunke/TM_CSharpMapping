@@ -61,13 +61,15 @@ public class MeshConfig
     [JsonPropertyName("LightmapSize")]
     public float? LightmapSize { get; set; } = null;
 
+    [JsonPropertyName("Group")]
+    public string? Group { get; set; } = string.Empty;
+
     /// <summary>
     /// Global LOD indices this mesh has actual geometry for, e.g. [1, 3, 5].
     /// Not necessarily contiguous. Empty = mesh has no LOD variance.
     /// </summary>
     [JsonPropertyName("Lods")]
     public List<int> Lods { get; set; } = [];
-
 
     public MeshConfig Clone() => new MeshConfig
     {

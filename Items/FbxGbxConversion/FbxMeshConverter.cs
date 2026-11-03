@@ -229,8 +229,8 @@ internal class FbxMeshConverter
                     Properties = ComputeMeshProperties(nodeAssignment.NodeDef.NodeConfig),
                     PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh),
                 };
-                if(nodeAssignment.NodeDef.NodeConfig.LightmapSize.HasValue)
-                    GbxItemUtils.SetLightmapSizeLengthMeters(meshRef.PreLightGenerator!, nodeAssignment.NodeDef.NodeConfig.LightmapSize.Value);
+                if(nodeAssignment.NodeDef.NodeConfig.LightmapSize.HasValue && meshRef.PreLightGenerator != null)
+                    GbxItemUtils.SetLightmapSizeLengthMeters(meshRef.PreLightGenerator, nodeAssignment.NodeDef.NodeConfig.LightmapSize.Value);
                 model.Meshes.Add(meshRef);
             }
         }
