@@ -1800,6 +1800,7 @@ public class ItemCompiler
 
             if (cluster.WaypointNoRespawn.HasValue && cluster.WaypointNoRespawn.Value)
                 return false; // no respawn not possible with simple item
+
         }
 
         if (staticClusterCount > 1 && !compileOptions.Optimization.HasFlag(ItemCompilerOptimization.AllowMerging))
@@ -1901,6 +1902,8 @@ public class ItemCompiler
         {
             if (cluster.Value.Type == ModelType.Trigger_Waypoint)
                 continue;
+            if (cluster.Value.GameplayMainDir.HasValue && cluster.Value.GameplayMainDir.Value != new Vector3(0, 0, 1))
+                return false;
             foreach(var instance in buildSettings.Instances.Where(i=>i.Value.ClusterKey == cluster.Key))
             {
                 if(!instance.Value.Visible || !instance.Value.Collidable)
