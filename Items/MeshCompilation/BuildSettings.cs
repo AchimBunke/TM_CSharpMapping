@@ -134,7 +134,7 @@ public sealed class BuildSettings
                     LightType? lightType;
                     if (lightRef.LightModel != null)
                     {
-                        lightType = lightRef.LightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>().U01 switch
+                        lightType = lightRef.LightModel.GetChunk<CPlugLightUserModel.Chunk090F9000>()!.U01 switch
                         {
                             0 => LightType.Point,
                             1 => LightType.Spot,

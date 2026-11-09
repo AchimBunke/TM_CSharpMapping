@@ -43,7 +43,7 @@ public static class ChunkSafeItemOperations
         => SetSurfaceGameplayId(surface, (ushort)gameplayId);
     public static void SetSurfaceGameplayId(CPlugSurface surface, ushort gameplayId)
     {
-        var chunk = surface.GetChunk<Chunk0900C003>();
+        var chunk = surface.GetChunk<Chunk0900C003>()!;
         chunk.U04 = [gameplayId];
     }
     public static ushort GetSurfaceGameplayId(CPlugSurface surface)

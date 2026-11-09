@@ -69,7 +69,7 @@ public class ItemEffectVariantCreator
 
                 mat.Link = newLink;
                 mat.IsUsingGameMaterial = true;
-                mat.MaterialName = ConvertMaterialName(mat.Link, gameplayId);
+                mat.Name = ConvertMaterialName(mat.Link, gameplayId);
                 changedTexture = true;
             }
 

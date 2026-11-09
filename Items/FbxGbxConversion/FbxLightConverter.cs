@@ -83,14 +83,14 @@ internal class FbxLightConverter
             ItemLightConverter itemLightConverter = new();
             var fakeSocket = new Socket()
             {
-                U01 = -1,
-                U02 = Iso4Utils.IsoFromTransform(position, rotation),
+                LocalTransform = Iso4Utils.IsoFromTransform(position, rotation),
+                JointIndex = -1,
                 Name = normalizedLight.Name
             };
             var light = itemLightConverter.ConvertLight(lightUserModel, fakeSocket);
 
             var cplugLight = light.U03!;
-            var gxlight = cplugLight.Light!;
+            var gxlight = cplugLight.GxLightModel!;
 
             gxlight.DoLighting = advancedLightConfig.LightingEnabled;
             gxlight.DoSpecular = advancedLightConfig.SpecularEnabled;
@@ -99,7 +99,7 @@ internal class FbxLightConverter
             {
                 gxBall.AttHyper2DerivAt0 = advancedLightConfig.AttenuationDerivativeAtZero;
                 gxBall.AttHyper2Tension = advancedLightConfig.AttenuationTension;
-                ItemLightHelper.SetAttHdrRadiusCoef(gxBall, advancedLightConfig.AttenuationHdrRadiusCoefficient);
+                gxBall.AttHdrRadiusCoef = advancedLightConfig.AttenuationHdrRadiusCoefficient;
             }
 
             normalizedLight.LightModel = null;

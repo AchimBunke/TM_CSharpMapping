@@ -948,11 +948,14 @@ public class SceneTimeline
 
         var trackOrder = tracks.ToDictionary(track => track, track => track.Blocks.Min(block => blockOrder[block]));
 
-        clip.Tracks.Sort((t1, t2) => {
+        var clipTracks = clip.Tracks.ToList();
+        clipTracks.Sort((t1, t2) => {
             if (tracks.Contains(t1) && tracks.Contains(t2))
                 return trackOrder[t1].CompareTo(trackOrder[t2]);
             else return 0;
         });
+
+        clip.Tracks = clipTracks!;
     }
 
     void UpdateTrackCycling()

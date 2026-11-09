@@ -56,7 +56,7 @@ public class ItemGameplayEffectConverter
         public required string To { get; init; }
 
         public bool AppliesTo(CPlugMaterialUserInst mat)
-            => mat.MaterialName == From;
+            => mat.Name == From;
 
 
         public void Apply(CPlugMaterialUserInst mat)
@@ -68,7 +68,7 @@ public class ItemGameplayEffectConverter
         public required CPlugSurface.MaterialId To { get; init; }
 
         public bool AppliesTo(CPlugMaterialUserInst mat)
-            => mat.MaterialName == From;
+            => mat.Name == From;
 
 
         public void Apply(CPlugMaterialUserInst mat)
@@ -80,7 +80,7 @@ public class ItemGameplayEffectConverter
         public required CPlugSurface.GameplayId To { get; init; }
 
         public bool AppliesTo(CPlugMaterialUserInst mat)
-            => mat.MaterialName == From;
+            => mat.Name == From;
 
 
         public void Apply(CPlugMaterialUserInst mat)
@@ -92,7 +92,7 @@ public class ItemGameplayEffectConverter
         public required IConversionRule InnerRule { get; init; }
 
         public bool AppliesTo(CPlugMaterialUserInst mat)
-            => mat.MaterialName == From && InnerRule.AppliesTo(mat);
+            => mat.Name == From && InnerRule.AppliesTo(mat);
 
 
         public void Apply(CPlugMaterialUserInst mat)

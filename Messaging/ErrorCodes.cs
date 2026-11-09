@@ -85,5 +85,9 @@ public static class ErrorCodes
         public const string UnsupportedSurfaceType = "ItemCompiler.UnsupportedSurfaceType";
         public const string MissingVisibleMesh = "ItemCompiler.MissingVisibleMesh";
     }
+    public static class ItemPodiumCreator
+    {
+        public const string UnsupportedEntityModel = "ItemPodiumCreator.UnsupportedEntityModel";
+    }
 }
 

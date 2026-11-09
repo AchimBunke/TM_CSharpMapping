@@ -318,7 +318,7 @@ namespace TM_GenericMapping.Items
         static void ReadMesh(CPlugSolid2Model mesh, TriangleObject obj, MaterialLibrary materialLibrary, ItemToTriangleObjectConverterSettings settings)
         {
             Dictionary<string, TriangleData> materialGroups = [];
-            for (int i = 0; i < mesh.Visuals!.Length; ++i)
+            for (int i = 0; i < mesh.Visuals!.Count; ++i)
             {
                 var visual = mesh.Visuals[i] as CPlugVisualIndexedTriangles;
                 var materialInstance = mesh.CustomMaterials![i].MaterialUserInst!;

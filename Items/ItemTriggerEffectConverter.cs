@@ -74,6 +74,9 @@ public class ItemTriggerEffectConverter
         var triggerSpecial = (prefab.Ents[1].Model as NPlugTrigger_SSpecial)!;
         triggerSpecial.TriggerShape = entityModel.TriggerShape as CPlugSurface;
         item.EntityModel = prefab;
-        item.Chunks.Get<CGameItemModel.Chunk2E00201F>()!.U08 = 0; // necessary otherwise error
+
+
+        //item.Chunks.Get<CGameItemModel.Chunk2E00201F>()!.U08 = 0; // necessary otherwise error
+        item.ItemFlags = CGameItemModel.EItemFlags.None; // TODO:Test
     }
 }

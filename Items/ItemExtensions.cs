@@ -53,14 +53,14 @@ public static class ItemExtensions
             BaseTexture = mat.BaseTexture,
             SurfacePhysicId = mat.SurfacePhysicId,
             TextureSizeInMeters = mat.TextureSizeInMeters,
-            Color = mat.Color,
+            CstValues = mat.CstValues,
             UvAnims = mat.UvAnims,
             Csts = mat.Csts,
             HidingGroup = mat.HidingGroup,
             IsNatural = mat.IsNatural,
             IsUsingGameMaterial = mat.IsUsingGameMaterial,
             Link = mat.Link,
-            MaterialName = mat.MaterialName,
+            Name = mat.Name,
             TilingU = mat.TilingU,
             TilingV = mat.TilingV,
             UserTextures = mat.UserTextures,
@@ -84,7 +84,7 @@ public static class ItemExtensions
             LayerId = geometryLayer.LayerId,
             LayerName = geometryLayer.LayerName,
             Ver = geometryLayer.Ver,
-            U02 = [..geometryLayer.U02 ?? []],
+            GroupIndices = [..geometryLayer.GroupIndices ?? []],
             Crystal = geometryLayer.Crystal != null ? DeepCopyCrystal(geometryLayer.Crystal) : null,
         };
 
@@ -94,9 +94,9 @@ public static class ItemExtensions
     {
         var cpy = new CPlugCrystal.Crystal()
         {
-            U01 = crystal.U01,
-            U02 = crystal.U02,
-            U03 = crystal.U03,
+            BaseVisualLevel = crystal.BaseVisualLevel,
+            MaxMaterialIndex = crystal.MaxMaterialIndex,
+            MaxGroupIndex = crystal.MaxGroupIndex,
             U04 = crystal.U04,
             U05 = crystal.U05,
             U06 = crystal.U06,

@@ -1,6 +1,15 @@
-﻿using System.Collections;
+﻿using GBX.NET;
+using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.MwFoundations;
+using GBX.NET.Engines.Plug;
+using GBX.NET.Serialization.Chunking;
+using System.Collections;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Xml.Linq;
+using static GBX.NET.Engines.Plug.NPlugModelKit_SDataBase;
+using static TM_GenericMapping.Common.GbxObjectComparer;
 
 namespace TM_GenericMapping.Common;
 
@@ -27,25 +36,36 @@ public struct GbxObjectComparerOptions
 public interface IGbxStructureComparer
 {
     bool FullReplacement { get; }
-    bool Equals(object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options);
+    bool DefineNullEquality { get; }
+    bool Equals(object? obj1, object? obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options);
     void AddHash(ref HashCode hash, object value, HashSet<object> visited,  GbxObjectComparerOptions options);
+    void Compare(object? obj1, object? obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences);
 
     bool EqualsField(FieldInfo fInfo, object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options);
     bool EqualsProperty(PropertyInfo pInfo, object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options);
 
     void AddHashField(ref HashCode hash, FieldInfo fInfo, object value, HashSet<object> visited, GbxObjectComparerOptions options);
     void AddHashProperty(ref HashCode hash, PropertyInfo pInfo, object value, HashSet<object> visited, GbxObjectComparerOptions options);
+
+    void CompareField(FieldInfo fInfo, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences);
+    void CompareProperty(PropertyInfo pInfo, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences);
+
+
 }
 public abstract class GbxStructureComparerBase<T> : IGbxStructureComparer
 {
     public virtual bool FullReplacement => false;
+    public virtual bool DefineNullEquality => false;
 
     public void AddHash(ref HashCode hash, object value, HashSet<object> visited, GbxObjectComparerOptions options)
         => AddHash(ref hash, (T)value, visited, options);
-    public bool Equals(object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
+    public bool Equals(object? obj1, object? obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
         => Equals((T)obj1, (T)obj2, visited, options);
-    protected virtual bool Equals(T obj1, T obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options) { throw new NotImplementedException(); }
+    public void Compare(object? obj1, object? obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+       => Compare((T?)obj1, (T?)obj2, visited, path1, path2, options, differences);
+    protected virtual bool Equals(T? obj1, T? obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options) { throw new NotImplementedException(); }
     protected virtual void AddHash(ref HashCode hash, T value, HashSet<object> visited, GbxObjectComparerOptions options) { throw new NotImplementedException(); }
+    protected virtual void Compare(T? obj1, T? obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences) { throw new NotImplementedException(); }
 
     public virtual void AddHashField(ref HashCode hash, FieldInfo fInfo, object value, HashSet<object> visited, GbxObjectComparerOptions options) 
     {
@@ -64,6 +84,17 @@ public abstract class GbxStructureComparerBase<T> : IGbxStructureComparer
     public virtual bool EqualsProperty(PropertyInfo pInfo, object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
     {
         return GbxObjectComparer.EqualsProperty(pInfo, obj1, obj2, visited, options);
+    }
+
+
+    public virtual void CompareField(FieldInfo fInfo, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        GbxObjectComparer.CompareField(fInfo, obj1, obj2, visited, path1, path2, options, differences);
+    }
+
+    public virtual void CompareProperty(PropertyInfo pInfo, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        GbxObjectComparer.CompareProperty(pInfo, obj1, obj2, visited, path1, path2, options, differences);
     }
 }
 
@@ -120,7 +151,19 @@ public static class GbxObjectComparer
         // Both null — equal
         if (obj1 == null && obj2 == null) return true;
 
-        if (obj1 == null || obj2 == null) return false;
+        IGbxStructureComparer? customComparer = null;
+
+        if (obj1 == null || obj2 == null)
+        {
+            var notNullType = obj1 != null ? obj1.GetType() : obj2!.GetType();
+
+            customComparer = GetComparerForType(notNullType, options);
+
+            if (customComparer is not null && customComparer.DefineNullEquality)
+                return customComparer.Equals(obj1, obj2, visited, options);
+            else
+                return false;
+        }
 
         Type type = obj1.GetType();
 
@@ -140,25 +183,12 @@ public static class GbxObjectComparer
         }
 
         // custom comparers
-        IGbxStructureComparer? customComparer = null;
-        if (!options.Flags.HasFlag(GbxObjectComparerFlags.IgnoreCustomComparers))
+        customComparer = GetComparerForType(type, options);
+
+        if (customComparer is not null && customComparer.FullReplacement)
         {
-            if (options.CustomComparers != null)
-            {
-                if (options.CustomComparers.TryGetValue(type, out customComparer))
-                {
-                    if(customComparer.FullReplacement)
-                        return customComparer.Equals(obj1, obj2, visited, options);
-                }
-            }
-            if (customComparer == null)
-            {
-                if (CustomComparerRegistry.TryGetValue(type, out customComparer))
-                    if (customComparer.FullReplacement)
-                        return customComparer.Equals(obj1, obj2, visited, options);
-            }
+            return customComparer.Equals(obj1, obj2, visited, options);
         }
-        
 
         // Value types that override Equals (e.g. DateTime, Guid, Vector3, etc.)
         // If the type overrides Equals, trust it rather than reflecting into fields
@@ -175,6 +205,8 @@ public static class GbxObjectComparer
 
             // treat collection fields as equal if they are from System.Collections or System.Collections.Generic namespaces
             if (IsFrameworkCollection(type))
+                return true;
+            if (IsChunkSet(type))
                 return true;
         }
 
@@ -195,7 +227,7 @@ public static class GbxObjectComparer
                     else if (!EqualsField(field, obj1, obj2, visited, options))
                         return false;
                 }
-
+                
                 currentType = currentType.BaseType;
             }
         }
@@ -380,6 +412,8 @@ public static class GbxObjectComparer
             EnumerableAddHash(ref hash, enum1, visited, options);
             if (IsFrameworkCollection(type))
                 return;
+            if (IsChunkSet(type))
+                return;
         }
 
         // Reflect fields only (properties are usually computed from fields;
@@ -476,6 +510,10 @@ public static class GbxObjectComparer
     {
         return type.Namespace?.StartsWith("System.Collections") == true;
     }
+    private static bool IsChunkSet(Type type)
+    {
+        return typeof(IChunkSet).IsAssignableFrom(type);
+    }
     public static string GetFieldName(FieldInfo field)
     {
         var name = field.Name;
@@ -497,6 +535,7 @@ public static class GbxObjectComparer
         CollectionDivergence,
         OneIsNull,
         CustomDifference,
+        Exception,
 
     }
     public record struct Difference(string Path1, string Path2, object? Value1, object? Value2, DifferenceType Type)
@@ -509,7 +548,8 @@ public static class GbxObjectComparer
             DifferenceType.CollectionDivergence => $"Diverge -> {Path1} != {Path2}: len[{Value1}] != len[{Value2}]",
             DifferenceType.OneIsNull => $"Null -> {Path1} != {Path2}: {Value1} != {Value2}",
             DifferenceType.CustomDifference => $"Custom -> {Path1} != {Path2}: {Value1} != {Value2}",
-            _=> $"Unknown -> {Path1} != {Path2}: {Value1} != {Value2}",
+            DifferenceType.Exception => $"Exception -> {Path1} != {Path2}: {Value1 ?? Value2}",
+            _ => $"Unknown -> {Path1} != {Path2}: {Value1} != {Value2}",
         };
         public string ShortString(int pathLength = 50) => Type switch
         {
@@ -538,14 +578,24 @@ public static class GbxObjectComparer
         }
     }
 
+ 
     private static void Compare(object? obj1, object? obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
     {
         // Both null — equal
         if (obj1 == null && obj2 == null) return;
 
+        IGbxStructureComparer? customComparer;
+
         if (obj1 == null || obj2 == null)
         {
-            differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.OneIsNull));
+            var notNullType = obj1 != null ? obj1.GetType() : obj2!.GetType();
+
+            customComparer = GetComparerForType(notNullType, options);
+
+            if (customComparer is not null && customComparer.DefineNullEquality)
+                customComparer.Compare(obj1, obj2, visited, path1, path2, options, differences);
+            else
+                differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.OneIsNull));
             return;
         }
 
@@ -566,35 +616,12 @@ public static class GbxObjectComparer
 
 
         // custom comparers
-        IGbxStructureComparer? customComparer = null;
-        if (!options.Flags.HasFlag(GbxObjectComparerFlags.IgnoreCustomComparers))
+        customComparer = GetComparerForType(type, options);
+
+        if(customComparer is not null && customComparer.FullReplacement)
         {
-            if (options.CustomComparers != null)
-            {
-                if (options.CustomComparers.TryGetValue(type, out customComparer))
-                {
-                    if (customComparer.FullReplacement)
-                    {
-                        if (!customComparer.Equals(obj1, obj2, visited, options))
-                        {
-                            differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.CustomDifference));
-                        }
-                        return;
-                    }
-                }
-            }
-            if (customComparer == null)
-            {
-                if (CustomComparerRegistry.TryGetValue(type, out customComparer))
-                    if (customComparer.FullReplacement)
-                    {
-                        if (!customComparer.Equals(obj1, obj2, visited, options))
-                        {
-                            differences.Add(new Difference(path1, path2, obj1, obj2, DifferenceType.CustomDifference));
-                        }
-                        return;
-                    }
-            }
+            customComparer.Compare(obj1, obj2, visited, path1, path2, options, differences);
+            return;
         }
 
 
@@ -630,10 +657,11 @@ public static class GbxObjectComparer
             // treat collection fields as equal if they are from System.Collections or System.Collections.Generic namespaces
             if (IsFrameworkCollection(type))
                 return;
+            if (IsChunkSet(type))
+                return;
         }
 
-        // Reflect fields only (properties are usually computed from fields;
-        // reflecting both causes double-reporting and can trigger side-effects)
+
         if (options.Flags.HasFlag(GbxObjectComparerFlags.PrivateFields))
         {
             var currentType = type;
@@ -641,8 +669,6 @@ public static class GbxObjectComparer
             {
                 foreach (var field in currentType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                 {
-                    object? v1 = field.GetValue(obj1);
-                    object? v2 = field.GetValue(obj2);
                     string fieldName = field.Name;
                     if (fieldName.StartsWith("<") && fieldName.EndsWith(">k__BackingField"))
                         fieldName = fieldName[1..fieldName.IndexOf('>')]; // strip to just PropName
@@ -651,13 +677,10 @@ public static class GbxObjectComparer
 
                     if (customComparer != null)
                     {
-                        if (!customComparer.EqualsField(field, obj1, obj2, [], options))
-                            differences.Add(new Difference(fPath1, fPath2, v1, v2, DifferenceType.CustomDifference));
-                        
+                        customComparer.CompareField(field, obj1, obj2, visited, fPath1, fPath2, options, differences);
                     }
                     else
-                        Compare(v1, v2, visited, fPath1, fPath2, options, differences);
-                    
+                        CompareField(field, obj1, obj2, visited, fPath1, fPath2, options, differences);
                 }
 
                 currentType = currentType.BaseType;
@@ -672,8 +695,6 @@ public static class GbxObjectComparer
                 if (field.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
                     continue;
 
-                object? v1 = field.GetValue(obj1);
-                object? v2 = field.GetValue(obj2);
                 string fieldName = field.Name;
                 if (fieldName.StartsWith("<") && fieldName.EndsWith(">k__BackingField"))
                     fieldName = fieldName[1..fieldName.IndexOf('>')]; // strip to just PropName
@@ -682,11 +703,11 @@ public static class GbxObjectComparer
 
                 if (customComparer != null)
                 {
-                    if (!customComparer.EqualsField(field, obj1, obj2, [], options))
-                        differences.Add(new Difference(fPath1, fPath2, v1, v2, DifferenceType.CustomDifference));
+                    customComparer.CompareField(field, obj1, obj2, visited, fPath1, fPath2, options, differences);
                 }
                 else
-                    Compare(v1, v2, visited, fPath1, fPath2, options, differences);
+                    CompareField(field, obj1, obj2, visited, fPath1, fPath2, options, differences);
+
             }
         }
 
@@ -697,21 +718,19 @@ public static class GbxObjectComparer
             {
                 if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
 
-                object? v1 = prop.GetValue(obj1);
-                object? v2 = prop.GetValue(obj2);
                 string propName = prop.Name;
                 string fPath1 = $"{path1}.{propName}";
                 string fPath2 = $"{path2}.{propName}";
 
                 if (customComparer != null)
                 {
-                    if (!customComparer.EqualsProperty(prop, obj1, obj2, [], options))
-                        differences.Add(new Difference(fPath1, fPath2, v1, v2, DifferenceType.CustomDifference));
+                    customComparer.CompareProperty(prop, obj1, obj2, visited, fPath1, fPath2, options, differences);
                 }
                 else
-                    Compare(v1, v2, visited, fPath1, fPath2, options, differences);
+                    CompareProperty(prop, obj1, obj2, visited, fPath1, fPath2, options, differences);
             }
         }
+
         return;
     }
 
@@ -814,5 +833,194 @@ public static class GbxObjectComparer
         }
     }
 
+    public static void CompareField(FieldInfo field, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        object? v1 = field.GetValue(obj1);
+        object? v2 = field.GetValue(obj2);
 
+        Compare(v1, v2, visited, path1, path2, options, differences);
+    }
+    public static void CompareProperty(PropertyInfo pInfo, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        object? v1, v2;
+        try { v1 = pInfo.GetValue(obj1); }
+        catch (Exception e) { differences.Add(new Difference(path1, path2, e, null, DifferenceType.Exception)); return; }
+        try { v2 = pInfo.GetValue(obj2); }
+        catch (Exception e) { differences.Add(new Difference(path1, path2, null, e, DifferenceType.Exception)); return; }
+
+        Compare(v1, v2, visited, path1, path2, options, differences);
+    }
+
+
+    private static IGbxStructureComparer? GetComparerForType(
+        Type type,
+        GbxObjectComparerOptions options)
+    {
+        if (options.Flags.HasFlag(GbxObjectComparerFlags.IgnoreCustomComparers))
+            return null;
+
+        // Exact type / generic definition
+        if (TryGetComparer(type, options.CustomComparers, out var comparer) ||
+            TryGetComparer(type, CustomComparerRegistry, out comparer))
+        {
+            return comparer;
+        }
+
+        // Base types
+        var currentType = type.BaseType;
+
+        while (currentType != null)
+        {
+            if (TryGetComparer(currentType, options.CustomComparers, out comparer) ||
+                TryGetComparer(currentType, CustomComparerRegistry, out comparer))
+            {
+                return comparer;
+            }
+
+            currentType = currentType.BaseType;
+        }
+
+        return null;
+    }
+
+    private static bool TryGetComparer(
+        Type type,
+        Dictionary<Type, IGbxStructureComparer>? registry,
+        out IGbxStructureComparer? comparer)
+    {
+        comparer = null;
+
+        if (registry == null)
+            return false;
+
+        if (registry.TryGetValue(type, out comparer))
+            return true;
+
+        if (type.IsGenericType &&
+            registry.TryGetValue(type.GetGenericTypeDefinition(), out comparer))
+            return true;
+
+        return false;
+    }
+}
+
+
+[CustomGbxStructureComparer(Type = typeof(NodeRef<>))]
+public class NodeRefComparer : GbxStructureComparerBase<NodeRef>
+{
+    public override bool FullReplacement => true;
+    public override bool DefineNullEquality => true;
+    protected override bool Equals(NodeRef? obj1, NodeRef? obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
+    {
+        if(obj1 is null)
+            return obj2?.Kind == NodeRefKind.None;
+        if (obj2 is null)
+            return obj1?.Kind == NodeRefKind.None;
+
+        if (obj1.Kind != obj2.Kind)
+            return false;
+        if (obj1.Kind == NodeRefKind.ExternalFile)
+            return GbxObjectComparer.EqualsProperty(GetPropertyUnambiguous(obj1, nameof(NodeRef.File))!, obj1, obj2, visited, options);
+        else if (obj1.Kind == NodeRefKind.Embedded)
+            return GbxObjectComparer.EqualsProperty(GetPropertyUnambiguous(obj1, nameof(NodeRef.Node))!, obj1, obj2, visited, options);
+        else if (obj1.Kind == NodeRefKind.ExternalResource)
+            return GbxObjectComparer.EqualsProperty(GetPropertyUnambiguous(obj1, nameof(NodeRef.Resource))!, obj1, obj2, visited, options);
+        else
+            return true;
+
+    }
+    protected override void AddHash(ref HashCode hash, NodeRef value, HashSet<object> visited, GbxObjectComparerOptions options)
+    {
+        if (value.Kind == NodeRefKind.None)
+            hash.Add(value.Kind);
+        if (value.Kind == NodeRefKind.ExternalFile)
+            GbxObjectComparer.AddHashProperty(ref hash, GetPropertyUnambiguous(value, nameof(NodeRef.File))!, value, visited, options);
+        else if (value.Kind == NodeRefKind.Embedded)
+            GbxObjectComparer.AddHashProperty(ref hash, GetPropertyUnambiguous(value, nameof(NodeRef.Node))!, value, visited, options);
+        else if (value.Kind == NodeRefKind.ExternalResource)
+            GbxObjectComparer.AddHashProperty(ref hash, GetPropertyUnambiguous(value, nameof(NodeRef.Resource))!, value, visited, options);
+    }
+
+    protected override void Compare(NodeRef? obj1, NodeRef? obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<GbxObjectComparer.Difference> differences)
+    {
+        if (obj1 is null && obj2?.Kind != NodeRefKind.None)
+        {
+            differences.Add(new GbxObjectComparer.Difference(path1, path2, null, obj2!.Kind, GbxObjectComparer.DifferenceType.OneIsNull));
+            return;
+        }
+        if (obj2 is null && obj1?.Kind != NodeRefKind.None)
+        {
+            differences.Add(new GbxObjectComparer.Difference(path1, path2, obj1!.Kind, null, GbxObjectComparer.DifferenceType.OneIsNull));
+            return;
+        }
+        if (obj1 is null || obj2 is null)
+            return;
+
+        if (obj1.Kind != obj2.Kind)
+        {
+            differences.Add(new GbxObjectComparer.Difference(path1, path2, obj1.Kind, obj2.Kind, GbxObjectComparer.DifferenceType.Value));
+            return;
+        }
+        if (obj1.Kind == NodeRefKind.ExternalFile)
+            GbxObjectComparer.CompareProperty(GetPropertyUnambiguous(obj1, nameof(NodeRef.File))!, obj1, obj2, visited, $"{path1}.{nameof(NodeRef.File)}", $"{path2}.{nameof(NodeRef.File)}", options, differences);
+        else if (obj1.Kind == NodeRefKind.Embedded)
+            GbxObjectComparer.CompareProperty(GetPropertyUnambiguous(obj1, nameof(NodeRef.Node))!, obj1, obj2, visited, $"{path1}.{nameof(NodeRef.Node)}", $"{path2}.{nameof(NodeRef.Node)}", options, differences);
+        else if (obj1.Kind == NodeRefKind.ExternalResource)
+            GbxObjectComparer.CompareProperty(GetPropertyUnambiguous(obj1, nameof(NodeRef.Resource))!, obj1, obj2, visited, $"{path1}.{nameof(NodeRef.Resource)}", $"{path2}.{nameof(NodeRef.Resource)}", options, differences);
+    }
+    PropertyInfo GetPropertyUnambiguous(NodeRef obj, string propertyName)
+    {
+        return obj.GetType()
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .First(p =>
+                p.Name == propertyName &&
+                p.DeclaringType?.IsGenericType == true &&
+                p.DeclaringType.GetGenericTypeDefinition() == typeof(NodeRef<>));
+    }
+}
+
+[CustomGbxStructureComparer(Type = typeof(CMwNod))]
+public class CMwNodComparer : GbxStructureComparerBase<CMwNod>
+{
+    override public bool FullReplacement => false;
+
+    public override bool EqualsField(FieldInfo fInfo, object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
+    {
+        CPlugVertexStream s;
+        if (GbxObjectComparer.GetFieldName(fInfo) == "chunks")
+        {
+            var v1 = fInfo.GetValue(obj1) as IChunkSet;
+            var v2 = fInfo.GetValue(obj2) as IChunkSet;
+            if (v1 is null && v2 is null)
+                return true;
+            else if (v1 != null && v2 != null)
+                return base.EqualsField(fInfo, obj1, obj2, visited, options);
+            else if (v1 is null && v2?.Count != 0 || v1?.Count != 0 && v2 is null)
+                return false;
+        }
+        return base.EqualsField(fInfo, obj1, obj2, visited, options);
+    }
+    public override void AddHashField(ref HashCode hash, FieldInfo fInfo, object value, HashSet<object> visited, GbxObjectComparerOptions options)
+    {
+        base.AddHashField(ref hash, fInfo, value, visited, options);
+    }
+    public override void CompareField(FieldInfo fInfo, object obj1, object obj2, HashSet<(object, object)> visited, string path1, string path2, GbxObjectComparerOptions options, List<Difference> differences)
+    {
+        if (GbxObjectComparer.GetFieldName(fInfo) == "chunks")
+        {
+            var v1 = fInfo.GetValue(obj1) as IChunkSet;
+            var v2 = fInfo.GetValue(obj2) as IChunkSet;
+            if (v1 is null && v2 is null)
+                return;
+            else if(v1 != null && v2 != null)
+                base.CompareField(fInfo, obj1, obj2, visited, path1, path2, options, differences);
+            else if (v1 is null && v2?.Count != 0 || v1?.Count != 0 && v2 is null)
+            {
+                differences.Add(new Difference(path1, path2, v1?.Count, v2?.Count, DifferenceType.OneIsNull));
+            }
+            return;
+        }
+
+        base.CompareField(fInfo, obj1, obj2, visited, path1, path2, options, differences);
+    }
 }

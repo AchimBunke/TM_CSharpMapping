@@ -1,4 +1,5 @@
-﻿using GBX.NET.Engines.Game;
+﻿using GBX.NET;
+using GBX.NET.Engines.Game;
 using GBX.NET.Engines.MwFoundations;
 using System.Net.Http.Headers;
 using System.Reflection;
@@ -93,8 +94,9 @@ public class MediaTrackerDeduplicator
     void CreateOptions()
     {
         var dic = new Dictionary<Type, IGbxStructureComparer>();
-        dic[typeof(CGameCtnMediaBlockTriangles3D.Chunk03029001)] = new Chunk03029001Comparer();
-        if(Settings.IgnoreTrackName)
+        dic[typeof(CGameCtnMediaBlockTriangles3D)] = new CGameCtnMediaBlockTrianglesComparer();
+        dic[typeof(CGameCtnMediaBlockTriangles2D)] = new CGameCtnMediaBlockTrianglesComparer();
+        if (Settings.IgnoreTrackName)
         {
             dic[typeof(CGameCtnMediaTrack)] = new TrackComparer();
         }
@@ -118,8 +120,10 @@ public class MediaTrackerDeduplicator
             _nodeRefs.Add(track);
             if (Settings.DeduplicateTracks)
             {
+                Console.WriteLine($"Hash for Track {track.Name}");
                 var hash = ComputeHash(track);
-                if(_nodes.TryGetValue(hash, out var nodeList))
+                Console.WriteLine($"End Hash for Track {track.Name}");
+                if (_nodes.TryGetValue(hash, out var nodeList))
                 {
                     bool deduplicated = false;
                     foreach (CGameCtnMediaTrack otherTrack in nodeList)
@@ -220,12 +224,33 @@ public class MediaTrackerDeduplicator
         protected override void AddHash(ref HashCode hash, CGameCtnMediaBlockTriangles.Chunk03029001 value, HashSet<object> visited, GbxObjectComparerOptions options)
         {
             hash.Add(value.Id);
-            hash.Add(value.U01);
+            //hash.Add(value.U01);
             // ignore other U because they differe when copying inside editor and i dont know what they do
         }
         protected override bool Equals(CGameCtnMediaBlockTriangles.Chunk03029001 obj1, CGameCtnMediaBlockTriangles.Chunk03029001 obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
         {
-            return obj1.Id == obj2.Id && obj1.U01 == obj2.U01;
+            return obj1.Id == obj2.Id;
+        }
+    }
+    class CGameCtnMediaBlockTrianglesComparer : GbxStructureComparerBase<CGameCtnMediaBlockTriangles>
+    {
+        public override bool EqualsField(FieldInfo fInfo, object obj1, object obj2, HashSet<(object, object)> visited, GbxObjectComparerOptions options)
+        {
+            var fieldName = GbxObjectComparer.GetFieldName(fInfo); // editor only fields
+            if (fieldName == "pickMode3D" || fieldName == "pickPlaneNormal" || fieldName == "pickPlanePosition")
+            {
+                return true;
+            }
+            return GbxObjectComparer.EqualsField(fInfo, obj1, obj2, visited, options);
+        }
+        public override void AddHashField(ref HashCode hash, FieldInfo fInfo, object value, HashSet<object> visited, GbxObjectComparerOptions options)
+        {
+            var fieldName = GbxObjectComparer.GetFieldName(fInfo); // editor only fields
+            if (fieldName == "pickMode3D" || fieldName == "pickPlaneNormal" || fieldName == "pickPlanePosition")
+            {
+                return;
+            }
+            GbxObjectComparer.AddHashField(ref hash, fInfo, value, visited, options);
         }
     }
 

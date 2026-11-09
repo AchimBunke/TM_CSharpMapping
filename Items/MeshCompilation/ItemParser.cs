@@ -108,7 +108,7 @@ public class ItemParser
         List<ShapeRef> collisionShapes = new List<ShapeRef>();
 
         CPlugSpawnModel? spawnModel = null;
-        List<int> smoothingGroups = crystal.GetChunk<CPlugCrystal.Chunk09003007>()?.U01?.ToList() ?? new List<int>();
+        List<int> smoothingGroups = crystal.FaceSmoothingGroupIndices?.ToList() ?? new List<int>(); //crystal.GetChunk<CPlugCrystal.Chunk09003007>()?.U01?.ToList() ?? new List<int>();
         int firstSmoothingGroupIdx = 0;
         Vector3? waypointSpawnPos = null;
         Quaternion? waypointSpawnRot = null;
@@ -629,12 +629,12 @@ public class ItemParser
         entityRef.ModelKey = key.GetHashCode();
 
         // mesh
-        var mesh = staticObjectModel.GetMesh();
+        var mesh = staticObjectModel.Mesh;
         if (mesh is not null)
             ParseSolid2Model(mesh, model, normalizedItem, staticObjectModel.IsMeshCollidable);
 
         // staticShape
-        var shape = staticObjectModel.GetShape();
+        var shape = staticObjectModel.Shape;
         if (shape is null)
             return ToolResult.Success(nameof(ItemParser)); // early return if no shape
 
@@ -685,12 +685,12 @@ public class ItemParser
         entityRef.DynaObjectModelParams = ent.Params as NPlugDynaObjectModel_SInstanceParams;
 
         // mesh
-        var mesh = dynamicObjectModel.GetMesh();
+        var mesh = dynamicObjectModel.Mesh;
         if (mesh is not null)
             ParseSolid2Model(mesh, model, normalizedItem, meshIsCollisionSource: false);
 
         // staticShape
-        var staticShape = dynamicObjectModel.GetStaticShape();
+        var staticShape = dynamicObjectModel.StaticShape;
         if (staticShape is not null)
         {
             var staticShapeRef = new ShapeRef()
@@ -706,7 +706,7 @@ public class ItemParser
         }
 
         // dynamicShape
-        var dynaShape = dynamicObjectModel.GetDynaShape();
+        var dynaShape = dynamicObjectModel.DynaShape;
         if (dynaShape is not null)
         {
             var dynamicShapeRef = new ShapeRef()
@@ -732,7 +732,7 @@ public class ItemParser
             return ToolResult.Success(nameof(ItemParser));
         }
 
-        var triggerShape = triggerSpecial.GetTriggerShape();
+        var triggerShape = triggerSpecial.TriggerShape;
         if (triggerShape == null)
             return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingTriggerShape);
 
@@ -780,7 +780,7 @@ public class ItemParser
             return ToolResult.Success(nameof(ItemParser));
         }
 
-        var triggerShape = triggerWaypoint.GetTriggerShape();
+        var triggerShape = triggerWaypoint.TriggerShape;
         if (triggerShape == null)
             return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.MissingTriggerShape);
 
@@ -873,7 +873,7 @@ public class ItemParser
                 var model = solid2Model.LightUserModels![light.ModelIndex];
                 var socket = sockets[light.SocketIndex];
 
-                socket.U02.Deconstruct(out var rot, out var xyz);
+                socket.LocalTransform.Deconstruct(out var rot, out var xyz);
                 var m = new Matrix4x4(
                     rot.XX, rot.XY, rot.XZ, 0,
                     rot.YX, rot.YY, rot.YZ, 0,
@@ -944,7 +944,7 @@ public class ItemParser
 
             bool hasUv0 = stream.UVs.TryGetValue(0, out var uv0);
             bool hasUv1 = stream.UVs.TryGetValue(1, out var uv1);
-            if (material.Color is null || material.Color.Length == 0)
+            if (material.CstValues is null || material.CstValues.Length == 0)
             {
                 if (hasUv0)
                     texCoords = uv0;

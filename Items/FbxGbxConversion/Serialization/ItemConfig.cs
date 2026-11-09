@@ -365,7 +365,7 @@ public class MovingGroupConfig
 
             MovingTexture = kinematicConstraint.ShaderTcType == NPlugDyna_SKinematicConstraint.EShaderTcType.TransSubTexture ? new MovingTextureConfig
             {
-                SubTextures = kinematicConstraint.ShaderTcDataTransSub.NbSubTexture,
+                SubTextures = kinematicConstraint.ShaderTcDataTransSub!.NbSubTexture,
                 SubTexturesPerLine = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerLine,
                 SubTexturesPerColumn = kinematicConstraint.ShaderTcDataTransSub.NbSubTexturePerColumn,
                 TopToBottom = kinematicConstraint.ShaderTcDataTransSub.TopToBottom,
@@ -733,17 +733,15 @@ public class PlacementConfig
             placementParams.PivotSnapDistance = placementConfig.PivotSnapDistance;
             placementParams.PivotPositions = placementConfig.PivotPositions?.ToArray() ?? Array.Empty<Vec3>();
             placementParams.PivotRotations = placementConfig.PivotRotations?.Select(q=>q.ToQuat().Fixed()).ToArray() ?? Array.Empty<Quat>();
-            ItemPlacementUtils.SetItemPlacementMagnets(placementParams,
-                placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) =>
+            placementParams.MagnetLocs = placementConfig.MagnetPositions.Zip(placementConfig.MagnetRotations, (pos, rot) =>
+            {
+                var pyr = rot;
+                return new CGameItemPlacementParam.MagnetLoc
                 {
-                    var conv = new PyrConvention {  };
-                    var pyr = rot;
-                    return new MagnetLoc
-                    {
-                        Position = pos,
-                        PitchYawRoll = new Vec3(pyr.X, pyr.Y, pyr.Z)
-                    };
-                }).ToList());
+                    Position = pos,
+                    YawPitchRoll = new Vec3(pyr.X, pyr.Y, pyr.Z),
+                };
+            }).ToArray();
 
             if (placementConfig.PlacementClass != null)
             {
@@ -800,9 +798,9 @@ public class PlacementConfig
             FlyVOffset = placementParam.FlyVOffset,
             PivotSnapDistance = placementParam.PivotSnapDistance,
             PivotPositions = placementParam.PivotPositions?.ToList() ?? new List<Vec3>(),
-            PivotRotations = placementParam.PivotRotations?.Select(q=>q.ToQuaternion()).ToList() ?? new List<Quaternion>(),
-            MagnetPositions = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => m.Position).ToList(),
-            MagnetRotations = ItemPlacementUtils.GetItemPlacementMagnets(placementParam).Select(m => m.PitchYawRoll).ToList(),
+            PivotRotations = placementParam.PivotRotations?.Select(q => q.ToQuaternion()).ToList() ?? new List<Quaternion>(),
+            MagnetPositions = placementParam.MagnetLocs?.Select(ml => ml.Position).ToList() ?? new List<Vec3>(),
+            MagnetRotations = placementParam.MagnetLocs?.Select(ml => ml.YawPitchRoll).ToList() ?? new List<Vec3>(),
         };
         if (placementParam.PlacementClass != null)
         {

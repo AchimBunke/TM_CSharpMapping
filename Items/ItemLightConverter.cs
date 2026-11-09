@@ -45,7 +45,7 @@ public class ItemLightConverter
                 throw new Exception("No socket found for light user model conversion.");
             var socket = sockets[lightInst.SocketIndex];
 
-            var customLight = model.LightUserModels[lightInst.ModelIndex];
+            var customLight = model.LightUserModels![lightInst.ModelIndex];
 
             var light = ConvertLight(customLight, socket);
             lights.Add(light);
@@ -87,16 +87,15 @@ public static class ItemLightHelper
 {
     public static void LightUserModelToLightProperties(CPlugLightUserModel lightUserModel, CPlugSkel.Socket socket, CPlugSolid2Model.Light light, LightType lightType)
     {
-        var transform = socket.U02;
+        var transform = socket.LocalTransform;
         light.U05 = transform;
 
-        var cPlugLight = light.U03;
+        var cPlugLight = light.U03!;
         cPlugLight.NightOnly = lightUserModel.NightOnly;
+        cPlugLight.SceneLightAlwaysActive = false;
 
-        SetFlags(cPlugLight, sceneLightAlwaysActive: false);
 
-
-        var gxLight = cPlugLight.Light;
+        var gxLight = cPlugLight.GxLightModel!;
         gxLight.Color = lightUserModel.Color;
         gxLight.Intensity = lightUserModel.Intensity;
 
@@ -122,7 +121,10 @@ public static class ItemLightHelper
         lightBall.RadiusFlare = lightUserModel.Distance * 4;
         lightBall.EmittingRadius = lightUserModel.PointEmissionRadius;
         lightBall.EmittingCylinderLenZ = lightUserModel.PointEmissionLength;
-        lightBall.GetChunk<GxLightBall.Chunk04002009>()!.U01 = lightUserModel.Distance;
+
+        lightBall.RadiusIndex = lightUserModel.Distance;
+        //TODO:
+        //lightBall.GetChunk<GxLightBall.Chunk04002009>()!.U01 = lightUserModel.Distance;
     }
     public static void FillLightSpotFromLightUserModel(CPlugLightUserModel lightUserModel, GxLightSpot lightSpot)
     {
@@ -160,10 +162,11 @@ public static class ItemLightHelper
         c003.Version = 1;
         var c004 = cplugLight.CreateChunk<CPlugLight.Chunk0901D004>();
         c004.Version = 0;
-        c004.U01 = -1;
-        c004.U02 = -1;
-        c004.U03 = -1;
-        c004.U05 = -1;
+        //c004.U01 = -1;
+        //c004.U02 = -1;
+        //c004.U03 = -1;
+        //c004.U05 = -1;
+        var c002 = cplugLight.CreateChunk<CPlugLight.Chunk0901D002>(); // flags
 
         cplugLight.AnimTimerName = "";
         cplugLight.AnimPeriodMin = 1;
@@ -171,10 +174,9 @@ public static class ItemLightHelper
         cplugLight.NightOnly = false;
         cplugLight.ReflectByGround = false;
         cplugLight.SceneLightOnlyWhenTreeVisible = false;
+        cplugLight.SceneLightAlwaysActive = false;
 
-        SetFlags(cplugLight, sceneLightAlwaysActive: false);
-
-        cplugLight.Light = CreateGxLight(lightType);
+        cplugLight.GxLightModel = CreateGxLight(lightType);
         return cplugLight;
     }
 
@@ -190,7 +192,8 @@ public static class ItemLightHelper
                     var c2 = point.CreateChunk<GxLightBall.Chunk04002008>();
                     var c3 = point.CreateChunk<GxLightBall.Chunk04002009>();
                     var c4 = point.CreateChunk<GxLightBall.Chunk0400200A>();
-                    c4.U01 = 0.015625f;
+                    point.AttHdrRadiusCoef = 0.015625f;
+                    //c4.U01 = 0.015625f;
 
                     light = point;
                     point.FlareSize = 0;
@@ -202,10 +205,10 @@ public static class ItemLightHelper
                     var spot = new GxLightSpot();
 
                     var c1 = spot.CreateChunk<GxLightSpot.Chunk0400B003>();
-                    c1.U01 = 1; // sub-light count X!
-                    c1.U02 = 1; // sub-light count Y!
-                    c1.U03 = 0;
                     c1.Version = 1;
+                    spot.SubLightCountX = 1;
+                    spot.SubLightCountY = 1;
+
 
                     light = spot;
                     spot.AngleInner = 0;
@@ -254,20 +257,12 @@ public static class ItemLightHelper
                     var frustum = new GxLightFrustum();
                     light = frustum;
 
-                    var c1 = frustum.CreateChunk<GxLightFrustum.Chunk0400A004>();
-                    c1.U01 = 0;
-                    c1.U02 = 0;
-                    c1.U03 = 0;
-                    c1.U04 = 0;
-                    c1.U05 = 0;
-                    c1.U06 = 0;
-                    c1.U07 = 0;
-                    c1.U08 = 0;
+                    frustum.Frustum = new GxLightFrustum.FrustumData
+                    {
+
+                    };
 
                     var c2 = frustum.CreateChunk<GxLightFrustum.Chunk0400A006>();
-                    c2.U01 = false;
-                    c2.U02 = new BoxAligned();
-                    c2.U03 = 0;
                 }
                 break;
 
@@ -307,12 +302,14 @@ public static class ItemLightHelper
             }
             if (lb.TryCreateChunk<GxLightBall.Chunk04002009>(out var c2))
             {
-                c2.U01 = 100f;// radius??
             }
+           
             if (lb.TryCreateChunk<GxLightBall.Chunk0400200A>(out var c3))
             {
-                c3.U01 = 0.015625f;// ? (1/64) / resolution? | epsilo? | grid?
+               
             }
+            lb.RadiusIndex = 100;
+            lb.AttHdrRadiusCoef = 0.015625f;// ? (1/64) / resolution? | epsilo? | grid?
             lb.Radius = 0;
             lb.Attenuation1 = 0;
             lb.Attenuation2 = 0;
@@ -354,20 +351,6 @@ public static class ItemLightHelper
     }
 
 
-    static CPlugLight.Chunk0901D004 GetFlagChunk(CPlugLight light)
-        => light.GetChunk<CPlugLight.Chunk0901D004>();
-    static void SetFlags(CPlugLight light, bool sceneLightAlwaysActive)
-    {
-        int bitmask = 
-            (int)light.Flags | 
-            (sceneLightAlwaysActive ? (1 << 5) : 0);
-        GetFlagChunk(light).U04 = bitmask;
-    }
-
-    public static void SetAttHdrRadiusCoef(GxLightBall lightBall, float coefficient)
-    {
-        lightBall.TryCreateChunk<GxLightBall.Chunk0400200A>(out var c3);
-        c3.U01 = coefficient;
-    }
+ 
 
 }

@@ -485,7 +485,8 @@ public class Triangle3DRenderer : TriangleRenderer
         {
             block.Chunks.Remove<CGameCtnMediaBlockTriangles3D.Chunk03029002>();
             var chunk = block.CreateChunk<CGameCtnMediaBlockTriangles3D.Chunk03029002>();
-            chunk.U01 = 0;
+            //chunk.U01 = 0; TODO
+            block.ClipEntId = 0;
         }
         return block;
     }

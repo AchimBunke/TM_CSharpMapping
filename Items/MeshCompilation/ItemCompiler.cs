@@ -13,6 +13,7 @@ using TM_GenericMapping.Items.FbxGbxConversion;
 using TM_GenericMapping.Messaging;
 using TM_GenericMapping.Templating;
 using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
@@ -136,14 +137,14 @@ public class ItemCompiler
         if (compileOptions.Optimization.HasFlag(ItemCompilerOptimization.PreferNadeoImporterStructure) &&
             CanConvertToCommonEntityModel(item, buildSettings, compileOptions))
         {
-            var itemTemplateResult = ConvertToCommonEntityModel(item, rootEntResult.Value as CPlugPrefab, buildSettings);
+            var itemTemplateResult = ConvertToCommonEntityModel(item, (CPlugPrefab)rootEntResult.Value, buildSettings);
             if(itemTemplateResult.IsFailure)
                 return ToolResult.Fail(itemTemplateResult);
             itemTemplate = itemTemplateResult.Value;
         }
         else
         {
-            if (ItemExtensions.Traverse<CPlugStaticObjectModel>(rootEntResult.Value).Any(so => so.GetMesh() is null))
+            if (ItemExtensions.Traverse<CPlugStaticObjectModel>(rootEntResult.Value).Any(so => so.Mesh is null))
                 return ToolResult.Fail(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingVisibleMesh); // return error here because common entitymodel allows this
 
             itemTemplate = CreateItemTemplate().Value;
@@ -551,8 +552,8 @@ public class ItemCompiler
                 {
                     var fakeSocket = new Socket()
                     {
-                        U01 = -1,
-                        U02 = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
+                        JointIndex = -1,
+                        LocalTransform = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
                         Name = normalizedLight.Name
                     };
                     light = _lightConverter.ConvertLight(normalizedLight.LightModel!, fakeSocket);
@@ -572,8 +573,8 @@ public class ItemCompiler
                 lightUserModels.Add(GbxItemUtils.CreateLightUserModel(normalizedLight, instance));
                 sockets.Add(new Socket()
                 {
-                    U01 = -1,
-                    U02 = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
+                    JointIndex = -1,
+                    LocalTransform = Iso4Utils.IsoFromTransform(lightRef.Position, lightRef.Rotation),
                     Name = normalizedLight.Name
                 });
             }
@@ -682,67 +683,60 @@ public class ItemCompiler
         vertexStream.Colors = colors;
 
         // fix data decl
-        var dataDeclField = typeof(CPlugVertexStream).GetField("dataDecls",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-
-        var dataDecls = (dataDeclField!.GetValue(vertexStream) as CPlugVertexStream.DataDecl[])!.ToList();
+        var dataDecls = vertexStream.DataDecls.ToList();
 
         // clear tex coords if rex or light is not available
         if (uvs.Count <= 0)
-            dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
+            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord0);
         if (uvs.Count <= 1)
-            dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord1);
+            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord1);
 
         if (colors.Count <= 0)
-            dataDecls.RemoveAll(decl => decl.WeightCount == CPlugVertexStream.EPlugVDcl.Color0);
-        else
-            dataDecls.Insert(2, new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16 });
+            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.Color0);
+        else if (!dataDecls.Any(d => d.Semantic == EPlugVDcl.Color0))
+            dataDecls.Insert(Math.Min(2, dataDecls.Count), new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16 });
 
         if (mesh.TexCoords is null)
         {
-            dataDecls.RemoveAll(decl => decl.WeightCount == EPlugVDcl.TangentU);
-            dataDecls.RemoveAll(decl => decl.WeightCount == EPlugVDcl.TangentV);
+            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TangentU);
+            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TangentV);
         }
 
-        if (colors.Count > 0)
+        static int ValueSize(CPlugVertexStream.DataDecl d) => d.Type switch
         {
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Position)?.Flags1 = 7341056; // 9438208;
+            EPlugVDclType.Float1 or EPlugVDclType.ColorD3D or EPlugVDclType.UByte4 or EPlugVDclType.Short2
+                or EPlugVDclType.UByte4N or EPlugVDclType.Short2N or EPlugVDclType.UShort2N
+                or EPlugVDclType.UDec3 or EPlugVDclType.Dec3N or EPlugVDclType.Half2 => 4,
+            EPlugVDclType.Float2 or EPlugVDclType.Short4 or EPlugVDclType.Short4N
+                or EPlugVDclType.UShort4N or EPlugVDclType.Half4 => 8,
+            EPlugVDclType.Float3 => 12,
+            EPlugVDclType.Float4 => 16,
+            _ => throw new NotSupportedException($"Unknown vertex declaration type {d.Type}.")
+        };
 
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Normal)?.Flags1 = 275782661;// 277879813;
-
-            dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.Color0)?.Flags1 = 544213000; //546310152;
-
-            var tex0Decl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TexCoord0);
-            if (tex0Decl != null)
-            {
-                tex0Decl.Flags1 = 544211466; // 546308618;
-                tex0Decl.Flags2 = 80;
-                tex0Decl.Offset = 20;
-            }
-
-            var tangentUDecl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TangentU);
-            if (tangentUDecl != null)
-            {
-                tangentUDecl.Flags1 = 277879826;
-                tangentUDecl.Flags2 = 112;
-                tangentUDecl.Offset = 28;
-            }
-
-            var tangentVDecl = dataDecls.FirstOrDefault(d => d.WeightCount == CPlugVertexStream.EPlugVDcl.TangentV);
-            if (tangentVDecl != null)
-            {
-                tangentVDecl.Flags1 = 277879828;
-                tangentVDecl.Flags2 = 128;
-                tangentVDecl.Offset = 32;
-            }
+        // rebuild interleaved layout: the first decl owns the buffer, all others share it
+        var offset = 0;
+        for (var i = 0; i < dataDecls.Count; i++)
+        {
+            var d = dataDecls[i];
+            d.Offset = (ushort)offset;
+            d.SharedDeclIndex = 0;
+            d.Flags2 = i == 0 ? 0u : (uint)offset << 2;   // first decl must stay non-shared
+            offset += ValueSize(d);
         }
-        dataDeclField.SetValue(vertexStream, dataDecls.ToArray());
+
+        var stride = (uint)offset;
+        foreach (var d in dataDecls)
+        {
+            d.Flags1 = (d.Flags1 & ~(0x3FFu << 18)) | (stride << 18);   // same stride for all
+            d.Data = null;                                             // writer allocates VertexCount * stride
+        }
 
 
-        var countField = typeof(CPlugVertexStream).GetField("count",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        countField?.SetValue(vertexStream, vertexStream.Positions.Length);
+        vertexStream.DataDecls = dataDecls.ToArray();
 
+
+        vertexStream.VertexCount = vertexStream.Positions.Length;
         if (mesh.TexCoords is null)
         {
             GbxItemUtils.SetTangentUs(vertexStream, null);
@@ -981,7 +975,7 @@ public class ItemCompiler
             ReadOnlySpan<int> sourceIndices;
             ReadOnlySpan<MaterialId> surfaceMaterialIds;
             ReadOnlySpan<GameplayId> surfaceGameplayIds;
-            NormalizedMesh normMesh;
+            NormalizedMesh? normMesh;
             if ((normMesh = geometrySource as NormalizedMesh) != null)
             {
                 sourcePositions = normMesh.Positions.AsSpan();
@@ -1359,8 +1353,29 @@ public class ItemCompiler
         CPlugCrystal crystal = GbxTemplateLibrary.CreateCPlugCrystalTemplate().Value;
         crystal.Layers = context.Layers;
         crystal.Materials = context.Materials;
-        var chunk = crystal.Chunks.Get<CPlugCrystal.Chunk09003007>()!;
-        chunk.U01 = context.SmoothingGroups.ToArray();
+        crystal.FaceSmoothingGroupIndices = context.SmoothingGroups.ToArray();
+
+        // Chunk09003006 keeps its own lightmap coords (template data is stale). Size them to the new
+        // vertex count so the chunk regenerates them from Face.Vertex.LightmapCoord on write.
+        var lightmapChunk = crystal.Chunks.Get<CPlugCrystal.Chunk09003006>();
+        if (lightmapChunk is not null)
+        {
+            var vertexCount = crystal.Layers.OfType<CPlugCrystal.GeometryLayer>()
+                .Where(l => l.IsEnabled && l.IsVisible)
+                .Select(l => l.Crystal)
+                .OfType<CPlugCrystal.Crystal>()
+                .SelectMany(c => c.Faces)
+                .Sum(f => f.Vertices.Length);
+            if (lightmapChunk.Version >= 2)
+            {
+                lightmapChunk.LightmapCoords = new Vec2[1];
+                lightmapChunk.LightmapCoordIndices = new int[vertexCount];
+            }
+            else
+            {
+                lightmapChunk.LightmapCoords = new Vec2[vertexCount];
+            }
+        }
         return crystal;
     }
 
@@ -1479,8 +1494,10 @@ public class ItemCompiler
             if (cluster.Type == ModelType.Trigger_Special || cluster.Type == ModelType.Trigger_Waypoint)
             {
                 CPlugCrystal.TriggerLayer triggerLayer = BuildTriggerLayer(item, instance, material, parentPosition, parentRotation);
-                triggerLayer.Crystal!.U02 = layerIndex;
+                triggerLayer.Crystal!.MaxMaterialIndex = layerIndex;
                 layer = triggerLayer;
+                foreach (var face in triggerLayer.Crystal!.Faces)
+                    face.MaterialIndex = context.Materials.Count;
             }
             else
             {
@@ -1510,6 +1527,8 @@ public class ItemCompiler
                 }
                 else
                     continue;
+                foreach (var face in geometryLayer.Crystal!.Faces)
+                    face.MaterialIndex = context.Materials.Count;
                 context.SmoothingGroups.AddRange(
                     geometryLayer.Crystal!.Faces.Select(_ =>
                     {
@@ -1522,12 +1541,13 @@ public class ItemCompiler
                         return 0;
                     }));
 
-                geometryLayer.Crystal!.U02 = layerIndex;
+                geometryLayer.Crystal!.MaxMaterialIndex = layerIndex;
                 geometryLayer.IsVisible = instance.Instance.Visible;
                 geometryLayer.Collidable = instance.Instance.Collidable;
 
                 layer = geometryLayer;
             }
+     
 
             context.Materials.Add(material);
             layer.LayerId = $"Layer{layerIndex}";
@@ -1544,6 +1564,7 @@ public class ItemCompiler
             {
                 parts.Add(new CPlugCrystal.PartInLayer() { GroupIndex = 0, LayerId = context.Layers[i].LayerId });
             }
+
             spawnLayer.Mask = parts.ToArray();
             spawnLayer.LayerId = $"Layer{layerCount}";
             spawnLayer.LayerName = $"Spawn Position";
@@ -1816,7 +1837,7 @@ public class ItemCompiler
         var entities = ExtractEntities(prefab, Vector3.Zero, Quaternion.Identity).ToList();
         var commonEntityModel = GbxTemplateLibrary.CreateCommonItemEntityModelTemplate().Value;
 
-        commonEntityModel.StaticObject.Mesh = CreateEmptySolid2Model(item);
+        commonEntityModel.StaticObject!.Mesh = CreateEmptySolid2Model(item);
 
         var surface = GbxTemplateLibrary.CreateSurfaceTemplate().Value;
         var surfMesh = GbxTemplateLibrary.CreateSurfaceMeshTemplate().Value;
@@ -1845,7 +1866,7 @@ public class ItemCompiler
 
         if (!commonEntityModel.StaticObject.Mesh.Visuals!.Any())
             commonEntityModel.StaticObject.Mesh = null;
-        else if (commonEntityModel.StaticObject.Mesh.CustomMaterials.Length > 0)
+        else if (commonEntityModel.StaticObject.Mesh.CustomMaterials?.Length > 0)
             commonEntityModel.StaticObject.Mesh.Materials = null;
 
         if (IsMeshCollidable(buildSettings))
@@ -1865,11 +1886,13 @@ public class ItemCompiler
             if(compileContext.PendingWaypoints.Count(pw=>pw.Value.SpawnPosition.HasValue) > 0)
             {
                 var pendingWaypoint = compileContext.PendingWaypoints.First(pw=>pw.Value.SpawnPosition.HasValue);
-                waypointSpawn = Iso4Utils.IsoFromTransform(pendingWaypoint.Value.SpawnPosition.Value!, pendingWaypoint.Value.SpawnRotation.Value!);
+                waypointSpawn = Iso4Utils.IsoFromTransform(pendingWaypoint.Value.SpawnPosition!.Value!, pendingWaypoint.Value.SpawnRotation!.Value!);
             }
         }
-        commonEntityModel.GetChunk<CGameCommonItemEntityModel.Chunk2E027000>().U03 = waypointSpawn;
+        //commonEntityModel.GetChunk<CGameCommonItemEntityModel.Chunk2E027000>().U03 = waypointSpawn;
 
+        // TODO:
+        commonEntityModel.SpawnLoc = waypointSpawn;
 
         var itemModel = CreateItemTemplate();
        
@@ -1938,16 +1961,16 @@ public class ItemCompiler
     {
         if (position == Vector3.Zero && rotation == Quaternion.Identity)
             return ToolResult.Success(None.Value, nameof(ItemCompiler));
-        var mesh = staticObject.GetMesh();
+        var mesh = staticObject.Mesh;
         if(mesh is not null)
         {
             foreach (var visual in mesh.Visuals ?? [])
             {
                 foreach (var vertexStream in visual.VertexStreams)
                 {
-                    vertexStream.Positions = vertexStream.Positions.Select(p => (position + Vector3.Transform(p, rotation)).ToVec3()).ToArray();
-                    vertexStream.Normals = vertexStream.Normals.Select(n => Vector3.Transform(n, rotation).ToVec3()).ToArray();
-                    var tangentUs = GbxItemUtils.GetTangentUs(vertexStream);
+                    vertexStream.Positions = vertexStream!.Positions!.Select(p => (position + Vector3.Transform(p, rotation)).ToVec3()).ToArray();
+                    vertexStream.Normals = vertexStream!.Normals!.Select(n => Vector3.Transform(n, rotation).ToVec3()).ToArray();
+                    var tangentUs = GbxItemUtils.GetTangentUs(vertexStream!);
                     if (tangentUs != null)
                         GbxItemUtils.SetTangentUs(vertexStream, tangentUs.Select(t => Vector3.Transform(t, rotation).ToVec3()).ToArray());
 
@@ -1957,17 +1980,17 @@ public class ItemCompiler
                 }
                 visual.BoundingBox = GbxItemUtils.BuildBoxAligned(visual);
             }
-            if (mesh.LightUserModels?.Length > 0)
+            if (mesh.LightUserModels?.Count > 0)
             {
                 var skel = mesh.Skel!;
                 var sockets = GbxItemUtils.ParseSockets(skel);
                 foreach (var s in sockets)
                 {
-                    var currentRot = s.U02.GetRotationQuaternion();
-                    var curPos = s.U02.GetPosition();
+                    var currentRot = s.LocalTransform.GetRotationQuaternion();
+                    var curPos = s.LocalTransform.GetPosition();
                     var newRot = currentRot * Quaternion.Inverse(rotation);
                     var newPos = position + Vector3.Transform(curPos, rotation);
-                    s.U02 = Iso4Utils.IsoFromTransform(newPos, newRot);
+                    s.LocalTransform = Iso4Utils.IsoFromTransform(newPos, newRot);
                 }
                 mesh.Skel = GbxItemUtils.CreateSkel(sockets);
             }
@@ -2002,14 +2025,14 @@ public class ItemCompiler
 
     void MergeStaticObject(CPlugStaticObjectModel target, CPlugStaticObjectModel staticObject)
     {
-        var targetMesh = target.GetMesh();
-        var staticObjectMesh = staticObject.GetMesh();
+        var targetMesh = target.Mesh;
+        var staticObjectMesh = staticObject.Mesh;
         if(targetMesh is null)
             target.Mesh = staticObject.Mesh;
         else if (staticObjectMesh is not null)
             MergeSolid2Model(targetMesh, staticObjectMesh);
-        var shape = target.GetShape();
-        var staticObjectShape = staticObject.GetShape();
+        var shape = target.Shape;
+        var staticObjectShape = staticObject.Shape;
         if (shape is null)
             target.Shape = staticObject.Shape;
         else if (staticObjectShape is not null)
@@ -2020,9 +2043,9 @@ public class ItemCompiler
         bool targetHasLod = target.LodMaxDistAtFov90?.Length > 0;
         target.LodMaxDistAtFov90 = targetHasLod ? target.LodMaxDistAtFov90 : solid2Model.LodMaxDistAtFov90;
 
-        var matIndexOffset = target.Materials?.Length ?? 0;
-        var visualIndexOffset = target.Visuals?.Length ?? 0;
-        foreach (var geom in solid2Model.ShadedGeoms)
+        var matIndexOffset = target.Materials?.Count ?? 0;
+        var visualIndexOffset = target.Visuals?.Count ?? 0;
+        foreach (var geom in solid2Model.ShadedGeoms ?? [])
         {
             geom.MaterialIndex += matIndexOffset;
             geom.VisualIndex += visualIndexOffset;
@@ -2063,7 +2086,7 @@ public class ItemCompiler
         }
         else
         {
-            int lightModelOffset = target.LightUserModels?.Length ?? 0;
+            int lightModelOffset = target.LightUserModels?.Count ?? 0;
             foreach (var l in solid2Model.LightInsts ?? [])
             {
                 l.ModelIndex += lightModelOffset;
@@ -2087,7 +2110,7 @@ public class ItemCompiler
             return;
         var vertexOffset = targetMesh.Vertices.Length;
         targetMesh.Vertices = [.. targetMesh.Vertices, .. surfaceMesh.Vertices];
-        targetMesh.Triangles = [.. targetMesh.Triangles, .. surfaceMesh.Triangles.Select(i => i with { Indices = i.Indices + new Int3(vertexOffset, vertexOffset,vertexOffset)})];
+        targetMesh.Triangles = [.. targetMesh.Triangles!, .. surfaceMesh.Triangles!.Select(i => i with { Indices = i.Indices + new Int3(vertexOffset, vertexOffset,vertexOffset)})];
     }
     ToolResult<None> TransformWaypointTrigger(NPlugTrigger_SWaypoint waypoint, Vector3 position, Quaternion rotation)
     {

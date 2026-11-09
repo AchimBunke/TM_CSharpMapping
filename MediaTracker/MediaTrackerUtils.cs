@@ -44,10 +44,8 @@ public static class MediaTrackerUtils
             Condition = original.Condition,
             Coords = original.Coords?.ToList() ?? [],
             ConditionValue = original.ConditionValue,
-            U01 = original.U01,
-            U02 = original.U02,
-            U03 = original.U03,
-            U04 = original.U04,
+            RefCoord = original.RefCoord,
+            RefDir = original.RefDir,
 
         };
         return cpy;
@@ -120,10 +118,8 @@ public static class MediaTrackerUtils
             Rotation = original.Rotation,
             Scale = original.Scale,
             Time = original.Time,
-            U01 = original.U01,
-            U02 = original.U02,
-            U03 = original.U03,
-            U04 = original.U04,
+            ColorBlend = original.ColorBlend,
+            Color = original.Color,
         };
         return cpy;
     }
@@ -250,9 +246,9 @@ public static class MediaTrackerUtils
             U04 = original.U04,
             U05 = original.U05,
             U06 = original.U06,
-            U07 = original.U07,
-            U08 = original.U08,
-            U09 = original.U09,
+            LegacyTargetSceneUId = original.LegacyTargetSceneUId,
+            LegacyAnchorSceneUId = original.LegacyAnchorSceneUId,
+            PssmDistScale = original.PssmDistScale,
             LeftTangent = original.LeftTangent is not null ? DeepCopyInterpVal(original.LeftTangent) : null,
             RightTangent = original.RightTangent is not null ? DeepCopyInterpVal(original.RightTangent) : null,
         };
@@ -267,7 +263,7 @@ public static class MediaTrackerUtils
             PitchYawRoll = original.PitchYawRoll,
             Position = original.Position,
             TargetPosition = original.TargetPosition,
-            U01 = original.U01,
+            PssmDistScale = original.PssmDistScale,
         };
         return cpy;
     }
@@ -400,10 +396,8 @@ public static class MediaTrackerUtils
     {
         var trigger = new Trigger()
         {
-            U01 = -1,
-            U02 = -1,
-            U03 = -1,
-            U04 = 0,
+            RefCoord = (-1,-1,-1),
+            RefDir = Direction.North,
             Coords = []
         };
         return trigger;

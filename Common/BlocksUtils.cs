@@ -69,7 +69,7 @@ public static class BlocksUtils
 
         triangleBlock.Chunks.Remove<CGameCtnMediaBlockTriangles3D.Chunk03029002>();
         var chunk = triangleBlock.CreateChunk<CGameCtnMediaBlockTriangles3D.Chunk03029002>();
-        chunk.U01 = 0;
+        triangleBlock.ClipEntId = 0;
 
         if (ensureVisibility)
         {

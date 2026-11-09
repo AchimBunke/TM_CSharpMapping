@@ -51,7 +51,7 @@ internal class FbxMaterialConverter
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMaterialConfig, matName);
         bool usingGameMaterial = _materialLibrary.Materials.TryGetValue(materialConfig.Link, out var dMaterial);
 
-        customMat.MaterialName = materialConfig.Name;
+        customMat.Name = materialConfig.Name;
         customMat.IsNatural = false;
         customMat.IsUsingGameMaterial = usingGameMaterial;
         if (usingGameMaterial)
@@ -80,13 +80,13 @@ internal class FbxMaterialConverter
             int g = BitConverter.SingleToInt32Bits(SrgbToLinear(color.G / 255.0f));
             int b = BitConverter.SingleToInt32Bits(SrgbToLinear(color.B / 255.0f));
 
-            customMat.Color = [r, g, b];
+            customMat.CstValues = [r, g, b];
             customMat.Csts = [
                 new CPlugMaterialUserInst.Cst()
                 {
-                    U01 = "TargetColor",
-                    U02 = "Real",
-                    U03 = 3,
+                    Name = "TargetColor",
+                    Type = "Real",
+                    ValueCount = 3,
                 }
                 ];
         }
@@ -149,7 +149,7 @@ internal class FbxMaterialConverter
     {
         var mat = new ImportedMaterial
         {
-            Name = string.IsNullOrWhiteSpace(materialUserInst.MaterialName) ? "UnnamedMaterial" : materialUserInst.MaterialName,
+            Name = string.IsNullOrWhiteSpace(materialUserInst.Name) ? "UnnamedMaterial" : materialUserInst.Name,
         };
 
         var matConfig = new MaterialConfig()
@@ -162,11 +162,11 @@ internal class FbxMaterialConverter
             BaseTexture = materialUserInst.BaseTexture,
             Model = materialUserInst.Model,
         };
-        if (materialUserInst.Color?.Length > 0)
+        if (materialUserInst.CstValues?.Length > 0)
         {
-            float r = LinearToSrgb(BitConverter.Int32BitsToSingle(materialUserInst.Color[0])) * 255f;
-            float g = LinearToSrgb(BitConverter.Int32BitsToSingle(materialUserInst.Color[1])) * 255f;
-            float b = LinearToSrgb(BitConverter.Int32BitsToSingle(materialUserInst.Color[2])) * 255f;
+            float r = LinearToSrgb(BitConverter.Int32BitsToSingle(materialUserInst.CstValues[0])) * 255f;
+            float g = LinearToSrgb(BitConverter.Int32BitsToSingle(materialUserInst.CstValues[1])) * 255f;
+            float b = LinearToSrgb(BitConverter.Int32BitsToSingle(materialUserInst.CstValues[2])) * 255f;
             matConfig.Color = Color.FromArgb((int)r, (int)g, (int)b);
         }
 

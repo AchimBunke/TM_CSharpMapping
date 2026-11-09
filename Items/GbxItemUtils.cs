@@ -1,4 +1,5 @@
 ﻿using GBX.NET;
+using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.Plug;
@@ -107,8 +108,8 @@ public static class GbxItemUtils
 
     public static string MaterialToName(CPlugMaterialUserInst mat)
     {
-        if (!string.IsNullOrWhiteSpace(mat.MaterialName))
-            return mat.MaterialName;
+        if (!string.IsNullOrWhiteSpace(mat.Name))
+            return mat.Name;
         if (!string.IsNullOrWhiteSpace(mat.Link))
             return string.Join("\\", mat.Link.Split('\\').TakeLast(2));
         return "Unknown Material";
@@ -117,7 +118,7 @@ public static class GbxItemUtils
     {
         var mat = new CPlugMaterialUserInst()
         {
-            MaterialName = "",
+            Name = "",
             Model = "",
             BaseTexture = "",
 
@@ -225,7 +226,6 @@ public static class GbxItemUtils
             Position = Vec3.Zero,
             Rotation = Quat.Identity,
             Params = null,
-            ModelFile = null,
             U01 = "",
         };
         return entRef;
@@ -317,8 +317,8 @@ public static class GbxItemUtils
         {
             Name = "",
             U04 = [],
-            U05 = 1,
-            U06 = 0,
+            AnimLodCount = 1,
+            AnimLodDistances = [],
             U07 = [],
             U08 = [],
         };
@@ -361,35 +361,22 @@ public static class GbxItemUtils
 
     public static Vec3[]? GetTangentUs(CPlugVertexStream vertexStream)
     {
-        var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
-        BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-        return (Vec3[]?)tangentUsField.GetValue(vertexStream);
-
+        return vertexStream.TangentUs;
     }
    
     public static void SetTangentUs(CPlugVertexStream vertexStream, Vec3[]? tangentUs)
     {
-        var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
-        BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-        tangentUsField.SetValue(vertexStream, tangentUs);
+        vertexStream.TangentUs = tangentUs;
     }
 
     public static Vec3[]? GetTangentVs(CPlugVertexStream vertexStream)
     {
-        var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
-        BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-        return (Vec3[]?)tangentVsField.GetValue(vertexStream);
+        return vertexStream.TangentVs;
 
     }
     public static void SetTangentVs(CPlugVertexStream vertexStream, Vec3[]? tangentVs)
     {
-        var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
-        BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-        tangentVsField.SetValue(vertexStream, tangentVs);
+       vertexStream.TangentVs = tangentVs;
     }
 
 
@@ -403,5 +390,15 @@ public static class GbxItemUtils
     {
         // Z-row is "forward" in this Iso4 convention (see GetYaw/GetPitch formulas)
         Console.WriteLine($"{label}: Forward=({iso.ZX:F4}, {iso.ZY:F4}, {iso.ZZ:F4})");
+    }
+
+
+    public static void MakePodium(CGameItemModel item)
+    {
+        var clipList = new CPlugMediaClipList();
+        clipList.CreateChunk<CPlugMediaClipList.Chunk09189000>();
+        item.PodiumClipList = clipList;
+        //TODO
+  
     }
 }
