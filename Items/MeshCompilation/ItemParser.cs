@@ -577,6 +577,19 @@ public class ItemParser
                 return ParseTriggerWaypoint(triggerWaypoint, entityRef, normalizedItem);
             case CPlugPrefab nestedPrefab:
                 return ParsePrefab(nestedPrefab, entityRef, normalizedItem, container);
+            case null:
+                {
+                    switch (entRef.Params)
+                    {
+                        case NPlugItemPlacement_SPlacement sPlacement:
+                            return ParseSPlacement(sPlacement, entityRef, normalizedItem);
+                        case NPlugItemPlacement_SPlacementGroup sPlacementGroup:
+                            return ParseSPlacementGroup(sPlacementGroup, entityRef, normalizedItem);
+                        default:
+                            return ToolResult.Success(nameof(ItemParser));
+                    }
+                }
+            
 
         }
         return ToolResult.Success(nameof(ItemParser));
@@ -813,6 +826,65 @@ public class ItemParser
 
         return ToolResult.Success(nameof(ItemParser));
     }
+
+    ToolResult<None> ParseSPlacement(NPlugItemPlacement_SPlacement sPlacement, EntityRef entityRef, NormalizedItem normalizedItem)
+    {
+        //already parsed this model, just reference it
+        if (parseContext.nodeRefTable.TryGetKey(sPlacement, out var key))
+        {
+            entityRef.ModelKey = key.GetHashCode();
+            return ToolResult.Success(nameof(ItemParser));
+        }
+
+        key = normalizedItem.ModelPool.Count.ToString();
+
+        // register this model in the nodeRefTable so we don't parse it again
+        parseContext.nodeRefTable.Register(key, sPlacement);
+
+        var model = new NormalizedModel()
+        {
+            Type = ModelType.ItemAttachmentPoint,
+        };
+        var itemAttachmentPoint = ItemPlacementUtils.ReadSPlacement(sPlacement, entityRef.Position, entityRef.Rotation);
+        model.AttachmentPoint = itemAttachmentPoint;
+
+        // add the model to the pool so it can be referenced by other entities
+        normalizedItem.ModelPool.Add(key.GetHashCode(), model);
+        // set the entityRef to reference this model
+        entityRef.ModelKey = key.GetHashCode();
+
+        return ToolResult.Success(nameof(ItemParser));
+    }
+
+    ToolResult<None> ParseSPlacementGroup(NPlugItemPlacement_SPlacementGroup sPlacementGroup, EntityRef entityRef, NormalizedItem normalizedItem)
+    {
+        //already parsed this model, just reference it
+        if (parseContext.nodeRefTable.TryGetKey(sPlacementGroup, out var key))
+        {
+            entityRef.ModelKey = key.GetHashCode();
+            return ToolResult.Success(nameof(ItemParser));
+        }
+
+        key = normalizedItem.ModelPool.Count.ToString();
+
+        // register this model in the nodeRefTable so we don't parse it again
+        parseContext.nodeRefTable.Register(key, sPlacementGroup);
+
+        var model = new NormalizedModel()
+        {
+            Type = ModelType.ItemAttachmentGroup,
+        };
+        var itemAttachmentPoints = ItemPlacementUtils.ReadSPlacementGroup(sPlacementGroup);
+        model.AttachmentGroup = itemAttachmentPoints;
+
+        // add the model to the pool so it can be referenced by other entities
+        normalizedItem.ModelPool.Add(key.GetHashCode(), model);
+        // set the entityRef to reference this model
+        entityRef.ModelKey = key.GetHashCode();
+
+        return ToolResult.Success(nameof(ItemParser));
+    }
+
 
     void ParseSpawnModel(CPlugSpawnModel spawnModel, EntRef entRef)
     {

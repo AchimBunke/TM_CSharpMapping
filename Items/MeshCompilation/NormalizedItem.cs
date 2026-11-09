@@ -78,6 +78,8 @@ public enum ModelType
     Trigger_Special,
     Trigger_Waypoint,
     Variant_List,
+    ItemAttachmentPoint,
+    ItemAttachmentGroup,
 }
 
 public enum ShapeRole
@@ -120,6 +122,13 @@ public class NormalizedModel
 
     // variant list properties
     public List<NormalizedVariant> Variants { get; set; } = [];
+
+
+    // single attachement point
+    public ItemAttachmentLocation? AttachmentPoint { get; set; } = null;
+
+    // attachment group
+    public List<ItemAttachmentLocation> AttachmentGroup { get; set; } = [];
 }
 
 public abstract class RefBase

@@ -1,11 +1,23 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Meta;
+using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.Plug;
 using System.Buffers.Binary;
+using System.Numerics;
+using static GBX.NET.Engines.Plug.CPlugPrefab;
 
 
 namespace TM_GenericMapping.Items;
 
+public record ItemAttachmentDefinition(List<Dictionary<string, string>> Options, int ILayout)
+{
+    public ItemAttachmentDefinition()
+        : this(new List<Dictionary<string, string>>(), 0)
+    {
+    }
+}
+public record ItemAttachmentLocation(Vector3 Position, Quaternion Rotation, ItemAttachmentDefinition Definition);
 public static class ItemPlacementUtils
 {
     /// <summary>
@@ -312,4 +324,74 @@ public static class ItemPlacementUtils
        => KeyValuePair.Create("Slot", slot.ToString());
     public static KeyValuePair<string, string> GetPlacementPilotSlot(int slot)
        => KeyValuePair.Create("PilotSlot", slot.ToString());
+
+
+
+
+    public static NPlugItemPlacement_SPlacementGroup CreateSPlacementGroup(ReadOnlySpan<ItemAttachmentLocation> placementLocations)
+    {
+        var sPlacementGroup = new NPlugItemPlacement_SPlacementGroup();
+        sPlacementGroup.Version = 1;
+
+        Dictionary<ItemAttachmentDefinition, short> definitionIndices = [];
+        List<TransQuat> placementTransforms = [];
+        List<short> placementIndices = [];
+        List<NPlugItemPlacement_SPlacement> placements = [];
+        for (int i = 0; i < placementLocations.Length; i++)
+        {
+            var placementLocation = placementLocations[i];
+            if(!definitionIndices.TryGetValue(placementLocation.Definition, out var index))
+            {
+                index = (short)definitionIndices.Count;
+                definitionIndices.Add(placementLocation.Definition, index);
+                placements.Add(CreateSPlacement(placementLocation, out _, out _));
+            }
+            placementTransforms.Add(new TransQuat(placementLocation.Position, placementLocation.Rotation));
+            placementIndices.Add(index);
+        }
+        sPlacementGroup.U02 = placementTransforms.ToArray();
+        sPlacementGroup.U01 = placementIndices.ToArray();
+
+        sPlacementGroup.Placements = placements.ToArray();
+        return sPlacementGroup;
+    }
+    public static NPlugItemPlacement_SPlacement CreateSPlacement(ItemAttachmentLocation attachmentLocation, out Vector3 position, out Quaternion rotation)
+    {
+        position = attachmentLocation.Position;
+        rotation = attachmentLocation.Rotation;
+        return new NPlugItemPlacement_SPlacement()
+        {
+            Version = 1,
+            ILayout = attachmentLocation.Definition.ILayout,
+            Options = attachmentLocation.Definition.Options.Select(kvp2 => new NPlugItemPlacement_SPlacementOption()
+            {
+                RequiredTags = new(kvp2)
+            }).ToArray()
+        };
+    }
+    public static ItemAttachmentLocation ReadSPlacement(NPlugItemPlacement_SPlacement sPlacement, Vector3 position, Quaternion rotation)
+    {
+        var options = sPlacement.Options?.Select(o => new Dictionary<string, string>(o.RequiredTags ?? []))?.ToList() ?? [];
+        return new ItemAttachmentLocation(position, rotation, new ItemAttachmentDefinition(options, sPlacement.ILayout));
+    }
+    public static List<ItemAttachmentLocation> ReadSPlacementGroup(NPlugItemPlacement_SPlacementGroup sPlacementGroup)
+    {
+        var placementLocations = new List<ItemAttachmentLocation>();
+        var placements = sPlacementGroup.Placements ?? [];
+        var transforms = sPlacementGroup.U02 ?? [];
+        var indices = sPlacementGroup.U01 ?? [];
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            var transform = transforms[i];
+            var index = indices[i];
+            if (index < 0 || index >= placements.Length)
+                throw new InvalidOperationException($"Invalid placement index {index} for SPlacementGroup with {placements.Length} placements.");
+            var placement = placements[index];
+            transform.Deconstruct(out var position, out var rotation);
+            var definition = ReadSPlacement(placement, position, rotation);
+            placementLocations.Add(definition);
+        }
+        return placementLocations;
+    }
+
 }

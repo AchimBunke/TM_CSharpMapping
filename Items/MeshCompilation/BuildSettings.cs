@@ -57,6 +57,7 @@ public sealed class ClusterSettings
     public Vector3? WaypointSpawnPosition { get; set; }
     public Quaternion? WaypointSpawnRotation { get; set; }
 
+
     /// <summary>
     /// if model is originally shared across multiple entities, this cluster is detached from the original entity and chnages will apply only to this node
     /// </summary>
@@ -108,7 +109,6 @@ public sealed class BuildSettings
                     WaypointSpawnPosition = entRef?.WaypointSpawnPosition,
                     WaypointSpawnRotation = entRef?.WaypointSpawnRotation,
                     GameplayMainDir = model.GameplayMainDir,
-
                 };
                 if (entRef?.RelativeMovingParentKey is int parentKey)
                     pendingParents.Add((clusterKey, parentKey));
@@ -150,6 +150,12 @@ public sealed class BuildSettings
                    
                     
                     settings.Instances[l.Id] = new InstanceSettings { Kind = RefKind.Light, ClusterKey = clusterKey, LightTypeOverride = lightType };
+                }
+
+                if (model.Type == ModelType.ItemAttachmentPoint && refBase is EntityRef er)
+                {
+                    er.Position = model.AttachmentPoint.Position;
+                    er.Rotation = model.AttachmentPoint.Rotation;
                 }
 
                 foreach (var child in model.Children)

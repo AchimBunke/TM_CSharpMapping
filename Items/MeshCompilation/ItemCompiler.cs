@@ -5,6 +5,7 @@ using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
 using GBX.NET.Inputs;
+using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
@@ -272,7 +273,17 @@ public class ItemCompiler
         var byCluster = instances.GroupBy(i => i.Settings.ClusterKey).ToList();
 
         if (byCluster.Count == 0)
-            return ToolResult.Success<CMwNod>(GbxItemUtils.CreateCPlugPrefab(), nameof(ItemCompiler)); // empty container, nothing enabled
+        {
+            switch (model.Type)
+            {
+                case ModelType.ItemAttachmentPoint:
+                    return GetOrCreateItemAttachmentPoint(item, model, settings, out modelParams).Cast<CMwNod>();
+                case ModelType.ItemAttachmentGroup:
+                    return GetOrCreateItemAttachmentGroup(item, model, settings, out modelParams).Cast<CMwNod>();
+                default:
+                    return ToolResult.Success<CMwNod>(GbxItemUtils.CreateCPlugPrefab(), nameof(ItemCompiler)); // empty container, nothing enabled
+            }
+        }
 
         if (byCluster.Count == 1)
             return BuildCluster(item, byCluster[0].Key, byCluster[0].ToList(), settings.Clusters[byCluster[0].Key], settings, out modelParams);
@@ -325,7 +336,7 @@ public class ItemCompiler
             case ModelType.Trigger_Waypoint:
                 return GetOrCreateTriggerWaypoint(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
             case ModelType.Trigger_Special:
-                return GetOrCreateTriggerSpecial(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
+                return GetOrCreateTriggerSpecial(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();       
             default:
                 return GetOrCreateStaticObjectModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
         }
@@ -954,6 +965,36 @@ public class ItemCompiler
 
         ItemTriggerEffectConverter.ConvertEffect(cluster.TriggerGameplayId!.Value, triggerSpecial);
         return ToolResult.Success(triggerSpecial, nameof(ItemCompiler));
+    }
+
+    ToolResult<object?> GetOrCreateItemAttachmentPoint(NormalizedItem item, NormalizedModel model, BuildSettings buildSettings, out SMetaPtr sPlacement)
+    {
+        var placementResult = CreateSPlacement(item, model, buildSettings);
+        sPlacement = placementResult.Value;
+        if (placementResult.IsFailure)
+            return ToolResult.Fail(placementResult);
+
+        return ToolResult.Success<object?>(null, nameof(ItemCompiler));
+    }
+    ToolResult<NPlugItemPlacement_SPlacement> CreateSPlacement(NormalizedItem item, NormalizedModel model, BuildSettings buildSettings)
+    {
+        var sPlacement = ItemPlacementUtils.CreateSPlacement(model.AttachmentPoint!, out var pos, out var rot);
+        return ToolResult.Success(sPlacement, nameof(ItemCompiler));
+    }
+
+    ToolResult<object?> GetOrCreateItemAttachmentGroup(NormalizedItem item, NormalizedModel model, BuildSettings buildSettings, out SMetaPtr sPlacementGroup)
+    {
+        var sPlacementGroupResult = CreateSPlacementGroup(item, model, buildSettings);
+        sPlacementGroup = sPlacementGroupResult.Value;
+        if (sPlacementGroupResult.IsFailure)
+            return ToolResult.Fail(sPlacementGroupResult);
+
+        return ToolResult.Success<object?>(null, nameof(ItemCompiler));
+    }
+    ToolResult<NPlugItemPlacement_SPlacementGroup> CreateSPlacementGroup(NormalizedItem item, NormalizedModel model, BuildSettings buildSettings)
+    {
+        var sPlacementGroup = ItemPlacementUtils.CreateSPlacementGroup(model.AttachmentGroup.ToArray());
+        return ToolResult.Success(sPlacementGroup, nameof(ItemCompiler));
     }
 
     object ResolveCollisionSource(NormalizedItem item, Guid id, RefKind kind) => kind switch
@@ -1808,6 +1849,10 @@ public class ItemCompiler
             if (cluster.Type == ModelType.Dynamic)
                 return false;
             else if (cluster.Type == ModelType.Trigger_Special)
+                return false;
+            else if (cluster.Type == ModelType.ItemAttachmentPoint)
+                return false;
+            else if (cluster.Type == ModelType.ItemAttachmentGroup)
                 return false;
             else if (cluster.Type == ModelType.Trigger_Waypoint)
                 triggerClusterCount++;
