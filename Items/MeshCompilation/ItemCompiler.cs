@@ -1842,7 +1842,9 @@ public class ItemCompiler
         HashSet<float> lodDistances = [];
 
         HashSet<Guid> checkedClusters = [];
-        
+
+        if (buildSettings.Clusters.Any(c => c.Value.Type == ModelType.ItemAttachmentGroup || c.Value.Type == ModelType.ItemAttachmentPoint))
+            return false;
         foreach(var instance in buildSettings.Instances)
         {
             if (!instance.Value.Enabled)
