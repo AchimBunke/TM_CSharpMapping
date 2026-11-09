@@ -155,6 +155,7 @@ public class ItemCompiler
 
             FinalizeKinematicConstraints(itemTemplate);
             FinalizeWaypoints(itemTemplate);
+            FinalizePodium(itemTemplate, item);
         }
 
         FillItemData(itemTemplate, item, buildSettings);
@@ -1179,7 +1180,7 @@ public class ItemCompiler
         }
     }
 
-    public void FinalizeWaypoints(CGameItemModel itemModel)
+    void FinalizeWaypoints(CGameItemModel itemModel)
     {
         if (compileContext.PendingWaypoints.Count == 0)
             return;
@@ -1230,6 +1231,13 @@ public class ItemCompiler
 
             prefabParent.Ents = [.. prefabParent.Ents, entRef];
         }
+    }
+
+    void FinalizePodium(CGameItemModel itemModel, NormalizedItem normalizedItem)
+    {
+        if(normalizedItem.ModelPool.Any(m=>m.Value.AttachmentPoint?.Definition.Options.Any(o=>o.TryGetValue("Type", out var type) && type == "Podium") == true) || 
+            normalizedItem.ModelPool.Any(m=>m.Value.AttachmentGroup.Any(g=>g.Definition.Options.Any(o=>o.TryGetValue("Type", out var type) && type == "Podium") == true)) == true)
+            ItemPodiumCreator.CreatePodiumClipList(itemModel);
     }
 
 

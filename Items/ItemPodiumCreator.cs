@@ -35,10 +35,15 @@ public class ItemPodiumCreator
         if (res.IsFailure)
             return res;
 
+        CreatePodiumClipList(itemModel);
+
+        return ToolResult.Success(itemModel, nameof(ItemPodiumCreator));
+    }
+
+    public static void CreatePodiumClipList(CGameItemModel itemModel)
+    {
         var podiumClipList = itemModel.PodiumClipList = new CPlugMediaClipList();
         podiumClipList.CreateChunk<CPlugMediaClipList.Chunk09189000>();
         podiumClipList.MediaClipFids = [];
-
-        return ToolResult.Success(itemModel, nameof(ItemPodiumCreator));
     }
 }

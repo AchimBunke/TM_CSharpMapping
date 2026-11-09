@@ -124,11 +124,22 @@ public class ItemConfig
 
     public List<ItemAttachmentLocation> CreateAttachmentLocations()
     {
-        return Attachments.Select(a => new ItemAttachmentLocation(a.Position, a.Rotation, new ItemAttachmentDefinition(
-            a.Definition.Options.Select(o => new Dictionary<string, string>(o)).ToList(),
-            ILayout: a.Definition.Layout)
-            )).ToList();
+        List<ItemAttachmentLocation> locations = new List<ItemAttachmentLocation>();
+        foreach(var attachment in Attachments)
+        {
+            var definition = new ItemAttachmentDefinition(
+                attachment.Options.Select(o => new Dictionary<string, string>(o)).ToList(), 
+                ILayout: attachment.Layout);
+            for (int i = 0; i < attachment.Positions.Length; i++)
+            {
+                var location = new ItemAttachmentLocation(attachment.Positions[i], attachment.Rotations[i], definition);
+                locations.Add(location);
+            }
+           
+        }
+        return locations;
     }
+
     static JsonSerializerOptions serializerOptions = new JsonSerializerOptions
     {
         WriteIndented = true,
@@ -198,22 +209,19 @@ public class ScaleConfig
 }
 public class AttachementConfig
 {
-    [JsonPropertyName("Position")]
-    public Vec3 Position { get; set; } = new Vec3(0, 0, 0);
-    [JsonPropertyName("Rotation")]
-    public Quaternion Rotation { get; set; } = Quaternion.Identity;
-
-    [JsonPropertyName("Definition")]
-    public AttachementDefinitionConfig Definition { get; set; } = new AttachementDefinitionConfig();
-}
-public class AttachementDefinitionConfig
-{
     [JsonPropertyName("Layout")]
     public int Layout { get; set; } = 0;
 
     [JsonPropertyName("Options")]
     public Dictionary<string, string>[] Options { get; set; } = [];
+
+    [JsonPropertyName("Positions")]
+    public Vec3[] Positions { get; set; } = [];
+
+    [JsonPropertyName("Rotations")]
+    public Quaternion[] Rotations { get; set; } = [];
 }
+
 
 
 public class Waypoint

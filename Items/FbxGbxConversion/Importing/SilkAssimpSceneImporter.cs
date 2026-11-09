@@ -4,6 +4,7 @@ using GBX.NET.Engines.Meta;
 using Silk.NET.Assimp;
 using Silk.NET.Core;
 using System.Drawing.Drawing2D;
+using System.Net.Mail;
 using System.Numerics;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
@@ -618,6 +619,16 @@ public class SilkAssimpSceneImporter : ISceneImporter
     public void FixConfigAxes(ItemConfig itemConfig)
     {
         static Vector3 Fix(Vector3 v) => Vector3.Transform(v, BlenderToTarget);
+       
+        static Quaternion FixQuaternion(Quaternion q)
+        {
+            Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(BlenderToTarget);
+            Quaternion matrixRotationInv = Quaternion.Conjugate(matrixRotation);
+            return Quaternion.Normalize(
+                Quaternion.Multiply(
+                Quaternion.Multiply(matrixRotationInv, q),
+                matrixRotation));
+        }
 
         if (itemConfig.Waypoint != null)
         {
@@ -638,13 +649,8 @@ public class SilkAssimpSceneImporter : ISceneImporter
                 // Same formula as before, only the matrix now comes from the shared config.
                 // (q' = C^-1 * q * C; the other order gave the right axis but the wrong sign
                 //  for your pipeline.)
-                Quaternion matrixRotation = Quaternion.CreateFromRotationMatrix(BlenderToTarget);
-                Quaternion matrixRotationInv = Quaternion.Conjugate(matrixRotation);
                 for (int i = 0; i < itemConfig.Placement.PivotRotations.Count; ++i)
-                    itemConfig.Placement.PivotRotations[i] = Quaternion.Normalize(
-                        Quaternion.Multiply(
-                            Quaternion.Multiply(matrixRotationInv, itemConfig.Placement.PivotRotations[i]),
-                            matrixRotation));
+                    itemConfig.Placement.PivotRotations[i] = FixQuaternion(itemConfig.Placement.PivotRotations[i]);
             }
             if (itemConfig.Placement.MagnetPositions != null)
             {
@@ -690,6 +696,13 @@ public class SilkAssimpSceneImporter : ISceneImporter
             // sign, any rotation angle/limits on it flip sign as well.
             var (newRotAxis, _) = MapAxis(km.RotAxis);
             km.RotAxis = newRotAxis;
+        }
+        foreach(var attachment in itemConfig.Attachments)
+        {
+            for (int i = 0; i < attachment.Positions.Length; ++i)
+                attachment.Positions[i] = Fix(attachment.Positions[i]);
+            for (int i = 0; i < attachment.Rotations.Length; ++i)
+                attachment.Rotations[i] = FixQuaternion(attachment.Rotations[i]);
         }
     }
 
