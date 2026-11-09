@@ -85,9 +85,10 @@ public static class ErrorCodes
         public const string UnsupportedSurfaceType = "ItemCompiler.UnsupportedSurfaceType";
         public const string MissingVisibleMesh = "ItemCompiler.MissingVisibleMesh";
     }
-    public static class ItemPodiumCreator
+    public static class ItemAttachmentCreator
     {
-        public const string UnsupportedEntityModel = "ItemPodiumCreator.UnsupportedEntityModel";
+        public const string UnsupportedEntityModel = "ItemAttachmentCreator.UnsupportedEntityModel";
+        public const string InvalidAttachmentLocations = "ItemAttachmentCreator.InvalidAttachmentLocations";
     }
 }
 

@@ -60,6 +60,9 @@ public class ItemConfig
         get; set;
     }
 
+    [JsonPropertyName("Attachments")]
+    public List<AttachementConfig> Attachments { get; set; } = new List<AttachementConfig>();
+
     [JsonPropertyName("Scale")]
     public float Scale { get; set; } = 1.0f;
 
@@ -119,6 +122,13 @@ public class ItemConfig
         JsonSerializer.Serialize(itemInfoStream, item, serializerOptions);
     }
 
+    public List<ItemAttachmentLocation> CreateAttachmentLocations()
+    {
+        return Attachments.Select(a => new ItemAttachmentLocation(a.Position, a.Rotation, new ItemAttachmentDefinition(
+            a.Definition.Options.Select(o => new Dictionary<string, string>(o)).ToList(),
+            ILayout: a.Definition.Layout)
+            )).ToList();
+    }
     static JsonSerializerOptions serializerOptions = new JsonSerializerOptions
     {
         WriteIndented = true,
@@ -186,6 +196,25 @@ public class ScaleConfig
     public bool ScaleLightmapSizeOverrides { get; set; } = true;
 
 }
+public class AttachementConfig
+{
+    [JsonPropertyName("Position")]
+    public Vec3 Position { get; set; } = new Vec3(0, 0, 0);
+    [JsonPropertyName("Rotation")]
+    public Quaternion Rotation { get; set; } = Quaternion.Identity;
+
+    [JsonPropertyName("Definition")]
+    public AttachementDefinitionConfig Definition { get; set; } = new AttachementDefinitionConfig();
+}
+public class AttachementDefinitionConfig
+{
+    [JsonPropertyName("Layout")]
+    public int Layout { get; set; } = 0;
+
+    [JsonPropertyName("Options")]
+    public Dictionary<string, string>[] Options { get; set; } = [];
+}
+
 
 public class Waypoint
 {

@@ -4,6 +4,7 @@ using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Messaging;
+using static GBX.NET.Engines.Plug.NPlugModelKit_SDataBase;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion;
 
@@ -214,6 +215,8 @@ public class FbxGbxConverter
 
         SetMetaData(item, config);
 
+        SetAttachmentLocations(item, rootModel, config);
+
         item.PlacementParam = CreatePlacementParameters(config);
 
         return ToolResult.Success(item, nameof(FbxGbxConverter));
@@ -320,6 +323,25 @@ public class FbxGbxConverter
         return PlacementConfig.ToPlacementParam(config.ItemConfig.Placement);
     }
 
+    void SetAttachmentLocations(NormalizedItem item, NormalizedModel containerModel, FbxGbxConversionInput config)
+    {
+        var attachmentLocations = config.ItemConfig.CreateAttachmentLocations();
+        if (attachmentLocations.Count > 0)
+        {
+            var attachmentModel = new NormalizedModel { Type = ModelType.ItemAttachmentGroup };
+            attachmentModel.AttachmentGroup = attachmentLocations;
+
+            int modelKey = item.ModelPool.Count == 0 ? 0 : item.ModelPool.Keys.Max() + 1;
+            item.ModelPool[modelKey] = attachmentModel;
+
+            containerModel.Children.Add(new EntityRef()
+            {
+                ModelKey = modelKey,
+                Position = Vector3.Zero,
+                Rotation = Quaternion.Identity,
+            });
+        }
+    }
     List<NodeDef> FilterAndApplySpecialMeshItems(ImportedScene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)
     {
         List<NodeDef> nodesWithMesh = new List<NodeDef>();
