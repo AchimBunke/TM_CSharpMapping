@@ -18,7 +18,7 @@ internal class MovingParameter
 }
 
 /// <summary>
-/// One node's contribution to a specific output group: which of the
+/// One node's
 /// group's LOD slots it fills. A node may appear in several assignments
 /// across different groups if its Lods span more than 4 entries.
 /// </summary>
@@ -56,10 +56,12 @@ internal class NodeDefGroup
     public bool? WaypointNoRespawn { get; set; }
     public Vector3? AnchorPosition { get; set; }
     public string? RotationAnchorNode{ get; set; } = null;
+
+    /// <summary>Global rotation of the RotationAnchorNode. The moving group's constraint axes follow this rotation.</summary>
+    public Quaternion? AnchorRotation { get; set; }
     public CPlugSpawnModelHolder? WaypointSpawnModel { get; set; }
 
-    public List<NodeLodAssignment> Nodes { get; set; } = new();
-}
+    public List<NodeLodAssignment> Nodes { get; set; } = new();}
 
 /// <summary>Simple boxed holder so we can assign the socket spawn model after grouping without a circular dependency.</summary>
 internal class CPlugSpawnModelHolder

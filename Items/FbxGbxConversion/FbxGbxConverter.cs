@@ -97,7 +97,7 @@ public class FbxGbxConverter
             var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
             var scene = importer.Import(conversionInput.Fbx);
             importer.FixConfigAxes(conversionInput.ItemConfig);
-            FixConfigScale(conversionInput.ItemConfig);
+
             var res = ResolveInstances(scene, configIndex);
             if (res.IsFailure)
                 return ToolResult.Fail(res);
@@ -113,11 +113,12 @@ public class FbxGbxConverter
     ToolResult<NormalizedItem> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config, ConfigIndex configIndex)
     {
         var item = new NormalizedItem();
+        var reuseCache = new MeshReuseCache();
         var variants = config.ItemConfig.Variants;
 
         if (variants.Count == 0)
         {
-            var containerResult = BuildContainerModel(item, scene, config, configIndex, null, 0);
+            var containerResult = BuildContainerModel(item, scene, config, configIndex, null, 0, reuseCache);
             if (containerResult.IsFailure)
                 return ToolResult.Fail(containerResult);
             item.Model = containerResult.Value;
@@ -135,7 +136,7 @@ public class FbxGbxConverter
             foreach (var variantConfig in variants)
             {
                 int containerKey = item.ModelPool.Keys.Max() + 1;
-                var containerResult = BuildContainerModel(item, scene, config, configIndex, variantConfig.Name, containerKey);
+                var containerResult = BuildContainerModel(item, scene, config, configIndex, variantConfig.Name, containerKey, reuseCache);
                 if (containerResult.IsFailure)
                     return ToolResult.Fail(containerResult);
 
@@ -161,7 +162,7 @@ public class FbxGbxConverter
     /// Builds a container model (registered at <paramref name="rootKey"/>) holding all groups of the scene.
     /// If <paramref name="variant"/> is set, only meshes/lights without a Variant or with a matching Variant are included.
     /// </summary>
-    ToolResult<NormalizedModel> BuildContainerModel(NormalizedItem item, ImportedScene scene, FbxGbxConversionInput config, ConfigIndex configIndex, string? variant, int rootKey)
+    ToolResult<NormalizedModel> BuildContainerModel(NormalizedItem item, ImportedScene scene, FbxGbxConversionInput config, ConfigIndex configIndex, string? variant, int rootKey, MeshReuseCache reuseCache)
     {
         var res = ExtractAndGroupFbxData(scene, config, configIndex, variant,
             out var groups, 
@@ -254,7 +255,7 @@ public class FbxGbxConverter
         }
 
         var meshResult = FbxMeshConverter.ExtractMeshes(scene, groups, materials, nodes, config, item,
-            groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
+            groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation, reuseCache);
         if (meshResult.IsFailure)
             return ToolResult.Fail(meshResult);
 

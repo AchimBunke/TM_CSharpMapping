@@ -23,6 +23,11 @@ internal class SocketDef
     public CPlugSpawnModel? WaypointSpawnModel { get; set; }
 }
 
+internal class MeshReuseCache
+{
+    internal Dictionary<(int SourceMeshIndex, FbxMeshConverter.QuantizedMatrix LocalTransform, CPlugMaterialUserInst? Material), int> Entries { get; } = new();
+}
+
 internal class FbxMeshConverter
 {
     public static ToolResult<List<NodeDef>> ExtractMeshNodes(ImportedScene scene, ConfigIndex configIndex)
@@ -107,7 +112,12 @@ internal class FbxMeshConverter
                 ? null
                 : group.RelativeMovingParentGroupId;
             if (!string.IsNullOrEmpty(group.RotationAnchorNode))
-                group.AnchorPosition = allSceneNodes.FirstOrDefault(n => n.Name == group.RotationAnchorNode)!.GlobalTransform.Translation;
+            {
+                var anchorTransform = allSceneNodes.FirstOrDefault(n => n.Name == group.RotationAnchorNode)!.GlobalTransform;
+                Matrix4x4.Decompose(anchorTransform, out _, out var anchorRotation, out var anchorTranslation);
+                group.AnchorPosition = anchorTranslation;
+                group.AnchorRotation = anchorRotation;
+            }
         }
 
         if (sockets.Count > 0)
@@ -134,7 +144,15 @@ internal class FbxMeshConverter
     public static (System.Numerics.Vector3 Position, System.Numerics.Quaternion Rotation) ComputeGroupAnchor(NodeDefGroup group)
     {
         if (group.AnchorPosition.HasValue)
-            return (group.AnchorPosition.Value, System.Numerics.Quaternion.Identity);
+            return (group.AnchorPosition.Value, group.AnchorRotation ?? System.Numerics.Quaternion.Identity);
+
+        // Groups of a configured moving group must not inherit a mesh node's rotation: the entity rotation
+        // (and with it the direction of the constraint axes) is only controlled via the rotation anchor node.
+        if (!string.IsNullOrEmpty(group.OriginalGroupId) && group.Nodes.Count > 0)
+        {
+            Matrix4x4.Decompose(group.Nodes[0].NodeDef.GlobalTransform, out _, out _, out var movingTranslation);
+            return (movingTranslation, System.Numerics.Quaternion.Identity);
+        }
 
         if (group.Nodes.Count == 0)
             return (Vector3.Zero, System.Numerics.Quaternion.Identity);
@@ -160,7 +178,8 @@ internal class FbxMeshConverter
         NormalizedItem item,
         Dictionary<int, int> groupIndexToModelKey,
         Dictionary<int, System.Numerics.Vector3> groupIndexToAnchorPosition,
-        Dictionary<int, System.Numerics.Quaternion> groupIndexToAnchorRotation)
+        Dictionary<int, System.Numerics.Quaternion> groupIndexToAnchorRotation,
+        MeshReuseCache? reuseCache = null)
     {
         // Maps a source mesh (by scene mesh index + resulting local transform + material) to an already
         // created MeshPool entry, so that meshes shared between multiple nodes (or multiple mesh slots of
@@ -172,7 +191,8 @@ internal class FbxMeshConverter
         // position/rotation (and therefore should produce mathematically identical local geometry once
         // anchor-relative) can still differ by floating-point rounding noise. Comparing raw bits would make
         // the cache miss in that case and defeat mesh reuse/instancing.
-        Dictionary<(int SourceMeshIndex, QuantizedMatrix LocalTransform, CPlugMaterialUserInst? Material), int> meshCache = new();
+        // Pass one MeshReuseCache for the whole item so meshes are also shared between variants.
+        var meshCache = (reuseCache ?? new MeshReuseCache()).Entries;
         Dictionary<int, List<(int MeshKey, NodeLodAssignment NodeAssignment)>> meshRefsByGroup = new();
 
         foreach(var group in groups)
@@ -528,7 +548,7 @@ internal class FbxMeshConverter
     /// transforms) are mathematically equal for repeated instances of the same shape but can differ by tiny
     /// floating-point rounding noise, which would otherwise defeat exact-equality-based mesh reuse.
     /// </summary>
-    private readonly record struct QuantizedMatrix(
+    internal readonly record struct QuantizedMatrix(
         long M11, long M12, long M13, long M14,
         long M21, long M22, long M23, long M24,
         long M31, long M32, long M33, long M34,
