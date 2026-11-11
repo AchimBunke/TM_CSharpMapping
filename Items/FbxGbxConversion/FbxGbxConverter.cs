@@ -562,29 +562,54 @@ public class FbxGbxConverter
             return ToolResult.Fail(sceneResult);
         var scene = sceneResult.Value;
 
-        var res = ExtractAndGroupFbxData(scene, conversionInput, configIndex, null,
-              out var groups,
-              out var lights,
-              out var sockets,
-              out var nodes,
-              out var materials);
-        if (res.IsFailure)
-            return ToolResult.Fail(res);
+        FbxGbxPlanGroup[] PlanGroups(string? variant, out ToolResult<None>? failure)
+        {
+            failure = null;
+            var res = ExtractAndGroupFbxData(scene, conversionInput, configIndex, variant,
+                  out var groups,
+                  out _,
+                  out _,
+                  out _,
+                  out _);
+            if (res.IsFailure)
+            {
+                failure = res;
+                return [];
+            }
 
-        //groups = groups.OrderBy(g => g.GroupKey, StringComparer.Ordinal).ToList();
+            return groups.Select(g => new FbxGbxPlanGroup(
+                    g.GroupKey,
+                    g.Type.ToString(),
+                    PlannedLightmapSize(g),
+                    g.LodDistances.ToArray(),
+                    g.Nodes.Select(a => new FbxGbxPlanNode(
+                        a.NodeDef.Node.Name,
+                        configIndex.OriginalNodes.TryGetValue(a.NodeDef.Node.Name, out var originalName) ? originalName : null,
+                        a.LodIndices.ToArray())).ToArray()
+                )).ToArray();
+        }
 
-        var report = new FbxGbxPlanReport(1, groups.Select(g => new FbxGbxPlanGroup(
-                g.GroupKey,
-                g.Type.ToString(),
-                PlannedLightmapSize(g),
-                g.LodDistances.ToArray(),
-                g.Nodes.Select(a => new FbxGbxPlanNode(
-                    a.NodeDef.Node.Name,
-                    configIndex.OriginalNodes.TryGetValue(a.NodeDef.Node.Name, out var originalName) ? originalName : null,
-                    a.LodIndices.ToArray())).ToArray()
-            )).ToArray());
+        var variants = conversionInput.ItemConfig.Variants;
+        var variantNames = variants.Count == 0 ? new List<string?> { null } : variants.Select(v => (string?)v.Name).ToList();
 
-        return ToolResult.Success(report, nameof(FbxGbxConverter));
+        var allGroups = new List<FbxGbxPlanGroup>();
+        var seen = new HashSet<string>();
+        foreach (var variantName in variantNames)
+        {
+            var groups = PlanGroups(variantName, out var failure);
+            if (failure is not null)
+                return ToolResult.Fail(failure);
+
+            // groups shared between variants (identical key and content) are listed once
+            foreach (var group in groups)
+            {
+                var signature = $"{group.Key}|{group.Type}|{string.Join(",", group.LodDistances)}|{string.Join(";", group.Nodes.Select(n => $"{n.Name}:{string.Join(",", n.LodIndices)}"))}";
+                if (seen.Add(signature))
+                    allGroups.Add(group);
+            }
+        }
+
+        return ToolResult.Success(new FbxGbxPlanReport(1, allGroups.ToArray()), nameof(FbxGbxConverter));
     }
 
     float? PlannedLightmapSize(NodeDefGroup group)
