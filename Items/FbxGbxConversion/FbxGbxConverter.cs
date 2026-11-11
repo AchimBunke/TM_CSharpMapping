@@ -113,8 +113,57 @@ public class FbxGbxConverter
     ToolResult<NormalizedItem> ConvertToNormalizedItem(ImportedScene scene, FbxGbxConversionInput config, ConfigIndex configIndex)
     {
         var item = new NormalizedItem();
+        var variants = config.ItemConfig.Variants;
 
-        var res = ExtractAndGroupFbxData(scene, config, configIndex,
+        if (variants.Count == 0)
+        {
+            var containerResult = BuildContainerModel(item, scene, config, configIndex, null, 0);
+            if (containerResult.IsFailure)
+                return ToolResult.Fail(containerResult);
+            item.Model = containerResult.Value;
+        }
+        else
+        {
+            var duplicate = variants.GroupBy(v => v.Name).FirstOrDefault(g => g.Count() > 1);
+            if (duplicate is not null)
+                return ToolResult.Fail<NormalizedItem>(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMeshConfig, $"Duplicate variant name '{duplicate.Key}'.");
+
+            var variantList = new NormalizedModel { Type = ModelType.Variant_List };
+            item.ModelPool[0] = variantList;
+            item.Model = variantList;
+
+            foreach (var variantConfig in variants)
+            {
+                int containerKey = item.ModelPool.Keys.Max() + 1;
+                var containerResult = BuildContainerModel(item, scene, config, configIndex, variantConfig.Name, containerKey);
+                if (containerResult.IsFailure)
+                    return ToolResult.Fail(containerResult);
+
+                variantList.Variants.Add(new NormalizedVariant
+                {
+                    ModelKey = containerKey,
+                    Tags = new Dictionary<string, string>(variantConfig.Tags),
+                    HiddenInManualCycle = variantConfig.HiddenInManualCycle,
+                });
+            }
+        }
+
+        SetMetaData(item, config);
+        item.PlacementParam = CreatePlacementParameters(config);
+
+        return ToolResult.Success(item, nameof(FbxGbxConverter));
+    }
+
+    static bool IsInVariant(string? elementVariant, string? variant)
+        => variant is null || string.IsNullOrEmpty(elementVariant) || elementVariant == variant;
+
+    /// <summary>
+    /// Builds a container model (registered at <paramref name="rootKey"/>) holding all groups of the scene.
+    /// If <paramref name="variant"/> is set, only meshes/lights without a Variant or with a matching Variant are included.
+    /// </summary>
+    ToolResult<NormalizedModel> BuildContainerModel(NormalizedItem item, ImportedScene scene, FbxGbxConversionInput config, ConfigIndex configIndex, string? variant, int rootKey)
+    {
+        var res = ExtractAndGroupFbxData(scene, config, configIndex, variant,
             out var groups, 
             out var lights, 
             out var sockets, 
@@ -125,9 +174,7 @@ public class FbxGbxConverter
 
         // Root container model that references every group as a child EntityRef.
         var rootModel = new NormalizedModel { Type = ModelType.Container };
-        int rootKey = 0;
         item.ModelPool[rootKey] = rootModel;
-        item.Model = rootModel;
 
         var groupIndexToModelKey = new Dictionary<int, int>();
         var groupIndexToAnchorPosition = new Dictionary<int, Vector3>();
@@ -213,19 +260,16 @@ public class FbxGbxConverter
 
         AssignLightsToGroups(item, lights, groups, groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
 
-        SetMetaData(item, config);
+        SetAttachmentLocations(item, rootModel, config, variant);
 
-        SetAttachmentLocations(item, rootModel, config);
-
-        item.PlacementParam = CreatePlacementParameters(config);
-
-        return ToolResult.Success(item, nameof(FbxGbxConverter));
+        return ToolResult.Success(rootModel, nameof(FbxGbxConverter));
     }
 
     ToolResult<None> ExtractAndGroupFbxData(
         ImportedScene scene,
         FbxGbxConversionInput config,
         ConfigIndex configIndex,
+        string? variant,
         out List<NodeDefGroup> groups,
         out List<LightDef> lights,
         out List<SocketDef> sockets,
@@ -260,9 +304,10 @@ public class FbxGbxConverter
         var lightResults = FbxLightConverter.ExtractLights(scene, configIndex);
         if (lightResults.IsFailure)
             return ToolResult.Fail(lightResults);
-        lights = lightResults.Value;
+        lights = lightResults.Value.Where(l => IsInVariant(l.LightConfig.Variant, variant)).ToList();
 
-        nodes = FilterAndApplySpecialMeshItems(scene, meshNodeResults.Value, materialResults.Value);
+        var variantNodes = meshNodeResults.Value.Where(n => IsInVariant(n.NodeConfig.Variant, variant)).ToList();
+        nodes = FilterAndApplySpecialMeshItems(scene, variantNodes, materialResults.Value);
 
         var groupResults = FbxMeshConverter.GroupNodes(nodes, allSceneNodes, socketResults.Value, configIndex);
         if (groupResults.IsFailure)
@@ -326,9 +371,9 @@ public class FbxGbxConverter
         return PlacementConfig.ToPlacementParam(config.ItemConfig.Placement);
     }
 
-    void SetAttachmentLocations(NormalizedItem item, NormalizedModel containerModel, FbxGbxConversionInput config)
+    void SetAttachmentLocations(NormalizedItem item, NormalizedModel containerModel, FbxGbxConversionInput config, string? variant)
     {
-        var attachmentLocations = config.ItemConfig.CreateAttachmentLocations();
+        var attachmentLocations = config.ItemConfig.CreateAttachmentLocations(variant);
         if (attachmentLocations.Count > 0)
         {
             var attachmentModel = new NormalizedModel { Type = ModelType.ItemAttachmentGroup };
@@ -472,6 +517,8 @@ public class FbxGbxConverter
                     // TODO: overrides
                     newConfig.Lods = instanceDef.Lods;
                     newConfig.Group = instanceDef.Name;
+                    if (!string.IsNullOrEmpty(instanceDef.Variant))
+                        newConfig.Variant = instanceDef.Variant;
                     if(!string.IsNullOrEmpty(instanceDef.MovingGroup))
                         newConfig.MovingGroup = instanceDef.MovingGroup;
                     if(!string.IsNullOrEmpty(newConfig.MovingGroup))
@@ -514,7 +561,7 @@ public class FbxGbxConverter
             return ToolResult.Fail(sceneResult);
         var scene = sceneResult.Value;
 
-        var res = ExtractAndGroupFbxData(scene, conversionInput, configIndex,
+        var res = ExtractAndGroupFbxData(scene, conversionInput, configIndex, null,
               out var groups,
               out var lights,
               out var sockets,

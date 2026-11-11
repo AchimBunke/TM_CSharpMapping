@@ -1846,6 +1846,8 @@ public class ItemCompiler
 
         if (buildSettings.Clusters.Any(c => c.Value.Type == ModelType.ItemAttachmentGroup || c.Value.Type == ModelType.ItemAttachmentPoint))
             return false;
+        if(buildSettings.Clusters.Any(c=>c.Value.Type == ModelType.Variant_List))
+            return false;
         foreach(var instance in buildSettings.Instances)
         {
             if (!instance.Value.Enabled)

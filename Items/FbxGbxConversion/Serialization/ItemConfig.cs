@@ -86,6 +86,10 @@ public class ItemConfig
     [JsonPropertyName("MovingGroups")]
     public List<MovingGroupConfig> MovingGroups { get; set; } = new List<MovingGroupConfig>();
 
+    /// <summary>Optional. If non-empty the item becomes a variant item with one variant per entry.</summary>
+    [JsonPropertyName("Variants")]
+    public List<VariantItemConfig> Variants { get; set; } = new List<VariantItemConfig>();
+
     [JsonPropertyName("Instances")]
     public List<InstanceConfig> Instances { get; set; } = new List<InstanceConfig>();
     [JsonPropertyName("InstanceCollections")]
@@ -127,17 +131,20 @@ public class ItemConfig
         JsonSerializer.Serialize(itemInfoStream, item, serializerOptions);
     }
 
-    public List<ItemAttachmentLocation> CreateAttachmentLocations()
+    public List<ItemAttachmentLocation> CreateAttachmentLocations(string? variant = null)
     {
         List<ItemAttachmentLocation> locations = new List<ItemAttachmentLocation>();
         foreach(var attachment in Attachments)
         {
+            if (variant is not null && !string.IsNullOrEmpty(attachment.Variant) && attachment.Variant != variant)
+                continue;
             var definition = new ItemAttachmentDefinition(
                 attachment.Options.Select(o => new Dictionary<string, string>(o)).ToList(), 
                 ILayout: attachment.Layout);
             for (int i = 0; i < attachment.Positions.Length; i++)
             {
-                var location = new ItemAttachmentLocation(attachment.Positions[i], attachment.Rotations[i], definition);
+                var quat = Quaternion.CreateFromYawPitchRoll(attachment.Rotations[i].X * MathUtils.Deg2Rad, attachment.Rotations[i].Y * MathUtils.Deg2Rad, attachment.Rotations[i].Z * MathUtils.Deg2Rad);
+                var location = new ItemAttachmentLocation(attachment.Positions[i], quat, definition);
                 locations.Add(location);
             }
            
@@ -177,6 +184,10 @@ public class InstanceConfig
     [JsonPropertyName("MovingGroup")]
     public string? MovingGroup { get; set; } = null;
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Variant")]
+    public string? Variant { get; set; } = null;
+
     [JsonPropertyName("Lods")]
     public List<int> Lods { get; set; } = [];
 }
@@ -214,6 +225,11 @@ public class ScaleConfig
 }
 public class AttachementConfig
 {
+    /// <summary>Name of the variant (see ItemConfig.Variants) this attachment belongs to. Empty = part of every variant.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Variant")]
+    public string? Variant { get; set; } = null;
+
     [JsonPropertyName("Layout")]
     public int Layout { get; set; } = 0;
 
@@ -224,7 +240,7 @@ public class AttachementConfig
     public Vec3[] Positions { get; set; } = [];
 
     [JsonPropertyName("Rotations")]
-    public Quaternion[] Rotations { get; set; } = [];
+    public Vec3[] Rotations { get; set; } = [];
 }
 
 
@@ -566,6 +582,10 @@ public class LightConfig
     {
         get; set;
     } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Variant")]
+    public string? Variant { get; set; } = null;
 
     [JsonPropertyName("Type")]
     [JsonConverter(typeof(JsonStringEnumConverter))]

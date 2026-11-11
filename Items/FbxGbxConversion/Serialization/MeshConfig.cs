@@ -61,6 +61,11 @@ public class MeshConfig
     [JsonPropertyName("LightmapSize")]
     public float? LightmapSize { get; set; } = null;
 
+    /// <summary>Name of the variant (see ItemConfig.Variants) this mesh belongs to. Empty = part of every variant.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Variant")]
+    public string? Variant { get; set; } = null;
+
     [JsonPropertyName("Group")]
     public string? Group { get; set; } = string.Empty;
 
@@ -80,6 +85,7 @@ public class MeshConfig
         GameplayMainDir = this.GameplayMainDir,
         MovingGroup = this.MovingGroup,
         LightmapSize = this.LightmapSize,
+        Variant = this.Variant,
         Lods = [.. this.Lods]
     };
 }

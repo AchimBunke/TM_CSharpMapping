@@ -702,7 +702,10 @@ public class SilkAssimpSceneImporter : ISceneImporter
             for (int i = 0; i < attachment.Positions.Length; ++i)
                 attachment.Positions[i] = Fix(attachment.Positions[i]);
             for (int i = 0; i < attachment.Rotations.Length; ++i)
-                attachment.Rotations[i] = FixQuaternion(attachment.Rotations[i]);
+                attachment.Rotations[i] = new Vec3(
+                        attachment.Rotations[i].Z,
+                        attachment.Rotations[i].X,
+                        -attachment.Rotations[i].Y);
         }
     }
 
