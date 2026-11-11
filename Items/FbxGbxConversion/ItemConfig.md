@@ -31,6 +31,7 @@ The root object of the configuration file.
 | `Instances`             | `InstanceConfig[]`         | `[]`             | Configuration for used collection_instances, empties                          |
 | `InstanceCollections`   | `InstanceCollectionConfig[]`         | `[]`             | Configuration for collection_instances                         |
 | `LodParameters`         | `LodParameters?`       | `null`           | Optional LOD configuration. Required if meshes define LODs.                                             |
+| `Variants`             | `VariantItemConfig?`           | `[]`  | Configuration for variants used in this item. Name identifier for each variant.            |
 
 ---
 
@@ -109,7 +110,16 @@ Defines how multiple items are distributed within a placement patch.
 
 
 ---
+## `VariantItemConfig` 
+Defines configuration for variants used in this item.
 
+| Field        | Type          | Default | Description                                                                                 |
+| ------------ | ------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `Name`       | `string`      | `""`    | Name of the variant.                                    |
+| `Tags`       | `Dictionary<string,string>`      | `[]`    | Options which define where this variant is applicable. |
+| `HiddenInManualCycle`      | `bool`      | `false`  | is this variant hidden during cycling of variants.                                               |
+
+---
 
 ## `MaterialConfig`
 
@@ -175,6 +185,7 @@ Defines conversion behavior for an individual mesh.
 | `Lods`          | `int[]`             | `[]`    | LOD indices pointing to the global MaxLodDistances.                             |
 | `GameplayMainDir`| `Vec3?`            | `null`  | Optional main direction vector for trigger and effect purposes.                                 |
 | `LightmapSize`  | `float?`              | `null`  | Optional override size for the mesh. Multiple meshes merged together will use the max value of all lightmap sizes (also includes generated lightmap sizes) |
+| `Variant`   | `string?`           | `null`  | Optional variant identifier for meshes that belong to a specific variant.            |
 
 ### `Lods`
 
@@ -282,6 +293,8 @@ Defines a light generated as part of the GBX item.
 | `SpotOuterAngle`      | `float`     | `60`    | Outer cone angle for spot lights.      |
 | `SpotEmissionRadius`   | `float`     | `0`     | Radius of the spot emission area. |
 | `SpotEmissionLength`   | `float`     | `0`     | Length of the spot emission area. |
+| `Variant`   | `string?`           | `null`  | Optional variant identifier for lights that belong to a specific variant.            |
+
 
 Fields specific to point or spot lights only have an effect when the corresponding `Type` is used.
 
@@ -413,6 +426,10 @@ Defines configuration for a collection instance used on an empty node.
 | ------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------- |
 | `Name` | `string`  | - | Name of the empty node that defines the collection instance.                                                |
 | `Collection` | `string`  | - | Name of the collection instance configuration.                                                |
+| `MovingGroup`   | `string?`           | `null`  | Moving group this instance belongs to.            |
+| `Lods`   | `int[]`           | `[]`  | Lod levels for this instance.            |
+| `Variant`   | `string?`           | `null`  | Optional variant identifier for instances that belong to a specific variant.            |
+
 
 ---
 
