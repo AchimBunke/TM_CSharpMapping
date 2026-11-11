@@ -317,6 +317,9 @@ public class FbxGbxConverter
         item.Name = !string.IsNullOrWhiteSpace(config.ItemConfig.Name) ? config.ItemConfig.Name! : "Unnamed Item";
         item.Description = !string.IsNullOrWhiteSpace(config.ItemConfig.Description) ? config.ItemConfig.Description! : "No Description";
         item.WaypointType = config.ItemConfig.Waypoint?.Type ?? GBX.NET.Engines.GameData.CGameItemModel.EWaypointType.None;
+
+        if(config.ItemConfig.DisableAutoCreateSound.HasValue && config.ItemConfig.DisableAutoCreateSound.Value)
+            item.ItemFlags |= CGameItemModel.EItemFlags.DisableAutoCreateSound;
     }
     CGameItemPlacementParam CreatePlacementParameters(FbxGbxConversionInput config)
     {

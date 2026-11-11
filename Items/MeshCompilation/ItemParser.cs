@@ -82,6 +82,7 @@ public class ItemParser
         normalizedItem.Name = item.Name ?? string.Empty;
         normalizedItem.Description = item.Description ?? string.Empty;
         normalizedItem.WaypointType = item.WaypointType;
+        normalizedItem.ItemFlags = item.ItemFlags;
     }
 
     class MaterialBucket

@@ -1367,6 +1367,7 @@ public class ItemCompiler
         ChunkSafeItemOperations.SetIcon(item, normalizedItem.Icon, normalizedItem.IconWebP);
         item.Description = string.IsNullOrWhiteSpace(normalizedItem.Description) ? "No Description" : normalizedItem.Description;
         item.Ident = _ident;
+        item.ItemFlags = normalizedItem.ItemFlags;
         item.DefaultPlacement = normalizedItem.PlacementParam ?? GbxTemplateLibrary.CreatePlacementParamTemplate();
         if (item.EntityModel is CPlugPrefab prefab)
             prefab.FileWriteTime = DateTime.Now;

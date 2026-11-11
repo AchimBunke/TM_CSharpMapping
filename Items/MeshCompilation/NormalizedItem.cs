@@ -18,6 +18,8 @@ public class NormalizedItem
     public string Name { get; set; } = string.Empty;
     public EWaypointType WaypointType { get; set; } = EWaypointType.None;
 
+    public EItemFlags ItemFlags { get; set; } = EItemFlags.None;
+
 
     public Dictionary<int, NormalizedMesh> MeshPool { get; set; } = new();
     public Dictionary<int, NormalizedShape> ShapePool { get; set; } = new();

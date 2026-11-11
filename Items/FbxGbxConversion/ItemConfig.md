@@ -23,6 +23,7 @@ The root object of the configuration file.
 | `Waypoint`              | `Waypoint?`            | `null`           | Optional waypoint configuration.                                        |
 | `Placement`             | `PlacementParameters?` | `null`           | Optional parameters controlling item placement in the editor.           |
 | `Scale`                 | `float`                | `1.0`            | Global scale applied to the item.                                       |
+| `DisableAutoCreateSound` | `bool?`                | `null`            | Prevents the item from automatically creating sound.                                       |
 | `Materials`               | `MaterialConfig[]`     | `[]`             | Material definitions and their corresponding FBX/GBX material mappings. Required for each used material |
 | `Meshes`                  | `MeshConfig[]`         | `[]`             | Configuration for individual nodes in the FBX.                          |
 | `MovingGroups`          | `MovingGroupConfig[]`  | `[]`             | Moving-group configurations. |

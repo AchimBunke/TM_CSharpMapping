@@ -69,6 +69,11 @@ public class ItemConfig
     [JsonPropertyName("ScaleOptions")]
     public ScaleConfig? ScaleOptions { get; set; }
 
+
+    [JsonPropertyName("DisableAutoCreateSound")]
+    public bool? DisableAutoCreateSound { get; set; } = null;
+
+
     [JsonPropertyName("Materials")]
     public List<MaterialConfig> Materials { get; set; } = new List<MaterialConfig>();
 
