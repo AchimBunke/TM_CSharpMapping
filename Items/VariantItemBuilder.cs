@@ -31,6 +31,7 @@ public class VariantItemBuilder
             Icon = normalizedItem.Icon,
             IconWebP = normalizedItem.IconWebP,
             WaypointType = normalizedItem.WaypointType,
+            ItemFlags = normalizedItem.ItemFlags,
         };
        
         normVariantItem.Model = new NormalizedModel
@@ -105,9 +106,11 @@ public class VariantItemBuilder
                     childRef.ModelKey = modelKeyMapping[childRef.ModelKey];
             }
 
-            if (!modelKeyMapping.TryGetValue(normItem.ModelPool.First().Key, out int rootModelKey))
-                rootModelKey = normVariantItem.ModelPool.Count;
-            
+            var rootEntry = normItem.ModelPool.FirstOrDefault(kv => ReferenceEquals(kv.Value, normItem.Model));
+            if (rootEntry.Value is null)
+                return ToolResult.Fail(nameof(VariantItemBuilder), ErrorCodes.VariantItemBuilder.MissingVariantInputs);
+            int rootModelKey = modelKeyMapping[rootEntry.Key];
+
             var variantModel = CreateVariantModel(normItem, variantInputs[i]);
             variantModel.ModelKey = rootModelKey;
             normVariantItem.Model.Variants.Add(variantModel);
@@ -115,7 +118,7 @@ public class VariantItemBuilder
         }
 
         var meshBuilder = new ItemCompiler();
-        var settings = BuildSettings.DefaultFromItem(normalizedItem);
+        var settings = BuildSettings.DefaultFromItem(normVariantItem);
         var compileOptions = new CompileOptions()
         {
             Target = ItemModel.Prefab,
