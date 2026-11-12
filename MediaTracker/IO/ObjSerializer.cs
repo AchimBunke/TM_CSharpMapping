@@ -13,6 +13,31 @@ public static class ObjSerializer
     public struct ObjLoadSettings
     {
         public ObjMaterialMode ObjMaterialMode;
+        /// <summary>
+        /// Allow resolving files outside the source (absolute mtllib / map_Kd texture paths on disk).
+        /// If false, materials that only define a texture (no Kd) throw.
+        /// </summary>
+        public bool UseLocalFiles;
+    }
+
+    sealed class TextureData
+    {
+        public int Width, Height;
+        public Vector4[] Pixels = [];
+        public Vector4 Sample(Vector2 uv)
+        {
+            float u = uv.X - MathF.Floor(uv.X);
+            float v = uv.Y - MathF.Floor(uv.Y);
+            int x = Math.Clamp((int)(u * (Width - 1) + 0.5f), 0, Width - 1);
+            int y = Math.Clamp((int)((1f - v) * (Height - 1) + 0.5f), 0, Height - 1);
+            return Pixels[y * Width + x];
+        }
+    }
+
+    sealed class MaterialInfo
+    {
+        public Vector4? Color;
+        public TextureData? Texture;
     }
     public enum ObjMaterialMode
     {
@@ -67,7 +92,7 @@ public static class ObjSerializer
         var normals = new List<Vector3>();
         var uvs = new List<Vector2>();
 
-        var materials = new Dictionary<string, Vector4>();
+        var materials = new Dictionary<string, MaterialInfo>();
 
         var root = CreateEmptyObject(Path.GetFileNameWithoutExtension(fileName));
 
@@ -91,12 +116,13 @@ public static class ObjSerializer
             if (string.IsNullOrWhiteSpace(raw) || raw.StartsWith("#"))
                 continue;
 
-            var p = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            raw = raw.Trim();
+            var p = raw.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
             switch (p[0])
             {
                 case "mtllib":
-                    LoadMaterial(p[1], source, materials);
+                    LoadMaterial(raw.Substring(6).Trim(), source, materials, fileName, settings);
                     break;
 
                 case "o":
@@ -106,7 +132,13 @@ public static class ObjSerializer
                     break;
 
                 case "usemtl":
-                    currentMaterial = p[1];
+                    currentMaterial = raw.Substring(6).Trim();
+                    break;
+
+                case "vt":
+                    uvs.Add(new Vector2(
+                        float.Parse(p[1], CultureInfo.InvariantCulture),
+                        p.Length > 2 ? float.Parse(p[2], CultureInfo.InvariantCulture) : 0f));
                     break;
 
                 case "v":
@@ -124,6 +156,10 @@ public static class ObjSerializer
                         {
                             var comps = p[i].Split('/');
                             int vIndex = ResolveIndex(int.Parse(comps[0]), positions.Count);
+                            int uvIndex = comps.Length > 1 && comps[1].Length > 0
+                                ? ResolveIndex(int.Parse(comps[1]), uvs.Count)
+                                : -1;
+                            Vector2? uv = uvIndex >= 0 && uvIndex < uvs.Count ? uvs[uvIndex] : null;
 
                             string key = settings.ObjMaterialMode == ObjMaterialMode.PerFaceColor
                                 ? vIndex + "|" + currentMaterial   // duplicate per material
@@ -135,9 +171,7 @@ public static class ObjSerializer
                                 idx = vList.Count;
                                 vList.Add(positions[vIndex]);
 
-                                Vector4 col = materials.TryGetValue(currentMaterial, out var mCol)
-                                    ? mCol
-                                    : new Vector4(1, 1, 1, 1);
+                                Vector4 col = GetColor(materials, currentMaterial, uv);
 
                                 cList.Add(col);
                                 colorMap[idx] = (col, 1);
@@ -147,11 +181,8 @@ public static class ObjSerializer
                             if (settings.ObjMaterialMode == ObjMaterialMode.PerVertexColor_Interpolated)
                             {
 
-                                Vector4 col = materials.TryGetValue(currentMaterial, out var mCol)
-                                    ? mCol
-                                    : new Vector4(1, 1, 1, 1);
-                                var curValue = colorMap[idx];
-                                colorMap[idx] = (curValue.sum + col, curValue.count + 1);
+                                Vector4 col = GetColor(materials, currentMaterial, uv);
+                                var curValue = colorMap[idx];                                colorMap[idx] = (curValue.sum + col, curValue.count + 1);
                             }
 
                             face.Add(idx);
@@ -176,12 +207,64 @@ public static class ObjSerializer
     }
 
 
-    static void LoadMaterial(string mtlName, IObjSource source, Dictionary<string, Vector4> materials)
+    static Vector4 GetColor(Dictionary<string, MaterialInfo> materials, string name, Vector2? uv)
     {
-        if (!source.Exists(mtlName)) return;
-        string? current = null;
+        if (!materials.TryGetValue(name, out var m))
+            return new Vector4(1, 1, 1, 1);
+        if (m.Texture != null && uv.HasValue)
+            return m.Texture.Sample(uv.Value);
+        return m.Color ?? new Vector4(1, 1, 1, 1);
+    }
 
-        using var sr = new StreamReader(source.Open(mtlName));
+    static TextureData LoadTexture(string texPath, IObjSource source)
+    {
+        Stream stream;
+        if (File.Exists(texPath))
+            stream = File.OpenRead(texPath);
+        else if (source.Exists(Path.GetFileName(texPath)))
+            stream = source.Open(Path.GetFileName(texPath));
+        else
+            throw new FileNotFoundException($"Texture '{texPath}' cannot be resolved (not found locally or in the obj source).");
+
+        using (stream)
+        using (var bmp = new System.Drawing.Bitmap(stream))
+        {
+            int w = bmp.Width, h = bmp.Height;
+            var data = bmp.LockBits(new System.Drawing.Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                var bytes = new byte[Math.Abs(data.Stride) * h];
+                System.Runtime.InteropServices.Marshal.Copy(data.Scan0, bytes, 0, bytes.Length);
+                var pixels = new Vector4[w * h];
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        int o = y * data.Stride + x * 4;
+                        pixels[y * w + x] = new Vector4(bytes[o + 2] / 255f, bytes[o + 1] / 255f, bytes[o] / 255f, bytes[o + 3] / 255f);
+                    }
+                return new TextureData { Width = w, Height = h, Pixels = pixels };
+            }
+            finally { bmp.UnlockBits(data); }
+        }
+    }
+
+    static void LoadMaterial(string mtlName, IObjSource source, Dictionary<string, MaterialInfo> materials, string? objFileName, ObjLoadSettings settings)
+    {
+        Stream? mtlStream = null;
+        if (source.Exists(mtlName))
+            mtlStream = source.Open(mtlName);
+        else if (objFileName != null && source.Exists(Path.ChangeExtension(objFileName, ".mtl")))
+            mtlStream = source.Open(Path.ChangeExtension(objFileName, ".mtl"));
+        else if (settings.UseLocalFiles && File.Exists(mtlName))
+            mtlStream = File.OpenRead(mtlName);
+
+        if (mtlStream == null)
+            throw new FileNotFoundException($"Material file '{mtlName}' referenced by '{objFileName}' cannot be resolved.");
+
+        string? current = null;
+        var texturePaths = new Dictionary<string, string>();
+
+        using var sr = new StreamReader(mtlStream);
 
         string? line = "";
         while (!sr.EndOfStream)
@@ -189,18 +272,35 @@ public static class ObjSerializer
             line = sr.ReadLine();
             if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
                 continue;
-            var p = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            line = line.Trim();
+            var p = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
             if (p[0] == "newmtl")
-                current = p[1];
-            else if (p[0] == "Kd" && current != null)
+                {
+                    current = line.Substring(6).Trim();
+                    if (!materials.ContainsKey(current))
+                        materials[current] = new MaterialInfo();
+                }
+                else if (p[0] == "map_Kd" && current != null && p.Length >= 2)
+                    texturePaths[current] = line.Substring(6).Trim();
+            else if (p[0] == "Kd" && current != null && p.Length >= 4)
             {
-                materials[current] = new Vector4(
+                materials[current].Color = new Vector4(
                     float.Parse(p[1], CultureInfo.InvariantCulture),
                     float.Parse(p[2], CultureInfo.InvariantCulture),
                     float.Parse(p[3], CultureInfo.InvariantCulture),
                     1f);
             }
+        }
+
+        foreach (var (name, texPath) in texturePaths)
+        {
+            var mat = materials[name];
+            if (settings.UseLocalFiles)
+                mat.Texture = LoadTexture(texPath, source);
+            else if (mat.Color == null)
+                throw new InvalidOperationException(
+                    $"Material '{name}' only defines a texture ('{texPath}') and no Kd color. Material color cannot use local files; enable ObjLoadSettings.UseLocalFiles.");
         }
     }
     static TriangleObject CreateEmptyObject(string name) => new()
@@ -245,10 +345,11 @@ public static class ObjSerializer
 
         subObjects.Add(current);
 
-        vList = new();
-        tList = new();
-        cList = new();
-        vertexMap = new();
+        vList.Clear();
+        tList.Clear();
+        cList.Clear();
+        vertexMap.Clear();
+        colorMap.Clear();
     }
 
 
