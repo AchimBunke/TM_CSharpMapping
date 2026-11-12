@@ -42,8 +42,18 @@ public class VariantItemBuilder
         normVariantItem.ModelPool.Add(0, normVariantItem.Model);
 
 
+        var mergedRootKeys = new Dictionary<CGameItemModel, int>(ReferenceEqualityComparer.Instance);
+
         for (int i = 0; i < variantInputs.Length; i++)
         {
+            if (mergedRootKeys.TryGetValue(variantInputs[i].ItemModel, out int sharedRootKey))
+            {
+                var sharedVariant = CreateVariantModel(normalizedItem, variantInputs[i]);
+                sharedVariant.ModelKey = sharedRootKey;
+                normVariantItem.Model.Variants.Add(sharedVariant);
+                continue;
+            }
+
             int meshCount = normVariantItem.MeshPool.Count;
             int modelCount = normVariantItem.ModelPool.Count;
             int shapeCount = normVariantItem.ShapePool.Count;
@@ -110,6 +120,7 @@ public class VariantItemBuilder
             if (rootEntry.Value is null)
                 return ToolResult.Fail(nameof(VariantItemBuilder), ErrorCodes.VariantItemBuilder.MissingVariantInputs);
             int rootModelKey = modelKeyMapping[rootEntry.Key];
+            mergedRootKeys[variantInputs[i].ItemModel] = rootModelKey;
 
             var variantModel = CreateVariantModel(normItem, variantInputs[i]);
             variantModel.ModelKey = rootModelKey;
