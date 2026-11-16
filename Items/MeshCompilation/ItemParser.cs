@@ -2,12 +2,14 @@
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MetaNotPersistent;
+using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
 using System.Reflection;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Messaging;
 using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
@@ -288,9 +290,9 @@ public class ItemParser
                     }
                     nrmArr = nrmArr.Select(QuantizeVec3_10b).ToArray();
 
+                    ParseCPlugMaterialUserInst(mat, normalizedItem, out int materialPoolKey);
 
                     normalizedModel.Type = ModelType.Static;
-
                     var mesh = new NormalizedMesh()
                     {
                         Positions = posArr,
@@ -301,7 +303,6 @@ public class ItemParser
                         TangentVs = bitangents.Length > 0 ? bitangents.Select(v => v.ToVec3()).ToArray() : null,
                         Colors = null,
                         Indices = idxArr,
-                        Material = mat,
                         Name = GbxItemUtils.MaterialToName(mat),
                     };
                     int key = normalizedItem.MeshPool.Count;
@@ -310,6 +311,7 @@ public class ItemParser
                     var meshRef = new MeshRef()
                     {
                         MeshKey = key,
+                        MaterialKey = materialPoolKey,
                         Properties = properties,
                         SmoothingGroup = bucket.SmoothingGroup
                     };
@@ -518,7 +520,7 @@ public class ItemParser
         }
         return ToolResult.Success(nameof(ItemParser));
     }
-    ToolResult<None> ParsePrefab(CPlugPrefab prefab, EntityRefBase entityRef, NormalizedItem normalizedItem, NormalizedModel container)
+    ToolResult<None> ParsePrefab(CPlugPrefab prefab, EntityRefBase entityRef, NormalizedItem normalizedItem)
     {
         if (parseContext.nodeRefTable.TryGetKey(prefab, out var key))
         {
@@ -566,32 +568,37 @@ public class ItemParser
         };
         container.Children.Add(entityRef);
 
-        switch (entRef.Model)
+        return ParseEntityModel(entRef.Model, entRef, entityRef, normalizedItem);
+    }
+    ToolResult<None> ParseEntityModel(CMwNod? entityModel, EntRef entRef, EntityRefBase entityRefBase, NormalizedItem normalizedItem)
+    {
+        var entityRef = entityRefBase as EntityRef;
+        switch (entityModel)
         {
             case CPlugStaticObjectModel staticObjectModel:
-                return ParseStaticObjectModel(staticObjectModel, entityRef, normalizedItem);
+                return ParseStaticObjectModel(staticObjectModel, entityRefBase, normalizedItem);
             case CPlugDynaObjectModel dynaObjectModel:
-                return ParseDynamicObjectModel(dynaObjectModel, entRef, entityRef, normalizedItem);
+                return ParseDynamicObjectModel(dynaObjectModel, entRef, entityRef!, normalizedItem);
             case NPlugTrigger_SSpecial triggerSpecial:
-                return ParseTriggerSpecial(triggerSpecial, entityRef, normalizedItem);
+                return ParseTriggerSpecial(triggerSpecial, entityRef!, normalizedItem);
             case NPlugTrigger_SWaypoint triggerWaypoint:
-                return ParseTriggerWaypoint(triggerWaypoint, entityRef, normalizedItem);
+                return ParseTriggerWaypoint(triggerWaypoint, entityRef!, normalizedItem);
             case CPlugPrefab nestedPrefab:
-                return ParsePrefab(nestedPrefab, entityRef, normalizedItem, container);
+                return ParsePrefab(nestedPrefab, entityRefBase, normalizedItem);
+            case CPlugVegetTreeModel vegetTreeModel:
+                return ParseVegetTreeModel(vegetTreeModel, entityRefBase, normalizedItem);
             case null:
                 {
-                    switch (entRef.Params)
+                    switch (entRef?.Params)
                     {
                         case NPlugItemPlacement_SPlacement sPlacement:
-                            return ParseSPlacement(sPlacement, entityRef, normalizedItem);
+                            return ParseSPlacement(sPlacement, entityRef!, normalizedItem);
                         case NPlugItemPlacement_SPlacementGroup sPlacementGroup:
-                            return ParseSPlacementGroup(sPlacementGroup, entityRef, normalizedItem);
+                            return ParseSPlacementGroup(sPlacementGroup, entityRef!, normalizedItem);
                         default:
                             return ToolResult.Success(nameof(ItemParser));
                     }
                 }
-            
-
         }
         return ToolResult.Success(nameof(ItemParser));
     }
@@ -619,7 +626,7 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
-    ToolResult<None> ParseStaticObjectModel(CPlugStaticObjectModel staticObjectModel, EntityRef entityRef, NormalizedItem normalizedItem)
+    ToolResult<None> ParseStaticObjectModel(CPlugStaticObjectModel staticObjectModel, EntityRefBase entityRef, NormalizedItem normalizedItem)
     {
         //already parsed this model, just reference it
         if (parseContext.nodeRefTable.TryGetKey(staticObjectModel, out var key))
@@ -886,6 +893,51 @@ public class ItemParser
         return ToolResult.Success(nameof(ItemParser));
     }
 
+    ToolResult<None> ParseVegetTreeModel(CPlugVegetTreeModel treeModel, EntityRefBase entityRef, NormalizedItem normalizedItem)
+    {
+        //already parsed this model, just reference it
+        if (parseContext.nodeRefTable.TryGetKey(treeModel, out var key))
+        {
+            entityRef.ModelKey = key.GetHashCode();
+            return ToolResult.Success(nameof(ItemParser));
+        }
+
+        key = normalizedItem.ModelPool.Count.ToString();
+
+        // register this model in the nodeRefTable so we don't parse it again
+        parseContext.nodeRefTable.Register(key, treeModel);
+
+        var model = new NormalizedModel()
+        {
+            Type = ModelType.VegetTreeModel,
+        };
+        // add the model to the pool so it can be referenced by other entities
+        normalizedItem.ModelPool.Add(key.GetHashCode(), model);
+        // set the entityRef to reference this model
+        entityRef.ModelKey = key.GetHashCode();
+
+        // data
+        ParseVegetModelData(treeModel, model, normalizedItem);
+
+        // mesh
+        ParseVegetModelMeshes(treeModel, model, normalizedItem);
+
+        // collision
+        var collision = treeModel.Collision;
+        if (collision is null)
+            return ToolResult.Success(nameof(ItemParser)); // early return if no shape
+
+        var shapeRef = new ShapeRef()
+        {
+            Role = ShapeRole.Static,
+        };
+        var shapeResult = ParseCollisionSurface(collision, shapeRef, normalizedItem);
+        if (shapeResult.IsFailure)
+            return shapeResult;
+        model.Shapes.Add(shapeRef);
+
+        return ToolResult.Success(nameof(ItemParser));
+    }
 
     void ParseSpawnModel(CPlugSpawnModel spawnModel, EntRef entRef)
     {
@@ -911,12 +963,16 @@ public class ItemParser
         {
             var visual = solid2Model.Visuals![shaded.VisualIndex];
             var material = solid2Model.CustomMaterials![shaded.MaterialIndex].MaterialUserInst!;
+
+            ParseCPlugMaterialUserInst(material, normalizedItem, out int materialPoolKey);
+            var normalizedMaterial = normalizedItem.MaterialPool[materialPoolKey];
+
             if (visual is not CPlugVisualIndexedTriangles vit)
                 continue;
 
             var meshRef = new MeshRef();
-
-            ParseIndexedTriangles(vit, material, meshRef, normalizedItem);
+            meshRef.MaterialKey = materialPoolKey;
+            ParseIndexedTriangles(vit, normalizedMaterial, meshRef, normalizedItem);
 
             // disable collision for non-collision source meshes (shape takes role of collision)
             if (!meshIsCollisionSource)
@@ -986,13 +1042,14 @@ public class ItemParser
     }
     ToolResult<None> ParseIndexedTriangles(
         CPlugVisualIndexedTriangles visual,
-        CPlugMaterialUserInst material, 
+        NormalizedMaterial normalizedMaterial, 
         MeshRef meshRef,
         NormalizedItem normalizedItem)
     {
+        bool isMaterialUserInst = normalizedMaterial.Type == MaterialType.UserInstance;
         // properties, lod/smoothing group, etc. are set within static object model compilation.
         meshRef.Properties = MeshProperties.Enabled | MeshProperties.Visible;
-        if (material.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable)
+        if (isMaterialUserInst && normalizedMaterial.MaterialUserInst!.SurfacePhysicId != CPlugSurface.MaterialId.NotCollidable)
             meshRef.Properties |= MeshProperties.Collidable;
 
         // already parsed this mesh, just reference it
@@ -1014,10 +1071,12 @@ public class ItemParser
 
             Vec2[]? texCoords = null;
             Vec2[]? lightmapCoords = null;
+            Vec2[]? uv2 = null;
 
             bool hasUv0 = stream.UVs.TryGetValue(0, out var uv0);
             bool hasUv1 = stream.UVs.TryGetValue(1, out var uv1);
-            if (material.CstValues is null || material.CstValues.Length == 0)
+            bool hasUv2 = stream.UVs.TryGetValue(2, out uv2);
+            if (isMaterialUserInst && (normalizedMaterial.MaterialUserInst!.CstValues is null || normalizedMaterial.MaterialUserInst.CstValues.Length == 0))
             {
                 if (hasUv0)
                     texCoords = uv0;
@@ -1046,10 +1105,10 @@ public class ItemParser
                 LightmapCoords = lightmapCoords,
                 Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
                 Indices = visual.IndexBuffer!.Indices,
-                Material = material,
                 TangentUs = tangentsUs,
                 TangentVs = tangentVs,
-                Name = GbxItemUtils.MaterialToName(material)
+                UV2 = uv2,
+                Name = normalizedMaterial.Name,
             };
             key = normalizedItem.MeshPool.Count.ToString();
             parseContext.nodeRefTable.Register(key, visual);
@@ -1062,8 +1121,7 @@ public class ItemParser
             {
                 Positions = visual.Vertices.Select(v => v.Position).ToArray(),
                 Normals = visual.Vertices.Select(v => v.Normal ?? new Vec3(0, 1, 0)).ToArray(),
-                Name = GbxItemUtils.MaterialToName(material),
-                Material = material,
+                Name = normalizedMaterial.Name,
                 TangentUs = visual.Tangents?.ToArray(),
                 TangentVs = visual.BiTangents?.ToArray(),
                 // missing texcoords, lightmapcoords, colors, tangents, bitangents. This is a fallback for meshes that don't have a vertex stream but have vertices.
@@ -1107,6 +1165,80 @@ public class ItemParser
 
         normalizedItem.LightPool.Add(key.GetHashCode(), normalizedLight);
         lightRef.LightKey = key.GetHashCode();
+    }
+
+    ToolResult<None> ParseCollisionSurface(CollisionSurface collisionSurface, ShapeRef shapeRef, NormalizedItem normalizedItem)
+    {
+        var key = normalizedItem.ShapePool.Count.ToString();
+
+        var shape = new NormalizedShape()
+        {
+        };
+
+        // handle different surface types (only mesh was seen before)
+        switch (collisionSurface.Surf)
+        {
+            case CPlugSurface.Mesh mesh:
+                ParseSurfaceMesh(mesh, shape, normalizedItem);
+                break;
+            default:
+                return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.UnsupportedSurfaceType);
+        }
+        normalizedItem.ShapePool.Add(key.GetHashCode(), shape);
+        shapeRef.ShapeKey = key.GetHashCode();
+
+
+        return ToolResult.Success(nameof(ItemParser));
+    }
+    void ParseVegetModelMeshes(CPlugVegetTreeModel treeModel, NormalizedModel normalizedModel, NormalizedItem normalizedItem)
+    {
+        bool hasLods = treeModel.LodMaxDists?.Length > 0;
+        normalizedModel.LODDistances = treeModel.LodMaxDists ?? [];
+        Dictionary<int, int> materialPoolKeysByIndex = [];
+        for (int i = 0; i < treeModel.LodModels?.Length; ++i)
+        {
+            var lodMask = LODUtils.LodMaskFromLods([i]);
+            var group = treeModel.LodModels[i];
+            foreach(var shadedGeom in group.ShadedGeoms ?? [])
+            {
+                var material = treeModel.Materials![shadedGeom.ModelMaterialIndex];
+                if(!materialPoolKeysByIndex.TryGetValue(shadedGeom.ModelMaterialIndex, out var materialPoolKey))
+                {
+                    ParseTextureSet(material, normalizedItem, out materialPoolKey);
+                    materialPoolKeysByIndex[shadedGeom.ModelMaterialIndex] = materialPoolKey;
+                }
+                var normalizedMaterial = normalizedItem.MaterialPool[materialPoolKey];
+                normalizedMaterial.Name = treeModel.TextureNames?.ElementAtOrDefault(shadedGeom.ModelMaterialIndex) ?? normalizedMaterial.Name;
+
+                var visual = shadedGeom.Visual;
+                if (visual is not CPlugVisualIndexedTriangles vit)
+                    continue;
+
+                var meshRef = new MeshRef();
+                meshRef.MaterialKey = materialPoolKey;
+
+                ParseIndexedTriangles(vit, normalizedMaterial, meshRef, normalizedItem);
+
+                meshRef.Properties &= ~MeshProperties.Collidable;
+
+                // set LOD properties
+                if (hasLods)
+                {
+                    if (!LODUtils.IsVisibleInAllLods(lodMask, treeModel.LodMaxDists!.Length)) // check if has any lod or always visible
+                    {
+                        meshRef.Properties |= MeshProperties.LOD;
+                    }
+                    meshRef.LODMask = lodMask;
+                }
+                meshRef.SmoothingGroup = 0;
+
+                normalizedModel.Meshes.Add(meshRef);
+            }
+        }
+    }
+    void ParseVegetModelData(CPlugVegetTreeModel treeModel, NormalizedModel normalizedModel, NormalizedItem normalizedItem)
+    {
+        normalizedModel.VegetTreeModel = treeModel;
     }
 
     ToolResult<None> ParseShape(CPlugSurface surface, ShapeRef shapeRef, NormalizedItem normalizedItem)
@@ -1164,6 +1296,39 @@ public class ItemParser
             normalizedShape.SurfaceGameplayIds[i] = (GameplayId)triangle.U03;
         }
     }
+    void ParseCPlugMaterialUserInst(CPlugMaterialUserInst material, NormalizedItem normalizedItem, out int materialPoolKey)
+    {
+        // already parsed this material, just reference it
+        if (parseContext.nodeRefTable.TryGetKey(material, out var key))
+        {
+            materialPoolKey = key.GetHashCode();
+            return;
+        }
+        key = normalizedItem.MaterialPool.Count.ToString();
+        parseContext.nodeRefTable.Register(key, material);
+        var normalizedMaterial = new NormalizedMaterial()
+        {
+            Type = MaterialType.UserInstance,
+            MaterialUserInst = material,
+            Name = GbxItemUtils.MaterialToName(material),
+        };
+        materialPoolKey = key.GetHashCode();
+        normalizedItem.MaterialPool.Add(materialPoolKey, normalizedMaterial);
+    }
+    void ParseTextureSet(TextureSet textureSet, NormalizedItem normalizedItem, out int materialPoolKey)
+    {
+        var key = normalizedItem.MaterialPool.Count.ToString();
+
+        var normalizedMaterial = new NormalizedMaterial()
+        {
+            Type = MaterialType.TextureSet,
+            TextureSet = textureSet,
+            Name = Path.GetFileNameWithoutExtension(textureSet?.References.ColorImage.File?.FilePath ?? "Unknown TextureSet"),
+        };
+        materialPoolKey = key.GetHashCode();
+        normalizedItem.MaterialPool.Add(materialPoolKey, normalizedMaterial);
+    }
+
 
     ToolResult<None> ParseCommonItemEntityModel(CGameCommonItemEntityModel commonItemEntityModel, NormalizedItem normalizedItem)
     {
@@ -1264,7 +1429,9 @@ public class ItemParser
     }
     ToolResult<None> ParseVariant(NPlugItem_SVariant variant, NormalizedItem normalizedItem, NormalizedModel container)
     {
-        if (variant.EntityModel is not CPlugPrefab prefab)
+        if (variant.EntityModel is not CPlugPrefab && 
+            variant.EntityModel is not CPlugStaticObjectModel &&
+            variant.EntityModel is not CPlugVegetTreeModel)
             return ToolResult.Fail(nameof(ItemParser), ErrorCodes.ItemParser.UnsupportedVariantType);
 
 
@@ -1277,7 +1444,7 @@ public class ItemParser
         };
         container.Variants.Add(normVariant);
 
-        var result = ParsePrefabEntityModel(prefab, normVariant, normalizedItem);
+        var result = ParseEntityModel(variant.EntityModel, default!, normVariant, normalizedItem);
         if (result.IsFailure)
             return result;
         return ToolResult.Success(nameof(ItemParser));

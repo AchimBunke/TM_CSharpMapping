@@ -141,6 +141,11 @@ public static class GbxTemplateLibrary
     static CGameItemModel variantsItemModel = null!;
     public static GbxTemplate<CGameItemModel> CreateVariantsItemTemplate()
         => new GbxTemplate<CGameItemModel>((ObjectCloner.DeepCloneObject(variantsItemModel ??= Gbx.Parse<CGameItemModel>(TemplateLoader.GetTemplate("VariantsEntityModel.Item.Gbx"))))!);
+
+
+    static Gbx<CPlugBitmap> bitmapTemplate = null!;
+    public static GbxTemplate<Gbx<CPlugBitmap>> CreateBitmapGbxTemplate()
+        => new GbxTemplate<Gbx<CPlugBitmap>>((ObjectCloner.DeepCloneObject(bitmapTemplate ??= Gbx.Parse<CPlugBitmap>(TemplateLoader.GetTemplate("BitmapTemplate.Texture.Gbx"))))!);
 }
 
 

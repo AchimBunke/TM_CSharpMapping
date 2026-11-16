@@ -193,7 +193,7 @@ internal class FbxMeshConverter
         // the cache miss in that case and defeat mesh reuse/instancing.
         // Pass one MeshReuseCache for the whole item so meshes are also shared between variants.
         var meshCache = (reuseCache ?? new MeshReuseCache()).Entries;
-        Dictionary<int, List<(int MeshKey, NodeLodAssignment NodeAssignment)>> meshRefsByGroup = new();
+        Dictionary<int, List<(int MeshKey, int MaterialKey, NodeLodAssignment NodeAssignment)>> meshRefsByGroup = new();
 
         foreach(var group in groups)
         {
@@ -229,7 +229,8 @@ internal class FbxMeshConverter
                         meshCache[cacheKey] = meshKey;
                     }
 
-                    groupList.Add((meshKey, nodeAssignment));
+                    int materialKey = GetOrAddMaterial(item, material.MaterialInstance);
+                    groupList.Add((meshKey, materialKey, nodeAssignment));
                 }
             }
         }
@@ -239,12 +240,13 @@ internal class FbxMeshConverter
         {
             var modelKey = groupIndexToModelKey[groupIndex];
             var model = item.ModelPool[modelKey];
-            foreach (var (meshKey, nodeAssignment) in meshRefs)
+            foreach (var (meshKey, materialKey, nodeAssignment) in meshRefs)
             {
                 var mesh = item.MeshPool[meshKey];
                 var meshRef = new MeshRef
                 {
                     MeshKey = meshKey,
+                    MaterialKey = materialKey,
                     LODMask = nodeAssignment.LODMask,
                     Properties = ComputeMeshProperties(nodeAssignment.NodeDef.NodeConfig),
                     PreLightGenerator = GbxItemUtils.ComputePreLightGenFromMeshData(mesh),
@@ -256,6 +258,24 @@ internal class FbxMeshConverter
         }
 
         return ToolResult.Success(None.Value, nameof(FbxGbxConverter));
+    }
+
+    static int GetOrAddMaterial(NormalizedItem item, CPlugMaterialUserInst materialInstance)
+    {
+        foreach (var (key, existing) in item.MaterialPool)
+        {
+            if (ReferenceEquals(existing.MaterialUserInst, materialInstance))
+                return key;
+        }
+
+        int newKey = item.MaterialPool.Count == 0 ? 0 : item.MaterialPool.Keys.Max() + 1;
+        item.MaterialPool[newKey] = new NormalizedMaterial
+        {
+            Type = MaterialType.UserInstance,
+            MaterialUserInst = materialInstance,
+            Name = GbxItemUtils.MaterialToName(materialInstance),
+        };
+        return newKey;
     }
 
     static MeshProperties ComputeMeshProperties(MeshConfig meshConfig)
@@ -319,7 +339,6 @@ internal class FbxMeshConverter
                 normalizedMesh.Colors = Enumerable.Repeat(-1, mesh.Positions.Length).ToArray();
         }
 
-        normalizedMesh.Material = material.MaterialInstance;
         normalizedMesh.Name = mesh.Name;
 
         DeduplicateVertices(normalizedMesh);
@@ -422,7 +441,6 @@ internal class FbxMeshConverter
 
         var result = new NormalizedMesh
         {
-            Material = list[0].Material,
             Name = list[0].Name,
         };
 

@@ -5,6 +5,7 @@ using GBX.NET.Engines.MetaNotPersistent;
 using GBX.NET.Engines.MwFoundations;
 using GBX.NET.Engines.Plug;
 using GBX.NET.Inputs;
+using System.ComponentModel;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Numerics;
@@ -14,12 +15,14 @@ using TM_GenericMapping.Items.FbxGbxConversion;
 using TM_GenericMapping.Messaging;
 using TM_GenericMapping.Templating;
 using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
 using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 using static GBX.NET.Engines.Plug.CPlugSurface.Mesh;
+using static GBX.NET.Engines.Plug.CPlugVehicleVisModelShared;
 using static GBX.NET.Engines.Plug.CPlugVertexStream;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
@@ -111,6 +114,8 @@ public class ItemCompiler
         _lightConverter = new ItemLightConverter();
     }
 
+    public ToolResult<CGameItemModel> Compile(NormalizedItem item) => Compile(item, BuildSettings.DefaultFromItem(item));
+    public ToolResult<CGameItemModel> Compile(NormalizedItem item, BuildSettings buildSettings) => Compile(item, buildSettings, new());
     public ToolResult<CGameItemModel> Compile(NormalizedItem item, BuildSettings buildSettings, CompileOptions compileOptions)
     {
         switch (compileOptions.Target)
@@ -337,7 +342,9 @@ public class ItemCompiler
             case ModelType.Trigger_Waypoint:
                 return GetOrCreateTriggerWaypoint(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
             case ModelType.Trigger_Special:
-                return GetOrCreateTriggerSpecial(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();       
+                return GetOrCreateTriggerSpecial(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
+            case ModelType.VegetTreeModel:
+                return GetOrCreateVegetTreeModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
             default:
                 return GetOrCreateStaticObjectModel(item, clusterKey, instances, cluster, settings).Cast<CMwNod>();
         }
@@ -515,7 +522,10 @@ public class ItemCompiler
             var meshRef = refBase as MeshRef;
             NormalizedMesh? mesh = meshRef != null ? item.MeshPool[meshRef.MeshKey] : null;
 
-            var visual = GetOrCreateIndexedTriangles(item, refBase, instance, buildSettings, out CPlugMaterialUserInst material);
+            var material = GbxItemUtils.CreateErrorMat();
+            if (meshRef != null)
+                material = ResolveCPlugMaterialUserInst(item, meshRef);
+            var visual = GetOrCreateIndexedTriangles(item, refBase, instance, buildSettings);
 
             if (!visualIndexInThisSolid.TryGetValue(visual, out var visualIndex))
             {
@@ -645,15 +655,11 @@ public class ItemCompiler
         NormalizedItem item,
         RefBase refBase,
         InstanceSettings instanceSetting,
-        BuildSettings buildSettings,
-        out CPlugMaterialUserInst material)
+        BuildSettings buildSettings)
     {
         NormalizedShape? shape = refBase is ShapeRef sr ? item.ShapePool[sr.ShapeKey] : null;
         NormalizedMesh? mesh = refBase is MeshRef mr ? item.MeshPool[mr.MeshKey] : null;
 
-        material = GbxItemUtils.CreateErrorMat();
-        if (mesh != null)
-            material = mesh.Material;
 
         var key = ComputeIndexedTrianglesKey(refBase);
 
@@ -685,6 +691,8 @@ public class ItemCompiler
             uvs[0] = mesh.TexCoords;
         if (mesh.LightmapCoords is not null)
             uvs[uvs.Count] = mesh.LightmapCoords;
+        if(mesh.UV2 is not null)
+            uvs[uvs.Count] = mesh.UV2;
         if (mesh.Colors is not null)
             colors[0] = mesh.Colors;
 
@@ -702,6 +710,11 @@ public class ItemCompiler
             dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord0);
         if (uvs.Count <= 1)
             dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord1);
+        if (uvs.Count <= 2)
+            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord2);
+        
+        if(uvs.Count == 3)
+            dataDecls.Insert(dataDecls.IndexOf(dataDecls.First(d => d.Semantic == EPlugVDcl.TexCoord1)) + 1, new DataDecl() { Flags1 = 550502924, Flags2 = 144, Offset = 32, Semantic = EPlugVDcl.TexCoord2, Type = EPlugVDclType.Float2});
 
         if (colors.Count <= 0)
             dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.Color0);
@@ -968,6 +981,181 @@ public class ItemCompiler
         return ToolResult.Success(triggerSpecial, nameof(ItemCompiler));
     }
 
+    ToolResult<CPlugVegetTreeModel> GetOrCreateVegetTreeModel(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    {
+        var key = ComputeClusterContentKey(clusterKey, instances, cluster, buildSettings);
+
+        if (!compileContext.CompileOptions.Optimization.HasFlag(ItemCompilerOptimization.ProhibitInstanceSharing) &&
+            compileContext.nodeRefTable.TryGetNode<CPlugVegetTreeModel>(key, out var cached))
+            return ToolResult.Success(cached, nameof(ItemCompiler));
+
+        // build
+        var vegetModelResult = CreateVegetTreeModel(item, instances, cluster, key, buildSettings);
+        if (vegetModelResult.IsFailure)
+            return ToolResult.Fail(vegetModelResult);
+        var vegetModel = vegetModelResult.Value;
+
+        // register
+        compileContext.nodeRefTable.Register(key, vegetModel);
+
+
+        return ToolResult.Success(vegetModel, nameof(ItemCompiler));
+
+    }
+    ToolResult<CPlugVegetTreeModel> CreateVegetTreeModel(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, string clusterKey, BuildSettings buildSettings)
+    {
+        var vegetModel = ObjectCloner.DeepCloneObject(cluster.VegetTreeModel)!;
+
+        var meshInstances = instances
+            .Where(i => i.Instance.Visible)
+            .ToList();
+
+        CopyVegetTreeModelProperties(cluster.VegetTreeModel!, vegetModel);
+
+        if (meshInstances.Any(i => i.Instance.Visible))
+        {
+            var meshModelsResult = CreateVegetMeshModels(vegetModel, item, meshInstances, cluster, buildSettings);
+            if (meshModelsResult.IsFailure)
+                return ToolResult.Fail(meshModelsResult);
+        }
+
+        var collidable = instances.Where(i => i.Instance.Collidable).ToList();
+        var staticCollidableInstances = collidable.Where(i => ResolveDestination(item, i, ShapeRole.Static) == ShapeRole.Static).ToList();
+
+        var surface = GetOrCreateSurface(item, staticCollidableInstances, gameplayId: LegacyGameplayId.None, gameplayMainDir: cluster.GameplayMainDir.HasValue ? cluster.GameplayMainDir.Value : new Vector3(0, 0, 1), trigger: false, buildSettings);
+        if(surface is not null)
+        {
+            vegetModel.Collision = new CollisionSurface()
+            {
+                Surf = surface.Surf,
+                SurfaceVersion = 1,
+            };
+        }
+
+        
+
+        return ToolResult.Success(vegetModel, nameof(ItemCompiler));
+    }
+    ToolResult<None> CreateVegetMeshModels(CPlugVegetTreeModel treeModel, NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
+    {
+        Dictionary<TextureSet, int> materialInstances = [];
+        List<TextureSet> materials = [];
+        List<GeometryGroup> geometryGroups = [];
+        List<string> textureSetNames = [];
+
+        var visibleInstances = instances
+            .Where(i => i.Instance.Visible && (i.Instance.Kind == RefKind.Mesh || i.Instance.Kind == RefKind.Shape));
+
+        PreLightGen? preLightGen = null;
+        for (int i = 0; i < cluster.LODDistances.Length + 1; ++i)
+        {
+            var requiredLod = 1 << i;
+
+            List<Geometry> geometries = [];
+
+            foreach (var (id, instance) in visibleInstances)
+            {
+              
+                var refBase = compileContext.GuidToRef[id];
+                var meshRef = refBase as MeshRef;
+                NormalizedMesh? mesh = meshRef != null ? item.MeshPool[meshRef.MeshKey] : null;
+
+                int lodMask = instance.LODMaskOverride.HasValue ? 
+                    instance.LODMaskOverride.Value : 
+                    mesh != null ? meshRef!.LODMask : 0;
+
+                if (!LODUtils.IsVisibleInLod(lodMask, requiredLod))
+                    continue; // not visible in this lod, skip
+
+
+                var material = GbxItemUtils.CreateEmptyTextureSet();
+                if (meshRef != null)
+                    material = ResolveTextureSet(item, meshRef);
+
+                var visual = GetOrCreateIndexedTriangles(item, refBase, instance, buildSettings);
+
+                if (!materialInstances.TryGetValue(material, out int matIdx))
+                {
+                    matIdx = materials.Count;
+                    materials.Add(material);
+                    materialInstances[material] = matIdx;
+                    textureSetNames.Add(meshRef is not null ? item.MaterialPool[meshRef.MaterialKey].Name : "Unknown TextureSet");
+                }
+
+                var geometry = new Geometry()
+                {
+                    ModelMaterialIndex = (ushort)matIdx,
+                    U02 = 0,
+                    Visual = visual
+                };
+                geometries.Add(geometry);
+
+                if (mesh != null)
+                    preLightGen = MergePreLightGenerator(mesh, instance, preLightGen);
+            }
+
+            geometryGroups.Add(new GeometryGroup()
+            {
+                ShadedGeoms = geometries.ToArray(),
+            });
+        }
+
+        treeModel.LodModels = geometryGroups.ToArray();
+        treeModel.Materials = materials.ToArray();
+        treeModel.LodMaxDists = cluster.LODDistances;
+        treeModel.TextureNames = textureSetNames.ToArray();
+        if (preLightGen != null)
+        {
+            treeModel.AdditionalData = new Additional()
+            {
+                U01 = preLightGen.U01,
+                U02 = preLightGen.U02,
+                U03 = preLightGen.U03,
+                U04 = preLightGen.U04,
+                U05 = preLightGen.U05,
+                U06 = preLightGen.U06,
+                U07 = preLightGen.U07,
+                U08 = preLightGen.U08,
+                U09 = preLightGen.U09,
+                U10 = preLightGen.U10,
+                U11 = preLightGen.U11,
+                U12 = 0,
+                U13 = 0,
+                U15 = [],
+                U16 = [],
+                Version = 1
+            };
+        }
+
+        return ToolResult.Success(nameof(ItemCompiler));
+    }
+
+    void CopyVegetTreeModelProperties(CPlugVegetTreeModel source, CPlugVegetTreeModel target)
+    {
+        target.AngleMax_RotXZ_Deg = source.AngleMax_RotXZ_Deg;
+        target.EnableRandomRotationY = source.EnableRandomRotationY;
+        target.Force_No_Collision = source.Force_No_Collision;
+        target.Impostor_AllPlanesVisible = source.Impostor_AllPlanesVisible;
+        target.LodDistAtFov90 = source.LodDistAtFov90;
+        target.PlaneComputeMode = source.PlaneComputeMode;
+        target.PropagationAtlasGrid = source.PropagationAtlasGrid;
+        target.PropagationBaseColor = source.PropagationBaseColor;
+        target.PropagationConeHalfAngleDeg = source.PropagationConeHalfAngleDeg;
+        target.PropagationEmissionPositions = source.PropagationEmissionPositions?.ToArray();
+        target.PropagationEmissionSpawnRadius = source.PropagationEmissionSpawnRadius;
+        target.PropagationEnable = source.PropagationEnable;
+        target.PropagationGroundGenPointCount = source.PropagationGroundGenPointCount;
+        target.PropagationLeafPerSecondCount = source.PropagationLeafPerSecondCount;
+        target.PropagationLeafSize = source.PropagationLeafSize;
+        target.PropagationNormal = source.PropagationNormal;
+        target.ReceivesPSSM = source.ReceivesPSSM;
+        target.ScaleVar01 = source.ScaleVar01;
+        target.U01 = source.U01;
+        target.U02 = source.U02;
+        target.U05 = source.U05;
+        target.U06 = source.U06;
+    }
+
     ToolResult<object?> GetOrCreateItemAttachmentPoint(NormalizedItem item, NormalizedModel model, BuildSettings buildSettings, out SMetaPtr sPlacement)
     {
         var placementResult = CreateSPlacement(item, model, buildSettings);
@@ -998,9 +1186,24 @@ public class ItemCompiler
         return ToolResult.Success(sPlacementGroup, nameof(ItemCompiler));
     }
 
+    CPlugMaterialUserInst ResolveCPlugMaterialUserInst(NormalizedItem item, MeshRef meshRef)
+    {
+        if (item.MaterialPool.TryGetValue(meshRef.MaterialKey, out var normMaterial) && normMaterial.MaterialUserInst != null)
+            return normMaterial.MaterialUserInst;
+        return GbxItemUtils.CreateErrorMat();
+    }
+    TextureSet ResolveTextureSet(NormalizedItem item, MeshRef meshRef)
+    {
+        if (item.MaterialPool.TryGetValue(meshRef.MaterialKey, out var normMaterial) && normMaterial.TextureSet != null)
+            return normMaterial.TextureSet;
+        return GbxItemUtils.CreateEmptyTextureSet();
+    }
+
+    sealed record MeshCollisionSource(NormalizedMesh Mesh, CPlugMaterialUserInst Material);
+
     object ResolveCollisionSource(NormalizedItem item, Guid id, RefKind kind) => kind switch
     {
-        RefKind.Mesh => item.MeshPool[(compileContext.GuidToRef[id] as MeshRef)!.MeshKey],
+        RefKind.Mesh => new MeshCollisionSource(item.MeshPool[(compileContext.GuidToRef[id] as MeshRef)!.MeshKey], ResolveCPlugMaterialUserInst(item, (compileContext.GuidToRef[id] as MeshRef)!)),
         RefKind.Shape => item.ShapePool[(compileContext.GuidToRef[id] as ShapeRef)!.ShapeKey],
         _ => throw new InvalidOperationException($"Unexpected RefKind {kind} in collision source"),
     };
@@ -1017,9 +1220,12 @@ public class ItemCompiler
             ReadOnlySpan<int> sourceIndices;
             ReadOnlySpan<MaterialId> surfaceMaterialIds;
             ReadOnlySpan<GameplayId> surfaceGameplayIds;
-            NormalizedMesh? normMesh;
-            if ((normMesh = geometrySource as NormalizedMesh) != null)
+            NormalizedMesh? normMesh = null;
+            CPlugMaterialUserInst? collisionMaterial = null;
+            if (geometrySource is MeshCollisionSource meshSource)
             {
+                normMesh = meshSource.Mesh;
+                collisionMaterial = meshSource.Material;
                 sourcePositions = normMesh.Positions.AsSpan();
                 sourceIndices = normMesh.Indices.AsSpan();
                 surfaceMaterialIds = default;
@@ -1055,14 +1261,14 @@ public class ItemCompiler
                 if (!surfaceMaterialIds.IsEmpty)
                     materialId = surfaceMaterialIds[i / 3];
                 else if (normMesh is not null)
-                    materialId = normMesh.Material.SurfacePhysicId;
+                    materialId = collisionMaterial!.SurfacePhysicId;
                 else
                     materialId = MaterialId.Concrete;
                 GameplayId surfaceGameplayId = GameplayId.None;
-                if(!surfaceGameplayIds.IsEmpty)
+                if (!surfaceGameplayIds.IsEmpty)
                     surfaceGameplayId = surfaceGameplayIds[i / 3];
                 else if (normMesh is not null)
-                    surfaceGameplayId = normMesh.Material.SurfaceGameplayId;
+                    surfaceGameplayId = collisionMaterial!.SurfaceGameplayId;
                 else
                     surfaceGameplayId = GameplayId.None;
 
@@ -1286,7 +1492,12 @@ public class ItemCompiler
             $"{i.Id}:{i.Settings.Enabled}:{i.Settings.Visible}:{i.Settings.Collidable}:{i.Settings.LODMaskOverride}");
 
         return $"cluster{identityPart}:{cluster.Type}:" +
-               $"{cluster.WaypointType}:{cluster.WaypointNoRespawn}:{cluster.TriggerGameplayId}:{string.Join(",", cluster.LODDistances)}:[{string.Join(";", parts)}]";
+               $"{cluster.WaypointType}:" +
+               $"{cluster.WaypointNoRespawn}:" +
+               $"{cluster.TriggerGameplayId}:" +
+               $"{string.Join(",", cluster.VegetTreeModel?.TextureNames ?? [])}:" +
+               $"{string.Join(",", cluster.LODDistances)}:" +
+               $"[{string.Join(";", parts)}]";
     }
 
     private string ComputeSolidMeshKey(List<(Guid Id, InstanceSettings Instance)> visibleInstances)
@@ -1524,7 +1735,7 @@ public class ItemCompiler
 
             CPlugMaterialUserInst baseMaterialInstance;
             if (mesh != null)
-                baseMaterialInstance = mesh.Material;
+                baseMaterialInstance = ResolveCPlugMaterialUserInst(item, meshRef!);
             else
                 baseMaterialInstance = ObjectCloner.DeepCloneObject(context.ErrorMat)!;
 
@@ -1859,14 +2070,9 @@ public class ItemCompiler
 
             var cluster = buildSettings.Clusters[instance.Value.ClusterKey];
 
-            if (cluster.Type == ModelType.Dynamic)
+            if (cluster.Type != ModelType.Static && cluster.Type != ModelType.Container && cluster.Type != ModelType.Trigger_Waypoint)
                 return false;
-            else if (cluster.Type == ModelType.Trigger_Special)
-                return false;
-            else if (cluster.Type == ModelType.ItemAttachmentPoint)
-                return false;
-            else if (cluster.Type == ModelType.ItemAttachmentGroup)
-                return false;
+
             else if (cluster.Type == ModelType.Trigger_Waypoint)
                 triggerClusterCount++;
             else

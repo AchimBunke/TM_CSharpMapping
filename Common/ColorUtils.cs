@@ -1,4 +1,5 @@
 ﻿using GBX.NET;
+using SixLabors.ImageSharp;
 using System.Drawing;
 using System.Numerics;
 using Color = System.Drawing.Color;
@@ -124,6 +125,14 @@ public static class ColorUtils
         {
             return $"{c.R:X2}{c.G:X2}{c.B:X2}";
         }
+
+        /// <summary>
+        /// Drop alpha
+        /// </summary>
+        /// <returns></returns>
+        public int ToRGBInt()
+            => c.ToArgb() & 0xFFFFFF;
+
     }
     // -----------------------------
     // Basic lerp

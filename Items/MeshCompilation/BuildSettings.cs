@@ -57,6 +57,7 @@ public sealed class ClusterSettings
     public Vector3? WaypointSpawnPosition { get; set; }
     public Quaternion? WaypointSpawnRotation { get; set; }
 
+    public CPlugVegetTreeModel? VegetTreeModel { get; set; } = null;
 
     /// <summary>
     /// if model is originally shared across multiple entities, this cluster is detached from the original entity and chnages will apply only to this node
@@ -109,6 +110,7 @@ public sealed class BuildSettings
                     WaypointSpawnPosition = entRef?.WaypointSpawnPosition,
                     WaypointSpawnRotation = entRef?.WaypointSpawnRotation,
                     GameplayMainDir = model.GameplayMainDir,
+                    VegetTreeModel = model.VegetTreeModel,
                 };
                 if (entRef?.RelativeMovingParentKey is int parentKey)
                     pendingParents.Add((clusterKey, parentKey));

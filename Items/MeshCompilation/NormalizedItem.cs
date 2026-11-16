@@ -4,6 +4,7 @@ using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.Plug;
 using System.Numerics;
 using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
@@ -25,6 +26,7 @@ public class NormalizedItem
     public Dictionary<int, NormalizedShape> ShapePool { get; set; } = new();
     public Dictionary<int, NormalizedLight> LightPool { get; set; } = new();
     public Dictionary<int, NormalizedModel> ModelPool { get; set; } = new();
+    public Dictionary<int, NormalizedMaterial> MaterialPool { get; set; } = new();
 
     public NormalizedModel Model { get; set; } = null!;
 
@@ -37,9 +39,9 @@ public class NormalizedMesh
 
     public Vec2[]? TexCoords { get; set; }
     public Vec2[]? LightmapCoords { get; set; }
+    public Vec2[]? UV2 { get; set; } // tree models, unknown role
     public int[]? Colors { get; set; } // packed argb color
     public int[] Indices { get; set; } = [];     // local 0-based
-    public CPlugMaterialUserInst Material { get; set; } = null!;
    
 
     public Vec3[]? TangentUs { get; set; }  // per vertex, same length as Positions
@@ -47,6 +49,18 @@ public class NormalizedMesh
 
     public string Name { get; set; } = string.Empty;
 
+}
+public enum MaterialType
+{
+    UserInstance,
+    TextureSet,
+}
+public class NormalizedMaterial
+{
+    public MaterialType Type { get; set; } = MaterialType.UserInstance;
+    public CPlugMaterialUserInst? MaterialUserInst { get; set; } = null;
+    public TextureSet? TextureSet { get; set; } = null;
+    public string Name { get; set; } = string.Empty;
 }
 public class NormalizedShape
 {
@@ -82,6 +96,7 @@ public enum ModelType
     Variant_List,
     ItemAttachmentPoint,
     ItemAttachmentGroup,
+    VegetTreeModel,
 }
 
 public enum ShapeRole
@@ -131,6 +146,9 @@ public class NormalizedModel
 
     // attachment group
     public List<ItemAttachmentLocation> AttachmentGroup { get; set; } = [];
+
+    // VegetTreeModel
+    public CPlugVegetTreeModel? VegetTreeModel { get; set; } = null;
 }
 
 public abstract class RefBase
@@ -166,6 +184,8 @@ public class EntityRef : EntityRefBase
 public class MeshRef : RefBase
 {
     public int MeshKey { get; set; } = -1;
+
+    public int MaterialKey { get; set; } = -1;
 
     public int LODMask { get; set; } = 1;
     public int? SmoothingGroup { get; set; } = 0;

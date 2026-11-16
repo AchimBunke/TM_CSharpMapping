@@ -8,6 +8,7 @@ using System.Reflection;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.MeshCompilation;
 using TmEssentials;
+using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
@@ -128,6 +129,14 @@ public static class GbxItemUtils
         c2.U02 = 0;
         mat.TryCreateChunk<CPlugMaterialUserInst.Chunk090FD002>(out var c3);
         return mat;
+    }
+    public static TextureSet CreateEmptyTextureSet()
+    {
+        var textureSet = new TextureSet()
+        {
+
+        };
+        return textureSet;
     }
 
     public static PreLightGen CreateEmtpyPreLightGen()
