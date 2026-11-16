@@ -7,6 +7,7 @@ using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
 using static GBX.NET.Engines.Plug.CPlugSolid2Model;
 using static GBX.NET.Engines.Plug.CPlugSurface;
+using static GBX.NET.Engines.Plug.CPlugVertexStream;
 
 namespace TM_GenericMapping.Items.MeshCompilation;
 
@@ -31,21 +32,31 @@ public class NormalizedItem
     public NormalizedModel Model { get; set; } = null!;
 
 }
-
+public record struct DataDeclType(EPlugVDcl Semantic, EPlugVDclSpace Space, EPlugVDclType Type);
 public class NormalizedMesh
 {
     public Vec3[] Positions { get; set; } = [];
     public Vec3[] Normals { get; set; } = [];
 
-    public Vec2[]? TexCoords { get; set; }
+    public Vec2[]? TexCoords0 { get; set; }
     public Vec2[]? LightmapCoords { get; set; }
-    public Vec2[]? UV2 { get; set; } // tree models, unknown role
+    public Vec2[]? TexCoords1 { get; set; } // tree models, unknown role
+    public Vec2[]? TexCoords2 { get; set; } // tree models, unknown role
     public int[]? Colors { get; set; } // packed argb color
+    public int[]? Colors2 { get; set; } // packed argb color
     public int[] Indices { get; set; } = [];     // local 0-based
+
+
    
 
     public Vec3[]? TangentUs { get; set; }  // per vertex, same length as Positions
     public Vec3[]? TangentVs { get; set; }  // per vertex, same length as Positions
+
+    public bool DirtyVision { get; set; } = false;
+    public bool IsStatic { get; set; } = true;
+    public bool SkipVision { get; set; } = false;
+    public byte CompressTexCoords { get; set; } = 0;
+    public bool CompressLocalFloat3 { get; set; } = true;
 
     public string Name { get; set; } = string.Empty;
 
@@ -55,13 +66,24 @@ public enum MaterialType
     UserInstance,
     TextureSet,
 }
+public enum AssetType
+{
+    ImgFile,
+    Bitmap,
+}
 public class NormalizedMaterial
 {
     public MaterialType Type { get; set; } = MaterialType.UserInstance;
     public CPlugMaterialUserInst? MaterialUserInst { get; set; } = null;
+    /// <summary>Boilerplate: to be created from <see cref="TextureAssets"/> by the GBX creation code.</summary>
     public TextureSet? TextureSet { get; set; } = null;
+    public NormalizedTextureAssets? TextureAssets { get; set; } = null;
     public string Name { get; set; } = string.Empty;
 }
+
+/// <summary>Resolved external file (absolute, or as given if no base directory is known).</summary>
+public record NormalizedAsset(string Path, AssetType Type);
+public record NormalizedTextureAssets(NormalizedAsset? ColorImage, NormalizedAsset? NormalImage, NormalizedAsset? RoughnessImage, NormalizedAsset? DiffuseBitmap, NormalizedAsset? NormalBitmap, NormalizedAsset? RoughnessBitmap);
 public class NormalizedShape
 {
     public Vec3[] Positions { get; set; } = [];

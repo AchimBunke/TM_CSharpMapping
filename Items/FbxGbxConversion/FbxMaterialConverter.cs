@@ -49,6 +49,17 @@ internal class FbxMaterialConverter
 
         if (!TryFindMaterialConfig(matName, configIndex, out var materialConfig))
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMaterialConfig, matName);
+
+        if (FbxVegetTreeConverter.HasTextureAssets(materialConfig))
+        {
+            // tree material: Link/library are not used, the texture assets are attached to the material and
+            // turned into GBX types by the tree creation code. The instance is only a placeholder.
+            var assetsResult = FbxVegetTreeConverter.ResolveTextureAssets(configIndex.ItemConfig, materialConfig);
+            if (assetsResult.IsFailure)
+                return ToolResult.Fail(assetsResult);
+            customMat.Name = materialConfig.Name;
+            return ToolResult.Success(new MaterialDef(customMat, null, assetsResult.Value), nameof(FbxGbxConverter));
+        }
         bool usingGameMaterial = _materialLibrary.Materials.TryGetValue(materialConfig.Link, out var dMaterial);
 
         customMat.Name = materialConfig.Name;

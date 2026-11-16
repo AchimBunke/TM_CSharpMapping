@@ -81,8 +81,12 @@ internal class FbxMeshConverter
     {
         var lods = configIndex.ItemConfig.LodParameters?.MaxLodDistances ?? [];
 
+        var treeValidation = FbxVegetTreeConverter.ValidateNodes(nodes, configIndex);
+        if (treeValidation.IsFailure)
+            return ToolResult.Fail(treeValidation);
+
         int maxReferencedLod = nodes
-            .Where(n => n.NodeConfig.Lods is { Count: > 0 })
+            .Where(n => n.NodeConfig.Lods is { Count: > 0 } && string.IsNullOrEmpty(n.NodeConfig.VegetTree))
             .SelectMany(n => n.NodeConfig.Lods)
             .DefaultIfEmpty(-1)
             .Max();
@@ -229,7 +233,18 @@ internal class FbxMeshConverter
                         meshCache[cacheKey] = meshKey;
                     }
 
-                    int materialKey = GetOrAddMaterial(item, material.MaterialInstance);
+                    int materialKey;
+                    if (group.VegetTree is not null)
+                    {
+                        var texResult = FbxVegetTreeConverter.GetOrAddTextureSetMaterial(item, material);
+                        if (texResult.IsFailure)
+                            return ToolResult.Fail(texResult);
+                        materialKey = texResult.Value;
+                    }
+                    else
+                    {
+                        materialKey = GetOrAddMaterial(item, material.MaterialInstance);
+                    }
                     groupList.Add((meshKey, materialKey, nodeAssignment));
                 }
             }
@@ -315,7 +330,7 @@ internal class FbxMeshConverter
         {
             int texChannelIndex = 0;
             if (mesh.TextureCoordinateChannels.Length > texChannelIndex)
-                normalizedMesh.TexCoords = mesh.TextureCoordinateChannels[texChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
+                normalizedMesh.TexCoords0 = mesh.TextureCoordinateChannels[texChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
 
             if (mesh.Tangents is not null)
                 normalizedMesh.TangentUs = TransformVectors(mesh.Tangents, localTransform, Matrix4x4.Identity, true).ToArray();
@@ -460,8 +475,8 @@ internal class FbxMeshConverter
             positions.AddRange(mesh.Positions);
             normals.AddRange(mesh.Normals);
 
-            if (mesh.TexCoords != null)
-                texCoords.AddRange(mesh.TexCoords);
+            if (mesh.TexCoords0 != null)
+                texCoords.AddRange(mesh.TexCoords0);
 
             if (mesh.LightmapCoords != null)
                 lightmapCoords.AddRange(mesh.LightmapCoords);
@@ -485,7 +500,7 @@ internal class FbxMeshConverter
         result.Normals = normals.ToArray();
         result.Indices = indices.ToArray();
 
-        result.TexCoords = texCoords.Count > 0 ? texCoords.ToArray() : null;
+        result.TexCoords0 = texCoords.Count > 0 ? texCoords.ToArray() : null;
         result.LightmapCoords = lightmapCoords.Count > 0 ? lightmapCoords.ToArray() : null;
         result.TangentUs = tangentsU.Count > 0 ? tangentsU.ToArray() : null;
         result.TangentVs = tangentsV.Count > 0 ? tangentsV.ToArray() : null;
@@ -501,7 +516,7 @@ internal class FbxMeshConverter
 
         var positions = new List<Vec3>();
         var normals = new List<Vec3>();
-        var texCoords = mesh.TexCoords != null ? new List<Vec2>() : null;
+        var texCoords = mesh.TexCoords0 != null ? new List<Vec2>() : null;
         var lightmapCoords = mesh.LightmapCoords != null ? new List<Vec2>() : null;
         var tangentUs = mesh.TangentUs != null ? new List<Vec3>() : null;
         var tangentVs = mesh.TangentVs != null ? new List<Vec3>() : null;
@@ -516,7 +531,7 @@ internal class FbxMeshConverter
             var key = new VertexKey(
                 mesh.Positions[oldIndex],
                 mesh.Normals[oldIndex],
-                mesh.TexCoords?[oldIndex],
+                mesh.TexCoords0?[oldIndex],
                 mesh.LightmapCoords?[oldIndex],
                 mesh.TangentUs?[oldIndex],
                 mesh.TangentVs?[oldIndex],
@@ -531,7 +546,7 @@ internal class FbxMeshConverter
                 positions.Add(mesh.Positions[oldIndex]);
                 normals.Add(mesh.Normals[oldIndex]);
 
-                texCoords?.Add(mesh.TexCoords![oldIndex]);
+                texCoords?.Add(mesh.TexCoords0![oldIndex]);
                 lightmapCoords?.Add(mesh.LightmapCoords![oldIndex]);
                 tangentUs?.Add(mesh.TangentUs![oldIndex]);
                 tangentVs?.Add(mesh.TangentVs![oldIndex]);
@@ -543,7 +558,7 @@ internal class FbxMeshConverter
 
         mesh.Positions = positions.ToArray();
         mesh.Normals = normals.ToArray();
-        mesh.TexCoords = texCoords?.ToArray();
+        mesh.TexCoords0 = texCoords?.ToArray();
         mesh.LightmapCoords = lightmapCoords?.ToArray();
         mesh.TangentUs = tangentUs?.ToArray();
         mesh.TangentVs = tangentVs?.ToArray();

@@ -59,6 +59,10 @@ public static class ErrorCodes
         public const string MissingStaticMeshGroup = "FbxGbxConverter.MissingStaticMeshGroup";
         public const string MissingLodDistanceConfig = "FbxGbxConverter.MissingLodDistanceConfig";
         public const string MissingInstanceCollection = "FbxGbxConverter.MissingInstanceCollection";
+        public const string MissingVegetTreeConfig = "FbxGbxConverter.MissingVegetTreeConfig";
+        public const string MissingVegetTextureSet = "FbxGbxConverter.MissingVegetTextureSet";
+        public const string MissingAsset = "FbxGbxConverter.MissingAsset";
+        public const string InvalidVegetTreeConfig = "FbxGbxConverter.InvalidVegetTreeConfig";
 
     }
     public static class VariantItemBuilder

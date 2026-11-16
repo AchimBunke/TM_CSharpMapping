@@ -1,6 +1,7 @@
 ﻿using GBX.NET;
 using GBX.NET.Engines.Plug;
 using System.Text.Json.Serialization;
+using TM_GenericMapping.Items.MeshCompilation;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
@@ -33,10 +34,82 @@ public class MaterialConfig
 
     [JsonPropertyName("Model")]
     public string? Model { get; set; } = null;
+
+    /// <summary>Asset ids (see ItemConfig.Assets). Only used by materials of meshes that are part of a VegetTree (replaces Link).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("ColorImage")]
+    public string? ColorImage { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("NormalImage")]
+    public string? NormalImage { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("RoughnessImage")]
+    public string? RoughnessImage { get; set; }
+
+    /// <summary>Asset ids (see ItemConfig.Assets). Only used by materials of meshes that are part of a VegetTree (replaces Link).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("DiffuseBitmap")]
+    public string? DiffuseBitmap { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("NormalBitmap")]
+    public string? NormalBitmap { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("RoughnessBitmap")]
+    public string? RoughnessBitmap { get; set; }
+}
+
+
+
+/// <summary>Entry of the top-level asset registry. Path is relative to the config file unless absolute.</summary>
+public class AssetConfig
+{
+    [JsonPropertyName("Id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("Path")]
+    public string Path { get; set; } = string.Empty;
+
+    [JsonPropertyName("Type")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AssetType Type { get; set; } = AssetType.ImgFile;
+}
+
+public class VegetTreeConfig
+{
+    [JsonPropertyName("Name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Same unit convention as LodParameters.MaxLodDistances.</summary>
+    [JsonPropertyName("MaxLodDistances")]
+    public List<float> MaxLodDistances { get; set; } = [];
+
+    [JsonPropertyName("AngleMaxRotXZDeg")]
+    public float? AngleMaxRotXZDeg { get; set; }
+
+    [JsonPropertyName("EnableRandomRotationY")]
+    public bool? EnableRandomRotationY { get; set; }
+
+    [JsonPropertyName("ForceNoCollision")]
+    public bool? ForceNoCollision { get; set; }
+
+    [JsonPropertyName("ImpostorAllPlanesVisible")]
+    public bool? ImpostorAllPlanesVisible { get; set; }
+
+    [JsonPropertyName("LodDistAtFov90")]
+    public float? LodDistAtFov90 { get; set; }
 }
 
 public class MeshConfig
 {
+    /// <summary>Name of the vegetation tree (see ItemConfig.VegetTrees) this mesh is part of.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("VegetTree")]
+    public string? VegetTree { get; set; } = null;
+
     [JsonPropertyName("Name")]
     public string Name { get; set; } = string.Empty;
 
@@ -86,6 +159,7 @@ public class MeshConfig
         MovingGroup = this.MovingGroup,
         LightmapSize = this.LightmapSize,
         Variant = this.Variant,
+        VegetTree = this.VegetTree,
         Lods = [.. this.Lods]
     };
 }

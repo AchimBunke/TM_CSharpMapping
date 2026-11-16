@@ -297,7 +297,7 @@ public class ItemParser
                     {
                         Positions = posArr,
                         Normals = nrmArr,
-                        TexCoords = texArr.Length> 0 ? texArr.ToArray() : null,
+                        TexCoords0 = texArr.Length> 0 ? texArr.ToArray() : null,
                         LightmapCoords = lmArr.Length > 0 ? lmArr.ToArray() : null,
                         TangentUs = tangents.Length > 0 ? tangents.Select(v => v.ToVec3()).ToArray() : null,
                         TangentVs = bitangents.Length > 0 ? bitangents.Select(v => v.ToVec3()).ToArray() : null,
@@ -972,7 +972,7 @@ public class ItemParser
 
             var meshRef = new MeshRef();
             meshRef.MaterialKey = materialPoolKey;
-            ParseIndexedTriangles(vit, normalizedMaterial, meshRef, normalizedItem);
+            ParseIndexedTriangles(vit, normalizedMaterial, meshRef, LightmapMode.Default_1_or_Last, normalizedItem);
 
             // disable collision for non-collision source meshes (shape takes role of collision)
             if (!meshIsCollisionSource)
@@ -1040,10 +1040,16 @@ public class ItemParser
             }
         }
     }
+    enum LightmapMode
+    {
+        None,
+        Default_1_or_Last
+    }
     ToolResult<None> ParseIndexedTriangles(
         CPlugVisualIndexedTriangles visual,
         NormalizedMaterial normalizedMaterial, 
         MeshRef meshRef,
+        LightmapMode lightmapMode,
         NormalizedItem normalizedItem)
     {
         bool isMaterialUserInst = normalizedMaterial.Type == MaterialType.UserInstance;
@@ -1061,54 +1067,101 @@ public class ItemParser
         {
             var stream = visual.VertexStreams[0];
 
-            var tangentUsField = typeof(CPlugVertexStream).GetField("tangentUs",
-              BindingFlags.NonPublic | BindingFlags.Instance);
-            var tangentsUs = (Vec3[])tangentUsField?.GetValue(stream)!;
+            var tangentsUs = stream.TangentUs;
+            var tangentVs = stream.TangentVs;
 
-            var tangentVsField = typeof(CPlugVertexStream).GetField("tangentVs",
-              BindingFlags.NonPublic | BindingFlags.Instance);
-            var tangentVs = (Vec3[])tangentVsField?.GetValue(stream)!;
-
-            Vec2[]? texCoords = null;
+            Vec2[]? texCoords0 = null;
+            Vec2[]? texCoords1 = null;
+            Vec2[]? texCoords2 = null;
             Vec2[]? lightmapCoords = null;
-            Vec2[]? uv2 = null;
+
 
             bool hasUv0 = stream.UVs.TryGetValue(0, out var uv0);
             bool hasUv1 = stream.UVs.TryGetValue(1, out var uv1);
-            bool hasUv2 = stream.UVs.TryGetValue(2, out uv2);
+            bool hasUv2 = stream.UVs.TryGetValue(2, out var uv2);
             if (isMaterialUserInst && (normalizedMaterial.MaterialUserInst!.CstValues is null || normalizedMaterial.MaterialUserInst.CstValues.Length == 0))
             {
-                if (hasUv0)
-                    texCoords = uv0;
-                if (hasUv1)
-                    lightmapCoords = uv1;
+                switch(lightmapMode)
+                {
+                    case LightmapMode.Default_1_or_Last:
+                        if (hasUv0)
+                            texCoords0 = uv0;
+                        if (hasUv1)
+                            lightmapCoords = uv1;
+                        break;
+
+                    case LightmapMode.None:
+                        if (hasUv0)
+                            texCoords0 = uv0;
+                        if (hasUv1)
+                            texCoords1 = uv1;
+                        break;
+                }
             }
             else
             {
-                if (hasUv0 && hasUv1)
+                switch (lightmapMode)
                 {
-                    texCoords = uv0;
-                    lightmapCoords = uv1;
+                    case LightmapMode.Default_1_or_Last:
+                        if (hasUv2)
+                        {
+                            texCoords0 = uv0;
+                            lightmapCoords = uv1;
+                            texCoords1 = uv2;
+
+                        }
+                        else if (hasUv1)
+                        {
+                            texCoords0 = uv0;
+                            lightmapCoords = uv1;
+                        }
+                        else if (hasUv0)
+                        {
+                            lightmapCoords = uv0;
+                        }
+                        break;
+
+                    case LightmapMode.None:
+                        if (hasUv2)
+                        {
+                            texCoords0 = uv0;
+                            texCoords1 = uv1;
+                            texCoords2 = uv2;
+
+                        }
+                        else if (hasUv1)
+                        {
+                            texCoords0 = uv0;
+                            texCoords1 = uv1;
+                        }
+                        else if (hasUv0)
+                        {
+                            texCoords0 = uv0;
+                        }
+                        break;
                 }
-                else
-                {
-                    if (hasUv0)
-                        lightmapCoords = uv0;
-                }
+               
 
             }
             var normalizedMesh = new NormalizedMesh()
             {
                 Positions = stream.Positions!,
                 Normals = stream.Normals!,
-                TexCoords = texCoords,
+                TexCoords0 = texCoords0,
+                TexCoords1 = texCoords1,
+                TexCoords2 = texCoords2,
                 LightmapCoords = lightmapCoords,
                 Colors = stream.Colors.TryGetValue(0, out var col) ? col : null,
+                Colors2 = stream.Colors.TryGetValue(1, out var col2) ? col2 : null,
                 Indices = visual.IndexBuffer!.Indices,
                 TangentUs = tangentsUs,
                 TangentVs = tangentVs,
-                UV2 = uv2,
                 Name = normalizedMaterial.Name,
+                DirtyVision = stream.DirtyVision,
+                IsStatic = stream.IsStatic,
+                SkipVision = stream.SkipVision,
+                CompressTexCoords = stream.CompressTexCoords,
+                CompressLocalFloat3 = stream.CompressLocalFloat3,
             };
             key = normalizedItem.MeshPool.Count.ToString();
             parseContext.nodeRefTable.Register(key, visual);
@@ -1217,7 +1270,7 @@ public class ItemParser
                 var meshRef = new MeshRef();
                 meshRef.MaterialKey = materialPoolKey;
 
-                ParseIndexedTriangles(vit, normalizedMaterial, meshRef, normalizedItem);
+                ParseIndexedTriangles(vit, normalizedMaterial, meshRef, material.U09 == 0 ? LightmapMode.Default_1_or_Last : LightmapMode.None, normalizedItem);
 
                 meshRef.Properties &= ~MeshProperties.Collidable;
 

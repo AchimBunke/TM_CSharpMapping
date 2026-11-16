@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TM_GenericMapping.Common;
+using TM_GenericMapping.Items.MeshCompilation;
 using TM_GenericMapping.Templating;
 using TmEssentials;
 using static GBX.NET.Engines.GameData.CGameItemModel;
@@ -86,6 +87,13 @@ public class ItemConfig
     [JsonPropertyName("MovingGroups")]
     public List<MovingGroupConfig> MovingGroups { get; set; } = new List<MovingGroupConfig>();
 
+    /// <summary>Registry of referenced external files (textures etc.). Paths are relative to the config file unless absolute.</summary>
+    [JsonPropertyName("Assets")]
+    public List<AssetConfig> Assets { get; set; } = new List<AssetConfig>();
+
+    [JsonPropertyName("VegetTrees")]
+    public List<VegetTreeConfig> VegetTrees { get; set; } = new List<VegetTreeConfig>();
+
     /// <summary>Optional. If non-empty the item becomes a variant item with one variant per entry.</summary>
     [JsonPropertyName("Variants")]
     public List<VariantItemConfig> Variants { get; set; } = new List<VariantItemConfig>();
@@ -112,10 +120,30 @@ public class ItemConfig
 
 
 
+    /// <summary>Directory used to resolve relative asset paths. Set automatically when deserialized from a file.</summary>
+    [JsonIgnore]
+    public string? BaseDirectory { get; set; }
+
+    /// <summary>Resolves an asset id to its path (relative to <see cref="BaseDirectory"/> unless absolute). Null if the id is unknown.</summary>
+    public (string Path, AssetType Type)? ResolveAsset(string? assetId)
+    {
+        if (string.IsNullOrEmpty(assetId))
+            return null;
+        var asset = Assets.FirstOrDefault(a => a.Id == assetId);
+        if (asset is null)
+            return null;
+        var path = Path.IsPathRooted(asset.Path) || string.IsNullOrEmpty(BaseDirectory)
+            ? asset.Path
+            : Path.GetFullPath(Path.Combine(BaseDirectory, asset.Path));
+        return (path, asset.Type);
+    }
+
     public static ItemConfig Deserialize(string filePath)
     {
         using var itemInfoStream = File.OpenRead(filePath);
-        return Deserialize(itemInfoStream);
+        var config = Deserialize(itemInfoStream);
+        config.BaseDirectory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        return config;
     }
     public static ItemConfig Deserialize(Stream itemInfoStream)
     {

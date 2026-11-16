@@ -46,6 +46,7 @@ internal class NodeDefGroup
     /// </summary>
     public List<float> LodDistances { get; set; } = new();
     public string? RelativeMovingParentGroupId { get; set; } = null;
+    public string? VegetTree { get; set; } = null;
     public string? OriginalGroupId { get; set; } = null;
 
     public NPlugDyna_SKinematicConstraint? KinematicConstraint { get; set; }
@@ -147,6 +148,9 @@ internal class NodeGrouper
         {
             var (info, nodes) = buckets[bucketKey];
 
+            if (info.Type == ModelType.VegetTreeModel)
+                continue;
+
             var shapeCounts = nodes
                 .GroupBy(GetShapeSignature)
                 .ToDictionary(g => g.Key, g => g.Count());
@@ -186,6 +190,9 @@ internal class NodeGrouper
 
         var f = node.NodeConfig.MeshFlags;
         bool isSingle = f.HasFlag(MeshFlags.SingleMesh);
+
+        if (!string.IsNullOrEmpty(node.NodeConfig.VegetTree))
+            return new BucketInfo { Key = $"vegettree_{node.NodeConfig.VegetTree}", Type = ModelType.VegetTreeModel, VegetTree = node.NodeConfig.VegetTree };
 
         string group = string.IsNullOrEmpty(node.NodeConfig.Group) ? string.Empty : node.NodeConfig.Group;
 
@@ -237,6 +244,7 @@ internal class NodeGrouper
         var groups = new List<NodeDefGroup>();
         NodeDefGroup NewGroup(string key) => new NodeDefGroup
         {
+            VegetTree = bucket.VegetTree,
             GroupKey = key,
             OriginalGroupId = bucket.MovingGroup,
             Type = bucket.Type,
@@ -250,7 +258,24 @@ internal class NodeGrouper
             RelativeMovingParentGroupId = movingParams?.ParentMovingGroupId,
         };
 
-        int K = _globalLodDistances.Count; // valid node lod indices are 0..K inclusive; K itself is the implicit "last -> infinity" bucket, never a real distance entry
+        if (bucket.Type == ModelType.VegetTreeModel)
+        {
+            // a tree is always one group with its own LOD distances (no chunking), LOD indices are tree-local
+            var tree = _configIndex.VegetTreeConfigsByName[bucket.VegetTree!];
+            var treeGroup = NewGroup(bucket.Key);
+            treeGroup.LodDistances = tree.MaxLodDistances.ToList();
+            foreach (var node in nodes)
+                treeGroup.Nodes.Add(new NodeLodAssignment
+                {
+                    NodeDef = node,
+                    LodIndices = node.NodeConfig.Lods.Count > 0
+                        ? node.NodeConfig.Lods.OrderBy(l => l).ToList()
+                        : Enumerable.Range(0, treeGroup.LodDistances.Count + 1).ToList(),
+                });
+            return new List<NodeDefGroup> { treeGroup };
+        }
+
+        int K = _globalLodDistances.Count;
 
         foreach (var node in nodes)
             if (node.NodeConfig.Lods != null)
@@ -448,5 +473,6 @@ internal class NodeGrouper
         public LegacyGameplayId? TriggerEffectId;
         public EWaypointType? WaypointType;
         public Vector3? GameplayMainDir;
+        public string? VegetTree;
     }
 }

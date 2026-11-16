@@ -1,4 +1,5 @@
 ﻿using GBX.NET;
+using GBX.NET.Components;
 using GBX.NET.Engines.GameData;
 using GBX.NET.Engines.Meta;
 using GBX.NET.Engines.MetaNotPersistent;
@@ -10,12 +11,14 @@ using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion;
 using TM_GenericMapping.Messaging;
 using TM_GenericMapping.Templating;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
+using static GBX.NET.Engines.MwFoundations.MwStack;
 using static GBX.NET.Engines.Plug.CPlugCrystal;
 using static GBX.NET.Engines.Plug.CPlugPrefab;
 using static GBX.NET.Engines.Plug.CPlugSkel;
@@ -77,6 +80,8 @@ public class ItemCompiler
         public Dictionary<CPlugDynaObjectModel, PendingConstraint> PendingConstraints { get; } = new();
         public Dictionary<NPlugTrigger_SWaypoint, PendingWaypoint> PendingWaypoints { get; } = new();
 
+        public Dictionary<string, CMwNod> LoadedAssetsByPath { get; } = new();
+        public GbxRefTable RefTable { get; private set; } = new();
         public Dictionary<Guid, RefBase> GuidToRef { get; private set; } = new();
         public CompileOptions CompileOptions { get; set; }
         public void Reset()
@@ -87,6 +92,8 @@ public class ItemCompiler
             GuidToRef.Clear();
             BuildDynaObjectClusters.Clear();
             CompileOptions = new();
+            LoadedAssetsByPath.Clear();
+            RefTable = new();
         }
         public void Rebuild(NormalizedItem item, CompileOptions compileOptions)
         {
@@ -687,45 +694,142 @@ public class ItemCompiler
         var uvs = new SortedDictionary<int, Vec2[]>();
         var colors = new SortedDictionary<int, int[]>();
 
-        if (mesh.TexCoords is not null)
-            uvs[0] = mesh.TexCoords;
+        if (mesh.TexCoords0 is not null)
+            uvs[0] = mesh.TexCoords0;
         if (mesh.LightmapCoords is not null)
             uvs[uvs.Count] = mesh.LightmapCoords;
-        if(mesh.UV2 is not null)
-            uvs[uvs.Count] = mesh.UV2;
+        if(mesh.TexCoords1 is not null)
+            uvs[uvs.Count] = mesh.TexCoords1;
+        if(mesh.TexCoords2 is not null)
+            uvs[uvs.Count] = mesh.TexCoords2;
         if (mesh.Colors is not null)
             colors[0] = mesh.Colors;
+        if (mesh.Colors2 is not null)
+            colors[1] = mesh.Colors2;
 
         var vertexStream = GbxTemplateLibrary.CreateCPlugVertexStreamTemplate().Value;
         vertexStream.Positions = mesh.Positions.ToArray();
         vertexStream.Normals = mesh.Normals.ToArray();
         vertexStream.UVs = uvs;
         vertexStream.Colors = colors;
+        vertexStream.VertexCount = vertexStream.Positions.Length;
+
+        if (mesh.TexCoords0 is null)
+        {
+            GbxItemUtils.SetTangentUs(vertexStream, null);
+            GbxItemUtils.SetTangentVs(vertexStream, null);
+        }
+        else
+        {
+            GbxItemUtils.SetTangentUs(vertexStream, mesh.TangentUs ?? new Vec3[mesh.Positions.Length]);
+            GbxItemUtils.SetTangentVs(vertexStream, mesh.TangentVs ?? new Vec3[mesh.Positions.Length]);
+        }
+
+
+        vertexStream.IsStatic = mesh.IsStatic;
+        vertexStream.SkipVision = mesh.SkipVision;
+        vertexStream.DirtyVision = mesh.DirtyVision;
+        vertexStream.CompressTexCoords = mesh.CompressTexCoords;
+        vertexStream.CompressLocalFloat3 = mesh.CompressLocalFloat3;
 
         // fix data decl
-        var dataDecls = vertexStream.DataDecls.ToList();
+        var templateDecl = vertexStream.DataDecls.ToList();
+
 
         // clear tex coords if rex or light is not available
-        if (uvs.Count <= 0)
-            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord0);
-        if (uvs.Count <= 1)
-            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord1);
-        if (uvs.Count <= 2)
-            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord2);
-        
-        if(uvs.Count == 3)
-            dataDecls.Insert(dataDecls.IndexOf(dataDecls.First(d => d.Semantic == EPlugVDcl.TexCoord1)) + 1, new DataDecl() { Flags1 = 550502924, Flags2 = 144, Offset = 32, Semantic = EPlugVDcl.TexCoord2, Type = EPlugVDclType.Float2});
+        //if (uvs.Count <= 0)
+        //    dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord0);
+        //if (uvs.Count <= 1)
+        //    dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord1);
+        //if (uvs.Count <= 2)
+        //    dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TexCoord2);
 
-        if (colors.Count <= 0)
-            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.Color0);
-        else if (!dataDecls.Any(d => d.Semantic == EPlugVDcl.Color0))
-            dataDecls.Insert(Math.Min(2, dataDecls.Count), new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16 });
+        //if(uvs.Count == 3)
+        //    dataDecls.Insert(dataDecls.IndexOf(dataDecls.First(d => d.Semantic == EPlugVDcl.TexCoord1)) + 1, new DataDecl() { Flags1 = 550502924, Flags2 = 144, Offset = 32, Semantic = EPlugVDcl.TexCoord2, Type = EPlugVDclType.Float2});
 
-        if (mesh.TexCoords is null)
+        //if (colors.Count <= 0)
+        //    dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.Color0);
+        //else if (!dataDecls.Any(d => d.Semantic == EPlugVDcl.Color0))
+        //    dataDecls.Insert(Math.Min(2, dataDecls.Count), new CPlugVertexStream.DataDecl() { Flags1 = 546310152, Flags2 = 64, Offset = 16 });
+
+        //if (mesh.TexCoords is null)
+        //{
+        //    dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TangentU);
+        //    dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TangentV);
+        //}
+
+        void SetFlags1(DataDecl d, EPlugVDclSpace space, bool isShared)
         {
-            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TangentU);
-            dataDecls.RemoveAll(decl => decl.Semantic == EPlugVDcl.TangentV);
+            var spaceShift = d.Legacy ? 27 : 28;
+            var spaceMask = d.Legacy ? 7u : 15u;
+
+            d.Flags1 = (d.Flags1 & ~(spaceMask << spaceShift)) | (((uint)space & spaceMask) << spaceShift);
+
+
+            if ((d.Flags1 & 0x40000000) == 0)
+                d.Flags2 = isShared ? d.Flags2 | 0xFFCu : d.Flags2 & ~0xFFCu;
         }
+
+        List<DataDecl> dataDecls = new();
+
+        if (vertexStream.Positions?.Length > 0) 
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.Position, Type = EPlugVDclType.Float3 };
+            SetFlags1(dataDecl, EPlugVDclSpace.Global3D, true);
+            dataDecls.Add(dataDecl);
+        }
+        if (vertexStream.Normals?.Length > 0)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.Normal, Type = EPlugVDclType.Dec3N };
+            SetFlags1(dataDecl, EPlugVDclSpace.Local3D, true);
+            dataDecls.Add(dataDecl);
+        }
+
+        if (vertexStream.Colors?.Count > 0)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.Color0, Type = EPlugVDclType.ColorD3D };
+            SetFlags1(dataDecl, EPlugVDclSpace.Global2D, true);
+            dataDecls.Add(dataDecl);
+        }
+        if (vertexStream.Colors?.Count > 1)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.Color1, Type = EPlugVDclType.ColorD3D };
+            SetFlags1(dataDecl, EPlugVDclSpace.Global2D, true);
+            dataDecls.Add(dataDecl);
+        }
+
+        if (vertexStream.UVs?.Count > 0)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.TexCoord0, Type = EPlugVDclType.Float2 };
+            SetFlags1(dataDecl, EPlugVDclSpace.Global2D, true);
+            dataDecls.Add(dataDecl);
+        }
+        if (vertexStream.UVs?.Count > 1)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.TexCoord1, Type = EPlugVDclType.Float2 };
+            SetFlags1(dataDecl, EPlugVDclSpace.Global2D, true);
+            dataDecls.Add(dataDecl);
+        }
+        if (vertexStream.UVs?.Count > 2)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.TexCoord2, Type = EPlugVDclType.Float2 };
+            SetFlags1(dataDecl, EPlugVDclSpace.Global2D, true);
+            dataDecls.Add(dataDecl);
+        }
+
+        if (vertexStream.TangentUs?.Length > 0)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.TangentU, Type = EPlugVDclType.Dec3N };
+            SetFlags1(dataDecl, EPlugVDclSpace.Local3D, true);
+            dataDecls.Add(dataDecl);
+        }
+        if (vertexStream.TangentVs?.Length > 0)
+        {
+            var dataDecl = new DataDecl() { Semantic = EPlugVDcl.TangentV, Type = EPlugVDclType.Dec3N };
+            SetFlags1(dataDecl, EPlugVDclSpace.Local3D, true);
+            dataDecls.Add(dataDecl);
+        }
+
 
         static int ValueSize(CPlugVertexStream.DataDecl d) => d.Type switch
         {
@@ -747,6 +851,7 @@ public class ItemCompiler
             d.Offset = (ushort)offset;
             d.SharedDeclIndex = 0;
             d.Flags2 = i == 0 ? 0u : (uint)offset << 2;   // first decl must stay non-shared
+            d.VertexCount = vertexStream.Positions.Length;
             offset += ValueSize(d);
         }
 
@@ -759,26 +864,8 @@ public class ItemCompiler
 
 
         vertexStream.DataDecls = dataDecls.ToArray();
+        MoveGeometryToBuffers(vertexStream, false);
 
-
-        vertexStream.VertexCount = vertexStream.Positions.Length;
-        if (mesh.TexCoords is null)
-        {
-            GbxItemUtils.SetTangentUs(vertexStream, null);
-        }
-        else
-        {
-            GbxItemUtils.SetTangentUs(vertexStream, mesh.TangentUs ?? new Vec3[mesh.Positions.Length]);
-        }
-
-        if (mesh.TexCoords is null)
-        {
-            GbxItemUtils.SetTangentVs(vertexStream, null);
-        }
-        else
-        {
-            GbxItemUtils.SetTangentVs(vertexStream, mesh.TangentVs ?? new Vec3[mesh.Positions.Length]);
-        }
 
         var indexBuffer = GbxTemplateLibrary.CreateCPlugIndexBufferTemplate().Value;
         indexBuffer.Indices = mesh.Indices.ToArray();
@@ -788,13 +875,135 @@ public class ItemCompiler
         indexedTriangles.VertexStreams = [vertexStream];
         indexedTriangles.IndexBuffer = indexBuffer;
         indexedTriangles.BoundingBox = GbxItemUtils.BuildBoxAligned(mesh);
+        indexedTriangles.VertexCount = mesh.Positions.Length;
 
-        var countProperty = typeof(CPlugVisualIndexedTriangles).GetProperty("Count",
-            BindingFlags.NonPublic | BindingFlags.Instance);
-        countProperty?.SetValue(indexedTriangles, vertexStream.Positions.Length);
 
         return indexedTriangles;
     }
+
+    public void MoveGeometryToBuffers(CPlugVertexStream vertexStream, bool clearProperties)
+    {
+        foreach (var decl in vertexStream.DataDecls ?? [])
+        {
+            var semantic = decl.Semantic;
+
+            var vectors = GetVec3(semantic, vertexStream);
+
+            vertexStream.UVs.TryGetValue(
+                (int)semantic - (int)EPlugVDcl.TexCoord0,
+                out var texCoords);
+
+            var pairs = semantic == EPlugVDcl.BlendWeight
+                ? vertexStream.BlendWeight
+                : texCoords;
+
+            var integers = semantic == EPlugVDcl.BlendIndices
+                ? vertexStream.BlendIndices
+                : GetColorIndex(semantic) is { } index
+                    && vertexStream.Colors.TryGetValue(index, out var colorValues)
+                        ? colorValues
+                        : null;
+
+            if (vectors is not null)
+            {
+                if (vectors.Length != vertexStream.VertexCount)
+                    throw new InvalidDataException("Invalid vector count.");
+
+                if (decl.Type == EPlugVDclType.Dec3N ||
+                    (vertexStream.CompressLocalFloat3 &&
+                     decl.Type == EPlugVDclType.Float3 &&
+                     decl.Space == EPlugVDclSpace.Local3D))
+                {
+                    var data = new int[vertexStream.VertexCount];
+
+                    for (var i = 0; i < vertexStream.VertexCount; i++)
+                    {
+                        var v = vectors[i];
+
+                        data[i] =
+                            ((int)(v.X * 511) & 0x3FF) |
+                            (((int)(v.Y * 511) & 0x3FF) << 10) |
+                            (((int)(v.Z * 511) & 0x3FF) << 20);
+                    }
+
+                    decl.Data = MemoryMarshal.AsBytes(data.AsSpan()).ToArray();
+                }
+                else
+                {
+                    decl.Data = MemoryMarshal.AsBytes(vectors.AsSpan()).ToArray();
+                }
+
+                if(clearProperties)
+                    SetVec3(semantic, null!, vertexStream);
+            }
+            else if (pairs is not null)
+            {
+                if (pairs.Length != vertexStream.VertexCount)
+                    throw new InvalidDataException("Invalid vector count.");
+
+                decl.Data = MemoryMarshal.AsBytes(pairs.AsSpan()).ToArray();
+
+                if (clearProperties)
+                {
+                    if (semantic == EPlugVDcl.BlendWeight)
+                        vertexStream.BlendWeight = null;
+                    else
+                        vertexStream.UVs.Remove((int)semantic - (int)EPlugVDcl.TexCoord0);
+                }
+            }
+            else if (integers is not null)
+            {
+                if (integers.Length != vertexStream.VertexCount)
+                    throw new InvalidDataException("Invalid integer count.");
+
+                decl.Data = MemoryMarshal.AsBytes(integers.AsSpan()).ToArray();
+
+                if (clearProperties)
+                {
+                    if (semantic == EPlugVDcl.BlendIndices)
+                        vertexStream.BlendIndices = null;
+                    else if (GetColorIndex(semantic) is { } colorIndex)
+                        vertexStream.Colors.Remove(colorIndex);
+                }
+            }
+        }
+    }
+
+    private Vec3[]? GetVec3(EPlugVDcl semantic, CPlugVertexStream vertexStream) => semantic switch
+    {
+        EPlugVDcl.Position => vertexStream.Positions,
+        EPlugVDcl.Position1 => vertexStream.Positions2,
+        EPlugVDcl.Normal => vertexStream.Normals,
+        EPlugVDcl.Normal1 => vertexStream.Normals2,
+        EPlugVDcl.TangentU => vertexStream.TangentUs,
+        EPlugVDcl.TangentU1 => vertexStream.TangentUs2,
+        EPlugVDcl.TangentV => vertexStream.TangentVs,
+        EPlugVDcl.TangentV1 => vertexStream.TangentVs2,
+        _ => null
+    };
+
+    private void SetVec3(EPlugVDcl semantic, Vec3[] values, CPlugVertexStream vertexStream)
+    {
+        switch (semantic)
+        {
+            case EPlugVDcl.Position: vertexStream.Positions = values; break;
+            case EPlugVDcl.Position1: vertexStream.Positions2 = values; break;
+            case EPlugVDcl.Normal: vertexStream.Normals = values; break;
+            case EPlugVDcl.Normal1: vertexStream.Normals2 = values; break;
+            case EPlugVDcl.TangentU: vertexStream.TangentUs = values; break;
+            case EPlugVDcl.TangentU1: vertexStream.TangentUs2 = values; break;
+            case EPlugVDcl.TangentV: vertexStream.TangentVs = values; break;
+            case EPlugVDcl.TangentV1: vertexStream.TangentVs2 = values; break;
+        }
+    }
+
+    private static int? GetColorIndex(EPlugVDcl semantic) => semantic switch
+    {
+        EPlugVDcl.Color0 => 0,
+        EPlugVDcl.Color1 => 1,
+        EPlugVDcl.Color2 => 2,
+        _ => null
+    };
 
     CPlugVisualIndexedTriangles CreateIndexedTrianglesFromShape(
         NormalizedShape shape,
@@ -1004,7 +1213,7 @@ public class ItemCompiler
     }
     ToolResult<CPlugVegetTreeModel> CreateVegetTreeModel(NormalizedItem item, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, string clusterKey, BuildSettings buildSettings)
     {
-        var vegetModel = ObjectCloner.DeepCloneObject(cluster.VegetTreeModel)!;
+        var vegetModel = GbxTemplateLibrary.CreateVegetTreeModelTemplate().Value;
 
         var meshInstances = instances
             .Where(i => i.Instance.Visible)
@@ -1049,7 +1258,6 @@ public class ItemCompiler
         PreLightGen? preLightGen = null;
         for (int i = 0; i < cluster.LODDistances.Length + 1; ++i)
         {
-            var requiredLod = 1 << i;
 
             List<Geometry> geometries = [];
 
@@ -1064,7 +1272,7 @@ public class ItemCompiler
                     instance.LODMaskOverride.Value : 
                     mesh != null ? meshRef!.LODMask : 0;
 
-                if (!LODUtils.IsVisibleInLod(lodMask, requiredLod))
+                if (!LODUtils.ToLodIndexes(lodMask, cluster.LODDistances).Contains(i))
                     continue; // not visible in this lod, skip
 
 
@@ -1194,8 +1402,36 @@ public class ItemCompiler
     }
     TextureSet ResolveTextureSet(NormalizedItem item, MeshRef meshRef)
     {
-        if (item.MaterialPool.TryGetValue(meshRef.MaterialKey, out var normMaterial) && normMaterial.TextureSet != null)
-            return normMaterial.TextureSet;
+        if(item.MaterialPool.TryGetValue(meshRef.MaterialKey, out var normMaterial))
+        {
+            if(normMaterial.TextureSet != null)
+                return normMaterial.TextureSet;
+            if(normMaterial.TextureAssets != null)
+            {
+                var texAssets = normMaterial.TextureAssets;
+                var textureSet = new TextureSet();
+                if(!string.IsNullOrWhiteSpace(texAssets.ColorImage.Path))
+                    textureSet.References.ColorImage.Descriptor = compileContext.RefTable.CreateFile(texAssets.ColorImage.Path, 1, false);
+
+                if (!string.IsNullOrWhiteSpace(texAssets.NormalImage.Path))
+                    textureSet.References.NormalImage.Descriptor = compileContext.RefTable.CreateFile(texAssets.NormalImage.Path, 1, false);
+
+                if (!string.IsNullOrWhiteSpace(texAssets.RoughnessImage.Path))
+                    textureSet.References.RoughnessImage.Descriptor = compileContext.RefTable.CreateFile(texAssets.RoughnessImage.Path, 1, false);
+
+                if (!string.IsNullOrWhiteSpace(texAssets.DiffuseBitmap.Path))
+                    textureSet.References.U01.Descriptor = compileContext.RefTable.CreateFile(texAssets.DiffuseBitmap.Path, 1, false);
+
+                if (!string.IsNullOrWhiteSpace(texAssets.NormalBitmap.Path))
+                    textureSet.References.U02.Descriptor = compileContext.RefTable.CreateFile(texAssets.NormalBitmap.Path, 1, false);
+
+                if (!string.IsNullOrWhiteSpace(texAssets.RoughnessBitmap.Path))
+                    textureSet.References.U03.Descriptor = compileContext.RefTable.CreateFile(texAssets.RoughnessBitmap.Path, 1, false);
+
+                return textureSet;
+            }
+
+        }
         return GbxItemUtils.CreateEmptyTextureSet();
     }
 
@@ -1579,6 +1815,8 @@ public class ItemCompiler
         item.Description = string.IsNullOrWhiteSpace(normalizedItem.Description) ? "No Description" : normalizedItem.Description;
         item.Ident = _ident;
         item.ItemFlags = normalizedItem.ItemFlags;
+        if ((int)item.ItemFlags == 1)
+            item.ItemFlags = EItemFlags.None;
         item.DefaultPlacement = normalizedItem.PlacementParam ?? GbxTemplateLibrary.CreatePlacementParamTemplate();
         if (item.EntityModel is CPlugPrefab prefab)
             prefab.FileWriteTime = DateTime.Now;
@@ -1855,7 +2093,7 @@ public class ItemCompiler
             name = mesh.Name;
             positions = mesh.Positions;
             indices = mesh.Indices;
-            texCoords = mesh.TexCoords;
+            texCoords = mesh.TexCoords0;
             lightmapCoords = mesh.LightmapCoords;
         }
         else if (refBase is ShapeRef shapeRef)

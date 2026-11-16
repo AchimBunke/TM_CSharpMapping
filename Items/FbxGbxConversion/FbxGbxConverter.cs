@@ -17,7 +17,10 @@ internal class ConfigIndex
     public Dictionary<string, InstanceConfig> InstanceConfigsByName { get; set; } = new Dictionary<string, InstanceConfig>();
     public Dictionary<string, MovingGroupConfig> MovingGroupConfigsByName { get; set; } = new Dictionary<string, MovingGroupConfig>();
 
-    public Dictionary<string,string> OriginalNodes { get; set; } = new Dictionary<string, string>();
+    public Dictionary<string, VegetTreeConfig> VegetTreeConfigsByName { get; set; } = new Dictionary<string, VegetTreeConfig>();
+    public Dictionary<string, AssetConfig> AssetsById { get; set; } = new Dictionary<string, AssetConfig>();
+
+    public Dictionary<string, string> OriginalNodes { get; set; } = new();
 
     public ItemConfig ItemConfig { get; set; } = null!;
 
@@ -34,7 +37,10 @@ internal class ConfigIndex
         index.InstanceCollectionConfigsByName = config.InstanceCollections.ToDictionary(ic => ic.Name, ic => ic);
         index.InstanceConfigsByName = config.Instances.ToDictionary(i => i.Name, i => i);
         index.MovingGroupConfigsByName = config.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => mg);
+        index.VegetTreeConfigsByName = config.VegetTrees.ToDictionary(t => t.Name, t => t);
+        index.AssetsById = config.Assets.ToDictionary(a => a.Id, a => a);
         index.ItemConfig = config;
+        index.OriginalNodes = new();
         return index;
     }
 }
@@ -206,6 +212,9 @@ public class FbxGbxConverter
                 WaypointNoRespawn = group.WaypointNoRespawn,
                 TriggerGameplayId = group.TriggerGameplayId,
                 GameplayMainDir = group.GameplayMainDir,
+                VegetTreeModel = group.VegetTree is not null
+                    ? FbxVegetTreeConverter.CreateModelTemplate(configIndex.VegetTreeConfigsByName[group.VegetTree])
+                    : null,
             };
 
             int modelKey = item.ModelPool.Count == 0 ? 0 : item.ModelPool.Keys.Max() + 1;

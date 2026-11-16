@@ -146,6 +146,11 @@ public static class GbxTemplateLibrary
     static Gbx<CPlugBitmap> bitmapTemplate = null!;
     public static GbxTemplate<Gbx<CPlugBitmap>> CreateBitmapGbxTemplate()
         => new GbxTemplate<Gbx<CPlugBitmap>>((ObjectCloner.DeepCloneObject(bitmapTemplate ??= Gbx.Parse<CPlugBitmap>(TemplateLoader.GetTemplate("BitmapTemplate.Texture.Gbx"))))!);
+
+    static CPlugVegetTreeModel vegetTreeModelTemplate = null!;
+    public static GbxTemplate<CPlugVegetTreeModel> CreateVegetTreeModelTemplate()
+        => new GbxTemplate<CPlugVegetTreeModel>((ObjectCloner.DeepCloneObject(vegetTreeModelTemplate ??= Gbx.Parse<CPlugVegetTreeModel>(TemplateLoader.GetTemplate("VegetTreeModelTemplate.VegetTreeModel.Gbx"))))!);
+
 }
 
 
