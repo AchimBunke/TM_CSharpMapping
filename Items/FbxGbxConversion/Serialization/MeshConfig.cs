@@ -3,6 +3,7 @@ using GBX.NET.Engines.Plug;
 using System.Text.Json.Serialization;
 using TM_GenericMapping.Items.MeshCompilation;
 using static GBX.NET.Engines.GameData.CGameItemModel;
+using static GBX.NET.Engines.Meta.CPlugVegetTreeModel;
 using static GBX.NET.Engines.Plug.CPlugSurface;
 
 namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
@@ -83,24 +84,63 @@ public class VegetTreeConfig
     [JsonPropertyName("Name")]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Same unit convention as LodParameters.MaxLodDistances.</summary>
-    [JsonPropertyName("MaxLodDistances")]
-    public List<float> MaxLodDistances { get; set; } = [];
 
     [JsonPropertyName("AngleMaxRotXZDeg")]
-    public float? AngleMaxRotXZDeg { get; set; }
+    public float AngleMaxRotXZDeg { get; set; } = 0; // not sure what this does.
 
     [JsonPropertyName("EnableRandomRotationY")]
-    public bool? EnableRandomRotationY { get; set; }
+    public bool EnableRandomRotationY { get; set; } = false; // rotation around Y axis is randomized when placed.
 
     [JsonPropertyName("ForceNoCollision")]
-    public bool? ForceNoCollision { get; set; }
+    public bool ForceNoCollision { get; set; } = false;
 
     [JsonPropertyName("ImpostorAllPlanesVisible")]
-    public bool? ImpostorAllPlanesVisible { get; set; }
+    public bool ImpostorAllPlanesVisible { get; set; } = false;
 
     [JsonPropertyName("LodDistAtFov90")]
-    public float? LodDistAtFov90 { get; set; }
+    public float LodDistAtFov90 { get; set; } = 100;
+
+    [JsonPropertyName("PlaneComputeMode")]
+    public EPlaneComputeMode PlaneComputeMode { get; set; } = EPlaneComputeMode.Zero; // how is the importer plane positioned
+
+    //  propagation (particle fx)
+
+    [JsonPropertyName("EnablePropagation")]
+    public bool EnablePropagation { get; set; } = false;
+
+    [JsonPropertyName("PropagationAtlasGrid")]
+    public Int2 PropagationAtlasGrid { get; set; } = (1, 1);
+
+    [JsonPropertyName("PropagationBaseColorBitmap")]
+    public string PropagationBaseColorBitmap { get; set; } = string.Empty;
+
+    [JsonPropertyName("PropagationNormalBitmap")]
+    public string PropagationNormalBitmap { get; set; } = string.Empty;
+
+    [JsonPropertyName("PropagationConeHalfAngleDeg")]
+    public float PropagationConeHalfAngleDeg { get; set; } = 45;
+
+    [JsonPropertyName("PropagationEmissionPositions")]
+    public Vec3[] PropagationEmissionPositions { get; set; } = [];
+
+    [JsonPropertyName("PropagationEmissionSpawnRadius")]
+    public float PropagationEmissionSpawnRadius { get; set; } = 2.5f;
+
+    [JsonPropertyName("PropagationGroundGenPointCount")]
+    public int PropagationGroundGenPointCount { get; set; } = 300;
+
+    [JsonPropertyName("PropagationLeafPerSecondCount")]
+    public int PropagationLeafPerSecondCount { get; set; } = 20;
+
+    [JsonPropertyName("PropagationLeafSize")]
+    public float PropagationLeafSize { get; set; } = 0.1f;
+
+
+    [JsonPropertyName("ReceivesPSSM")]
+    public bool ReceivesPSSM { get; set; } = true; // probably Parallel-Split Shadow Maps.
+
+    [JsonPropertyName("PropagationMaxRandomScaleReductionPerInstance")]
+    public float PropagationMaxRandomScaleReductionPerInstance { get; set; } = 0.1f;
 }
 
 public class MeshConfig

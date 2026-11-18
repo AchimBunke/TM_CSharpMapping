@@ -192,7 +192,7 @@ public class ItemCompiler
 
 
     GbxTemplate<CGameItemModel> CreateItemTemplate() 
-    {
+    {;
         var itemTemplate = GbxTemplateLibrary.CreateMovingItemTemplate();
         //itemTemplate.Value.GetChunk<CGameItemModel.Chunk2E00201F>().U08 = 1;
         //itemTemplate.Value.GetChunk<CGameItemModel.Chunk2E002020>().U03 = false;
@@ -1347,7 +1347,8 @@ public class ItemCompiler
         target.LodDistAtFov90 = source.LodDistAtFov90;
         target.PlaneComputeMode = source.PlaneComputeMode;
         target.PropagationAtlasGrid = source.PropagationAtlasGrid;
-        target.PropagationBaseColor = source.PropagationBaseColor;
+        target.References.PropagationBaseColor.Descriptor = source.References.PropagationBaseColor.Descriptor;
+        target.References.PropagationNormal.Descriptor = source.References.PropagationNormal.Descriptor;
         target.PropagationConeHalfAngleDeg = source.PropagationConeHalfAngleDeg;
         target.PropagationEmissionPositions = source.PropagationEmissionPositions?.ToArray();
         target.PropagationEmissionSpawnRadius = source.PropagationEmissionSpawnRadius;
@@ -1355,7 +1356,6 @@ public class ItemCompiler
         target.PropagationGroundGenPointCount = source.PropagationGroundGenPointCount;
         target.PropagationLeafPerSecondCount = source.PropagationLeafPerSecondCount;
         target.PropagationLeafSize = source.PropagationLeafSize;
-        target.PropagationNormal = source.PropagationNormal;
         target.ReceivesPSSM = source.ReceivesPSSM;
         target.ScaleVar01 = source.ScaleVar01;
         target.U01 = source.U01;
@@ -1410,24 +1410,48 @@ public class ItemCompiler
             {
                 var texAssets = normMaterial.TextureAssets;
                 var textureSet = new TextureSet();
-                if(!string.IsNullOrWhiteSpace(texAssets.ColorImage.Path))
-                    textureSet.References.ColorImage.Descriptor = compileContext.RefTable.CreateFile(texAssets.ColorImage.Path, 1, false);
+                if (!string.IsNullOrWhiteSpace(texAssets.ColorImage?.Path))
+                {
+                  
+                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.ColorImage.Path };
+                    textureSet.References.ColorImage.Descriptor = reftable.CreateFile(texAssets.ColorImage.Path, 1, false);
+                }
 
-                if (!string.IsNullOrWhiteSpace(texAssets.NormalImage.Path))
-                    textureSet.References.NormalImage.Descriptor = compileContext.RefTable.CreateFile(texAssets.NormalImage.Path, 1, false);
+                if (!string.IsNullOrWhiteSpace(texAssets.NormalImage?.Path))
+                {
+                   
+                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.NormalImage.Path };
+                    textureSet.References.NormalImage.Descriptor = reftable.CreateFile(texAssets.NormalImage.Path, 1, false);
+                }
 
-                if (!string.IsNullOrWhiteSpace(texAssets.RoughnessImage.Path))
-                    textureSet.References.RoughnessImage.Descriptor = compileContext.RefTable.CreateFile(texAssets.RoughnessImage.Path, 1, false);
+                if (!string.IsNullOrWhiteSpace(texAssets.RoughnessImage?.Path))
+                {
+                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.RoughnessImage.Path };
+                    textureSet.References.RoughnessImage.Descriptor = reftable.CreateFile(texAssets.RoughnessImage.Path, 1, false);
+                }
 
-                if (!string.IsNullOrWhiteSpace(texAssets.DiffuseBitmap.Path))
-                    textureSet.References.U01.Descriptor = compileContext.RefTable.CreateFile(texAssets.DiffuseBitmap.Path, 1, false);
+                if (!string.IsNullOrWhiteSpace(texAssets.DiffuseBitmap?.Path))
+                {
+                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.DiffuseBitmap.Path };
+                    textureSet.References.U01.Descriptor = reftable.CreateFile(texAssets.DiffuseBitmap.Path, 1, false);
+                }
 
-                if (!string.IsNullOrWhiteSpace(texAssets.NormalBitmap.Path))
-                    textureSet.References.U02.Descriptor = compileContext.RefTable.CreateFile(texAssets.NormalBitmap.Path, 1, false);
+                if (!string.IsNullOrWhiteSpace(texAssets.NormalBitmap?.Path))
+                {
+                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.NormalBitmap.Path };
+                    textureSet.References.U02.Descriptor = reftable.CreateFile(texAssets.NormalBitmap.Path, 1, false);
+                }
 
-                if (!string.IsNullOrWhiteSpace(texAssets.RoughnessBitmap.Path))
-                    textureSet.References.U03.Descriptor = compileContext.RefTable.CreateFile(texAssets.RoughnessBitmap.Path, 1, false);
+                if (!string.IsNullOrWhiteSpace(texAssets.RoughnessBitmap?.Path))
+                {
+                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.RoughnessBitmap.Path };
+                    textureSet.References.U03.Descriptor = reftable.CreateFile(texAssets.RoughnessBitmap.Path, 1, false);
+                }
 
+                if(!texAssets.SurfacePhysicsId.HasValue)
+                {
+                    textureSet.U09 = 1; // not sure
+                }
                 return textureSet;
             }
 
@@ -1435,14 +1459,33 @@ public class ItemCompiler
         return GbxItemUtils.CreateEmptyTextureSet();
     }
 
-    sealed record MeshCollisionSource(NormalizedMesh Mesh, CPlugMaterialUserInst Material);
-
-    object ResolveCollisionSource(NormalizedItem item, Guid id, RefKind kind) => kind switch
+    (MaterialId MaterialId, GameplayId GameplayId) ResolveGameplayPhysis(NormalizedMaterial normMat)
     {
-        RefKind.Mesh => new MeshCollisionSource(item.MeshPool[(compileContext.GuidToRef[id] as MeshRef)!.MeshKey], ResolveCPlugMaterialUserInst(item, (compileContext.GuidToRef[id] as MeshRef)!)),
-        RefKind.Shape => item.ShapePool[(compileContext.GuidToRef[id] as ShapeRef)!.ShapeKey],
-        _ => throw new InvalidOperationException($"Unexpected RefKind {kind} in collision source"),
-    };
+        switch (normMat.Type)
+        {
+            case MaterialType.UserInstance:
+                return (normMat.MaterialUserInst?.SurfacePhysicId ?? MaterialId.NotCollidable, normMat.MaterialUserInst?.SurfaceGameplayId ?? GameplayId.None);
+            case MaterialType.TextureSet:
+                return (normMat.TextureAssets?.SurfacePhysicsId ?? MaterialId.NotCollidable, normMat.TextureAssets?.SurfaceGameplayId ?? GameplayId.None);
+            default:
+                throw new NotImplementedException($"Material type {normMat.Type} not implemented in ResolveGameplayPhysis");
+        }
+    }
+    sealed record MeshCollisionSource(NormalizedMesh Mesh, MaterialId MaterialId, GameplayId GameplayId);
+
+    object ResolveCollisionSource(NormalizedItem item, Guid id, RefKind kind)
+    {
+        var physics = ResolveGameplayPhysis(item.MaterialPool[(compileContext.GuidToRef[id] as MeshRef)!.MaterialKey]);
+        return kind switch
+        {
+
+            RefKind.Mesh => new MeshCollisionSource(item.MeshPool[(compileContext.GuidToRef[id] as MeshRef)!.MeshKey], physics.MaterialId, physics.GameplayId),
+            RefKind.Shape => item.ShapePool[(compileContext.GuidToRef[id] as ShapeRef)!.ShapeKey],
+            _ => throw new InvalidOperationException($"Unexpected RefKind {kind} in collision source"),
+        };
+    }
+
+   
     void MergeIntoCollisionGeometry(IEnumerable<object> geometrySources, bool trigger, out List<Vec3> positions, out List<CPlugSurface.Mesh.Triangle> triangles)
     {
         //positions = new List<Vec3>();
@@ -1457,11 +1500,11 @@ public class ItemCompiler
             ReadOnlySpan<MaterialId> surfaceMaterialIds;
             ReadOnlySpan<GameplayId> surfaceGameplayIds;
             NormalizedMesh? normMesh = null;
-            CPlugMaterialUserInst? collisionMaterial = null;
+            MeshCollisionSource? collisionSource = null;
             if (geometrySource is MeshCollisionSource meshSource)
             {
                 normMesh = meshSource.Mesh;
-                collisionMaterial = meshSource.Material;
+                collisionSource = meshSource;
                 sourcePositions = normMesh.Positions.AsSpan();
                 sourceIndices = normMesh.Indices.AsSpan();
                 surfaceMaterialIds = default;
@@ -1497,14 +1540,14 @@ public class ItemCompiler
                 if (!surfaceMaterialIds.IsEmpty)
                     materialId = surfaceMaterialIds[i / 3];
                 else if (normMesh is not null)
-                    materialId = collisionMaterial!.SurfacePhysicId;
+                    materialId = collisionSource!.MaterialId;
                 else
                     materialId = MaterialId.Concrete;
                 GameplayId surfaceGameplayId = GameplayId.None;
                 if (!surfaceGameplayIds.IsEmpty)
                     surfaceGameplayId = surfaceGameplayIds[i / 3];
                 else if (normMesh is not null)
-                    surfaceGameplayId = collisionMaterial!.SurfaceGameplayId;
+                    surfaceGameplayId = collisionSource!.GameplayId;
                 else
                     surfaceGameplayId = GameplayId.None;
 

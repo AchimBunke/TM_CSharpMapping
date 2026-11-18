@@ -83,7 +83,15 @@ public class NormalizedMaterial
 
 /// <summary>Resolved external file (absolute, or as given if no base directory is known).</summary>
 public record NormalizedAsset(string Path, AssetType Type);
-public record NormalizedTextureAssets(NormalizedAsset? ColorImage, NormalizedAsset? NormalImage, NormalizedAsset? RoughnessImage, NormalizedAsset? DiffuseBitmap, NormalizedAsset? NormalBitmap, NormalizedAsset? RoughnessBitmap);
+public record NormalizedTextureAssets(
+    NormalizedAsset? ColorImage, 
+    NormalizedAsset? NormalImage, 
+    NormalizedAsset? RoughnessImage, 
+    NormalizedAsset? DiffuseBitmap, 
+    NormalizedAsset? NormalBitmap, 
+    NormalizedAsset? RoughnessBitmap, 
+    MaterialId? SurfacePhysicsId, 
+    GameplayId? SurfaceGameplayId);
 public class NormalizedShape
 {
     public Vec3[] Positions { get; set; } = [];

@@ -83,6 +83,7 @@ public class FbxGbxConverter
         Directory.CreateDirectory(Path.GetDirectoryName(conversionInput.ItemOutputPath)!);
         itemResult.Value.Save(conversionInput.ItemOutputPath);
 
+        Console.WriteLine(conversionInput.ItemOutputPath);
         return itemResult;
     }
 
@@ -204,6 +205,7 @@ public class FbxGbxConverter
                 var rotationAdjustedGameplayDir = Vector3.Transform(mainDir, Quaternion.Inverse(anchorRot));
                 group.GameplayMainDir = rotationAdjustedGameplayDir;
             }
+
             var model = new NormalizedModel
             {
                 Type = group.Type,
@@ -212,10 +214,15 @@ public class FbxGbxConverter
                 WaypointNoRespawn = group.WaypointNoRespawn,
                 TriggerGameplayId = group.TriggerGameplayId,
                 GameplayMainDir = group.GameplayMainDir,
-                VegetTreeModel = group.VegetTree is not null
-                    ? FbxVegetTreeConverter.CreateModelTemplate(configIndex.VegetTreeConfigsByName[group.VegetTree])
-                    : null,
+                VegetTreeModel = null
             };
+            if(group.VegetTree is not null)
+            {
+                var vegetModelResult = FbxVegetTreeConverter.CreateModelTemplate(configIndex.VegetTreeConfigsByName[group.VegetTree], config.ItemConfig);
+                if(vegetModelResult.IsFailure)
+                    return ToolResult.Fail(vegetModelResult);
+                model.VegetTreeModel = vegetModelResult.Value;
+            }
 
             int modelKey = item.ModelPool.Count == 0 ? 0 : item.ModelPool.Keys.Max() + 1;
             item.ModelPool[modelKey] = model;
@@ -272,7 +279,20 @@ public class FbxGbxConverter
 
         SetAttachmentLocations(item, rootModel, config, variant);
 
-        return ToolResult.Success(rootModel, nameof(FbxGbxConverter));
+        // Variant with a single vegetree group: use the tree model directly as variant child, no container.
+        if (variant is not null
+            && groups.Count == 1
+            && groups[0].VegetTree is not null
+            && rootModel.Children.Count == 1)
+        {
+            int treeKey = groupIndexToModelKey[0];
+            var treeModel = item.ModelPool[treeKey];
+            item.ModelPool.Remove(treeKey);
+            item.ModelPool[rootKey] = treeModel;
+            return ToolResult.Success(treeModel, nameof(FbxGbxConverter));
+        }
+
+         return ToolResult.Success(rootModel, nameof(FbxGbxConverter));
     }
 
     ToolResult<None> ExtractAndGroupFbxData(

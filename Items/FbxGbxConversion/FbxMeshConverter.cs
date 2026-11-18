@@ -326,24 +326,53 @@ internal class FbxMeshConverter
 
         normalizedMesh.Normals = TransformVectors(mesh.Normals, normalMatrix, Matrix4x4.Identity, true).ToArray();
 
-        if (material.DMaterial is null || material.DMaterial.HasTexUvLayer)
+        if (string.IsNullOrWhiteSpace(meshConfig.VegetTree))
         {
+            if (material.DMaterial is null || material.DMaterial.HasTexUvLayer)
+            {
+                int texChannelIndex = 0;
+                if (mesh.TextureCoordinateChannels.Length > texChannelIndex)
+                    normalizedMesh.TexCoords0 = mesh.TextureCoordinateChannels[texChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
+
+                if (mesh.Tangents is not null)
+                    normalizedMesh.TangentUs = TransformVectors(mesh.Tangents, localTransform, Matrix4x4.Identity, true).ToArray();
+                if (mesh.BiTangents is not null)
+                    normalizedMesh.TangentVs = TransformVectors(mesh.BiTangents, localTransform, Matrix4x4.Identity, true).ToArray();
+            }
+
+            if (material.DMaterial is null || material.DMaterial.HasLightmapUvlayer)
+            {
+                int lightmapChannelIndex = 1;
+                if (mesh.TextureCoordinateChannels.Length > lightmapChannelIndex)
+                    normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[lightmapChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
+            }
+        }
+        else
+        {
+            var texAssets = material.TextureAssets;
+
             int texChannelIndex = 0;
             if (mesh.TextureCoordinateChannels.Length > texChannelIndex)
                 normalizedMesh.TexCoords0 = mesh.TextureCoordinateChannels[texChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
 
-            if (mesh.Tangents is not null)
-                normalizedMesh.TangentUs = TransformVectors(mesh.Tangents, localTransform, Matrix4x4.Identity, true).ToArray();
-            if (mesh.BiTangents is not null)
-                normalizedMesh.TangentVs = TransformVectors(mesh.BiTangents, localTransform, Matrix4x4.Identity, true).ToArray();
+            if (texAssets.SurfacePhysicsId.HasValue)
+            {
+                int lightmapChannelIndex = 1;
+                if (mesh.TextureCoordinateChannels.Length > lightmapChannelIndex)
+                    normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[lightmapChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
+
+                int channel2 = 2;
+                if (mesh.TextureCoordinateChannels.Length > channel2)
+                    normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[channel2].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
+            }
+            else
+            {
+                int channel2 = 1;
+                if (mesh.TextureCoordinateChannels.Length > channel2)
+                    normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[channel2].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
+            }
         }
 
-        if (material.DMaterial is null || material.DMaterial.HasLightmapUvlayer)
-        {
-            int lightmapChannelIndex = 1;
-            if (mesh.TextureCoordinateChannels.Length > lightmapChannelIndex)
-                normalizedMesh.LightmapCoords = mesh.TextureCoordinateChannels[lightmapChannelIndex].Select(tc => new Vec2(tc.X, tc.Y)).ToArray();
-        }
 
         if (material.DMaterial is null || material.DMaterial.HasColor0)
         {

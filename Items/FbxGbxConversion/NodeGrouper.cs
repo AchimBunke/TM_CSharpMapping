@@ -258,22 +258,6 @@ internal class NodeGrouper
             RelativeMovingParentGroupId = movingParams?.ParentMovingGroupId,
         };
 
-        if (bucket.Type == ModelType.VegetTreeModel)
-        {
-            // a tree is always one group with its own LOD distances (no chunking), LOD indices are tree-local
-            var tree = _configIndex.VegetTreeConfigsByName[bucket.VegetTree!];
-            var treeGroup = NewGroup(bucket.Key);
-            treeGroup.LodDistances = tree.MaxLodDistances.ToList();
-            foreach (var node in nodes)
-                treeGroup.Nodes.Add(new NodeLodAssignment
-                {
-                    NodeDef = node,
-                    LodIndices = node.NodeConfig.Lods.Count > 0
-                        ? node.NodeConfig.Lods.OrderBy(l => l).ToList()
-                        : Enumerable.Range(0, treeGroup.LodDistances.Count + 1).ToList(),
-                });
-            return new List<NodeDefGroup> { treeGroup };
-        }
 
         int K = _globalLodDistances.Count;
 

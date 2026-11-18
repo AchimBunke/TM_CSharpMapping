@@ -1,4 +1,5 @@
 ﻿using System.Xml.Serialization;
+using TM_GenericMapping.Common;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 using static GBX.NET.Engines.GameData.CGameItemModel;
 
@@ -43,7 +44,7 @@ public record FbxGbxConversionInput : IDisposable
             Fbx = fbx,
             Icon = icon,
             MaterialLibrary = materialLib,
-            ItemOutputPath = GetItemOutputPath(itemXmlFilePath),
+            ItemOutputPath = FileUtils.ResolveRealPath(GetItemOutputPath(itemXmlFilePath)),
         };
         return config;
     }
@@ -55,7 +56,7 @@ public record FbxGbxConversionInput : IDisposable
             MaterialLibrary = ParseMaterialLibrary(materialLibStream),
             Fbx = fbx,
             Icon = icon,
-            ItemOutputPath = itemOutputPath,
+            ItemOutputPath = FileUtils.ResolveRealPath(itemOutputPath),
         };
         return config;
     }
@@ -68,7 +69,7 @@ public record FbxGbxConversionInput : IDisposable
             MaterialLibrary = materialLibrary,
             Fbx = fbx,
             Icon = icon,
-            ItemOutputPath = itemOutputPath,
+            ItemOutputPath = FileUtils.ResolveRealPath(itemOutputPath),
         };
         return config;
     }
