@@ -136,6 +136,10 @@ public static class NormalizedItemValidator
                 return ValidateWaypointModel(model, item, visitedContainerModels);
             case ModelType.Trigger_Special:
                 return ValidateSpecialModel(model, item, visitedContainerModels);
+            case ModelType.ParticleFx:
+                if (model.FxSystem is null)
+                    return ToolResult.Fail(nameof(NormalizedItemValidator), ErrorCodes.NormalizedItemValidator.ValidationError, $"ParticleFx Model must have an FxSystem");
+                break;
         }
         return ToolResult.Success(nameof(NormalizedItemValidator));
     }

@@ -139,8 +139,8 @@ public class VegetTreeConfig
     [JsonPropertyName("ReceivesPSSM")]
     public bool ReceivesPSSM { get; set; } = true; // probably Parallel-Split Shadow Maps.
 
-    [JsonPropertyName("PropagationMaxRandomScaleReductionPerInstance")]
-    public float PropagationMaxRandomScaleReductionPerInstance { get; set; } = 0.1f;
+    [JsonPropertyName("MaxRandomScaleReductionPerInstance")]
+    public float MaxRandomScaleReductionPerInstance { get; set; } = 0.1f;
 }
 
 public class MeshConfig

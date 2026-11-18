@@ -1,4 +1,5 @@
 using GBX.NET.Engines.GameData;
+using GBX.NET.Engines.Plug;
 using System.Numerics;
 using TM_GenericMapping.Items.FbxGbxConversion.Importing;
 using TM_GenericMapping.Items.FbxGbxConversion.Serialization;
@@ -19,6 +20,10 @@ internal class ConfigIndex
 
     public Dictionary<string, VegetTreeConfig> VegetTreeConfigsByName { get; set; } = new Dictionary<string, VegetTreeConfig>();
     public Dictionary<string, AssetConfig> AssetsById { get; set; } = new Dictionary<string, AssetConfig>();
+    public Dictionary<string, ParticleFxConfig> ParticleFxConfigsByName { get; set; } = new Dictionary<string, ParticleFxConfig>();
+
+    // converted once per conversion (keyed by fx config name) so all variants reference the same node
+    public Dictionary<string, CPlugFxSystem> LoadedFxSystemsByName { get; set; } = new Dictionary<string, CPlugFxSystem>();
 
     public Dictionary<string, string> OriginalNodes { get; set; } = new();
 
@@ -39,6 +44,7 @@ internal class ConfigIndex
         index.MovingGroupConfigsByName = config.MovingGroups.ToDictionary(mg => mg.MovingGroupId, mg => mg);
         index.VegetTreeConfigsByName = config.VegetTrees.ToDictionary(t => t.Name, t => t);
         index.AssetsById = config.Assets.ToDictionary(a => a.Id, a => a);
+        index.ParticleFxConfigsByName = config.ParticleFx.ToDictionary(p => p.Name, p => p);
         index.ItemConfig = config;
         index.OriginalNodes = new();
         return index;
@@ -104,6 +110,7 @@ public class FbxGbxConverter
             var importer = CreateSceneImporter(conversionInput.ItemConfig.Scale);
             var scene = importer.Import(conversionInput.Fbx);
             importer.FixConfigAxes(conversionInput.ItemConfig);
+            FixConfigScale(conversionInput.ItemConfig);   // meshes are scaled by the importer, config positions here
 
             var res = ResolveInstances(scene, configIndex);
             if (res.IsFailure)
@@ -279,6 +286,10 @@ public class FbxGbxConverter
 
         SetAttachmentLocations(item, rootModel, config, variant);
 
+        var fxResult = AddParticleFx(item, rootModel, scene, configIndex, variant);
+        if (fxResult.IsFailure)
+            return ToolResult.Fail(fxResult);
+
         // Variant with a single vegetree group: use the tree model directly as variant child, no container.
         if (variant is not null
             && groups.Count == 1
@@ -420,6 +431,33 @@ public class FbxGbxConverter
             });
         }
     }
+    /// <summary>Adds one ParticleFx child per fx node, placed at the node's world transform. Nodes sharing an fx system share one model.</summary>
+    ToolResult<None> AddParticleFx(NormalizedItem item, NormalizedModel containerModel, ImportedScene scene, ConfigIndex configIndex, string? variant)
+    {
+        var fxResult = FbxParticleFxConverter.ExtractParticleFx(scene, configIndex);
+        if (fxResult.IsFailure)
+            return ToolResult.Fail(fxResult);
+
+        var modelKeyByFxSystem = new Dictionary<CPlugFxSystem, int>(ReferenceEqualityComparer.Instance);
+        foreach (var fx in fxResult.Value.Where(f => IsInVariant(f.Config.Variant, variant)))
+        {
+            if (!modelKeyByFxSystem.TryGetValue(fx.FxSystem, out var modelKey))
+            {
+                modelKey = item.ModelPool.Count == 0 ? 0 : item.ModelPool.Keys.Max() + 1;
+                item.ModelPool[modelKey] = new NormalizedModel { Type = ModelType.ParticleFx, FxSystem = fx.FxSystem };
+                modelKeyByFxSystem[fx.FxSystem] = modelKey;
+            }
+
+            containerModel.Children.Add(new EntityRef
+            {
+                ModelKey = modelKey,
+                Position = fx.Position,
+                Rotation = fx.Rotation,
+            });
+        }
+        return ToolResult.Success(nameof(FbxGbxConverter));
+    }
+
     List<NodeDef> FilterAndApplySpecialMeshItems(ImportedScene scene, IEnumerable<NodeDef> nodes, List<MaterialDef> materials)
     {
         List<NodeDef> nodesWithMesh = new List<NodeDef>();
@@ -440,6 +478,15 @@ public class FbxGbxConverter
     {
         if (itemConfig.Scale == 1)
             return;
+
+        // propagation emitters belong to the tree mesh, which the importer always scales: no option
+        foreach (var tree in itemConfig.VegetTrees)
+        {
+            for (int i = 0; i < tree.PropagationEmissionPositions.Length; ++i)
+                tree.PropagationEmissionPositions[i] = Vector3.Multiply(tree.PropagationEmissionPositions[i], itemConfig.Scale);
+            tree.PropagationEmissionSpawnRadius *= itemConfig.Scale;
+        }
+
         if (itemConfig.ScaleOptions == null)
             return;
         var scale = itemConfig.Scale;

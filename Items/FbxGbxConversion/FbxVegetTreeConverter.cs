@@ -28,7 +28,7 @@ internal static class FbxVegetTreeConverter
             Force_No_Collision = config.ForceNoCollision,
             Impostor_AllPlanesVisible = config.ImpostorAllPlanesVisible,
             LodDistAtFov90 = config.LodDistAtFov90,
-            ScaleVar01 = config.PropagationMaxRandomScaleReductionPerInstance,
+            ScaleVar01 = config.MaxRandomScaleReductionPerInstance,
             PropagationEmissionSpawnRadius = config.PropagationEmissionSpawnRadius,
             PropagationLeafPerSecondCount = config.PropagationLeafPerSecondCount,
             PropagationLeafSize = config.PropagationLeafSize,

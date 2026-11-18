@@ -70,6 +70,9 @@ public enum AssetType
 {
     ImgFile,
     Bitmap,
+    // not used yet: reserved for particle fx (Nadeo's default particles don't reference materials/shaders)
+    Material,
+    Shader,
 }
 public class NormalizedMaterial
 {
@@ -127,6 +130,7 @@ public enum ModelType
     ItemAttachmentPoint,
     ItemAttachmentGroup,
     VegetTreeModel,
+    ParticleFx,
 }
 
 public enum ShapeRole
@@ -179,6 +183,9 @@ public class NormalizedModel
 
     // VegetTreeModel
     public CPlugVegetTreeModel? VegetTreeModel { get; set; } = null;
+
+    // ParticleFx: stored as-is (too many fields to normalize), the compiler references this node directly
+    public CPlugFxSystem? FxSystem { get; set; } = null;
 }
 
 public abstract class RefBase

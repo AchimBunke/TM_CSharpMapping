@@ -293,6 +293,11 @@ public class ItemCompiler
                     return GetOrCreateItemAttachmentPoint(item, model, settings, out modelParams).Cast<CMwNod>();
                 case ModelType.ItemAttachmentGroup:
                     return GetOrCreateItemAttachmentGroup(item, model, settings, out modelParams).Cast<CMwNod>();
+                case ModelType.ParticleFx:
+                    // FxSystem nodes are not normalized, reuse the node as-is. Ent params stay null (same as Nadeo prefabs).
+                    if (model.FxSystem is null)
+                        return ToolResult.Fail<CMwNod>(nameof(ItemCompiler), ErrorCodes.ItemCompiler.MissingFxSystem);
+                    return ToolResult.Success<CMwNod>(model.FxSystem, nameof(ItemCompiler));
                 default:
                     return ToolResult.Success<CMwNod>(GbxItemUtils.CreateCPlugPrefab(), nameof(ItemCompiler)); // empty container, nothing enabled
             }
@@ -1475,14 +1480,20 @@ public class ItemCompiler
 
     object ResolveCollisionSource(NormalizedItem item, Guid id, RefKind kind)
     {
-        var physics = ResolveGameplayPhysis(item.MaterialPool[(compileContext.GuidToRef[id] as MeshRef)!.MaterialKey]);
         return kind switch
         {
 
-            RefKind.Mesh => new MeshCollisionSource(item.MeshPool[(compileContext.GuidToRef[id] as MeshRef)!.MeshKey], physics.MaterialId, physics.GameplayId),
+            RefKind.Mesh => CreateMeshCollisionSource(item, (MeshRef)compileContext.GuidToRef[id]),
             RefKind.Shape => item.ShapePool[(compileContext.GuidToRef[id] as ShapeRef)!.ShapeKey],
             _ => throw new InvalidOperationException($"Unexpected RefKind {kind} in collision source"),
         };
+    }
+
+    // shapes carry their own surface ids, only meshes need the material lookup
+    MeshCollisionSource CreateMeshCollisionSource(NormalizedItem item, MeshRef meshRef)
+    {
+        var physics = ResolveGameplayPhysis(item.MaterialPool[meshRef.MaterialKey]);
+        return new MeshCollisionSource(item.MeshPool[meshRef.MeshKey], physics.MaterialId, physics.GameplayId);
     }
 
    
@@ -2340,6 +2351,9 @@ public class ItemCompiler
             return false;
         if(buildSettings.Clusters.Any(c=>c.Value.Type == ModelType.Variant_List))
             return false;
+        if (buildSettings.Clusters.Any(c => c.Value.Type == ModelType.ParticleFx))
+            return false; // fx systems only exist as prefab ents
+
         foreach(var instance in buildSettings.Instances)
         {
             if (!instance.Value.Enabled)

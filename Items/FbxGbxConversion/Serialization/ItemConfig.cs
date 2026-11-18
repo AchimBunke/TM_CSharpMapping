@@ -94,6 +94,9 @@ public class ItemConfig
     [JsonPropertyName("VegetTrees")]
     public List<VegetTreeConfig> VegetTrees { get; set; } = new List<VegetTreeConfig>();
 
+    [JsonPropertyName("ParticleFx")]
+    public List<ParticleFxConfig> ParticleFx { get; set; } = new List<ParticleFxConfig>();
+
     /// <summary>Optional. If non-empty the item becomes a variant item with one variant per entry.</summary>
     [JsonPropertyName("Variants")]
     public List<VariantItemConfig> Variants { get; set; } = new List<VariantItemConfig>();
@@ -601,6 +604,28 @@ public class SubAnimFunc
     {
         get; set;
     }
+}
+
+/// <summary>
+/// Places a particle system at the FBX node named <see cref="Name"/> (usually an empty).
+/// <see cref="Fx"/> is the inline "tm-fx/1" json whose root is a CPlugFxSystem (see <see cref="MeshCompilation.ParticleFxConverter"/>).
+/// </summary>
+public class ParticleFxConfig
+{
+    [JsonPropertyName("Name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Variant")]
+    public string? Variant { get; set; } = null;
+
+    /// <summary>
+    /// Fx document ({"format","vfx"}) or a bare CPlugFxSystem node. Kept as raw json because the fx schema is
+    /// generated from GBX.NET; .Gbx paths inside it resolve relative to the config file.
+    /// </summary>
+    [JsonPropertyName("Fx")]
+    // nullable: a default (Undefined) JsonElement throws when the config is serialized
+    public JsonElement? Fx { get; set; } = null;
 }
 
 public class LightConfig

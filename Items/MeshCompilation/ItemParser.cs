@@ -587,6 +587,8 @@ public class ItemParser
                 return ParsePrefab(nestedPrefab, entityRefBase, normalizedItem);
             case CPlugVegetTreeModel vegetTreeModel:
                 return ParseVegetTreeModel(vegetTreeModel, entityRefBase, normalizedItem);
+            case CPlugFxSystem fxSystem:
+                return ParseFxSystem(fxSystem, entityRefBase, normalizedItem);
             case null:
                 {
                     switch (entRef?.Params)
@@ -888,6 +890,30 @@ public class ItemParser
         // add the model to the pool so it can be referenced by other entities
         normalizedItem.ModelPool.Add(key.GetHashCode(), model);
         // set the entityRef to reference this model
+        entityRef.ModelKey = key.GetHashCode();
+
+        return ToolResult.Success(nameof(ItemParser));
+    }
+
+    ToolResult<None> ParseFxSystem(CPlugFxSystem fxSystem, EntityRefBase entityRef, NormalizedItem normalizedItem)
+    {
+        //already parsed this model, just reference it
+        if (parseContext.nodeRefTable.TryGetKey(fxSystem, out var key))
+        {
+            entityRef.ModelKey = key.GetHashCode();
+            return ToolResult.Success(nameof(ItemParser));
+        }
+
+        key = normalizedItem.ModelPool.Count.ToString();
+        parseContext.nodeRefTable.Register(key, fxSystem);
+
+        // not normalized, the compiler writes the same node back
+        var model = new NormalizedModel()
+        {
+            Type = ModelType.ParticleFx,
+            FxSystem = fxSystem,
+        };
+        normalizedItem.ModelPool.Add(key.GetHashCode(), model);
         entityRef.ModelKey = key.GetHashCode();
 
         return ToolResult.Success(nameof(ItemParser));

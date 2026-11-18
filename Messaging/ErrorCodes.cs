@@ -63,6 +63,7 @@ public static class ErrorCodes
         public const string MissingVegetTextureSet = "FbxGbxConverter.MissingVegetTextureSet";
         public const string MissingAsset = "FbxGbxConverter.MissingAsset";
         public const string InvalidVegetTreeConfig = "FbxGbxConverter.InvalidVegetTreeConfig";
+        public const string InvalidParticleFx = "FbxGbxConverter.InvalidParticleFx";
 
     }
     public static class VariantItemBuilder
@@ -89,6 +90,7 @@ public static class ErrorCodes
         public const string MissingDynaCollisionShape = "ItemCompiler.MissingDynaCollisionShape";
         public const string UnsupportedSurfaceType = "ItemCompiler.UnsupportedSurfaceType";
         public const string MissingVisibleMesh = "ItemCompiler.MissingVisibleMesh";
+        public const string MissingFxSystem = "ItemCompiler.MissingFxSystem";
     }
     public static class ItemAttachmentCreator
     {
