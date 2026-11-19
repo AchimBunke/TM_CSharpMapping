@@ -7,7 +7,8 @@ public static class NodeRefUtils
 {
     public static GbxRefTableFile CreateFile(string filePath)
     {
-        var reftable = new GbxRefTable() { FileSystemPath = filePath };
-        return reftable.CreateFile(filePath, 1, false);
+        var realPath = FileUtils.ResolveRealPath(filePath);
+        var reftable = new GbxRefTable() { FileSystemPath = realPath };
+        return reftable.CreateFile(realPath, 1, false);
     }
 }

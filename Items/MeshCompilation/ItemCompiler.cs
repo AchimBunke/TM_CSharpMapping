@@ -1417,40 +1417,38 @@ public class ItemCompiler
                 var textureSet = new TextureSet();
                 if (!string.IsNullOrWhiteSpace(texAssets.ColorImage?.Path))
                 {
-                  
-                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.ColorImage.Path };
-                    textureSet.References.ColorImage.Descriptor = reftable.CreateFile(texAssets.ColorImage.Path, 1, false);
+                    // real path (links resolved) like the item output path, so the reference can be relative
+                    textureSet.References.ColorImage.Descriptor = NodeRefUtils.CreateFile(texAssets.ColorImage.Path);
                 }
 
                 if (!string.IsNullOrWhiteSpace(texAssets.NormalImage?.Path))
                 {
-                   
-                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.NormalImage.Path };
-                    textureSet.References.NormalImage.Descriptor = reftable.CreateFile(texAssets.NormalImage.Path, 1, false);
+                    // real path (links resolved) like the item output path, so the reference can be relative
+                    textureSet.References.NormalImage.Descriptor = NodeRefUtils.CreateFile(texAssets.NormalImage.Path);
                 }
 
                 if (!string.IsNullOrWhiteSpace(texAssets.RoughnessImage?.Path))
                 {
-                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.RoughnessImage.Path };
-                    textureSet.References.RoughnessImage.Descriptor = reftable.CreateFile(texAssets.RoughnessImage.Path, 1, false);
+                    // real path (links resolved) like the item output path, so the reference can be relative
+                    textureSet.References.RoughnessImage.Descriptor = NodeRefUtils.CreateFile(texAssets.RoughnessImage.Path);
                 }
 
                 if (!string.IsNullOrWhiteSpace(texAssets.DiffuseBitmap?.Path))
                 {
-                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.DiffuseBitmap.Path };
-                    textureSet.References.U01.Descriptor = reftable.CreateFile(texAssets.DiffuseBitmap.Path, 1, false);
+                    // real path (links resolved) like the item output path, so the reference can be relative
+                    textureSet.References.U01.Descriptor = NodeRefUtils.CreateFile(texAssets.DiffuseBitmap.Path);
                 }
 
                 if (!string.IsNullOrWhiteSpace(texAssets.NormalBitmap?.Path))
                 {
-                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.NormalBitmap.Path };
-                    textureSet.References.U02.Descriptor = reftable.CreateFile(texAssets.NormalBitmap.Path, 1, false);
+                    // real path (links resolved) like the item output path, so the reference can be relative
+                    textureSet.References.U02.Descriptor = NodeRefUtils.CreateFile(texAssets.NormalBitmap.Path);
                 }
 
                 if (!string.IsNullOrWhiteSpace(texAssets.RoughnessBitmap?.Path))
                 {
-                    var reftable = new GbxRefTable() { FileSystemPath = texAssets.RoughnessBitmap.Path };
-                    textureSet.References.U03.Descriptor = reftable.CreateFile(texAssets.RoughnessBitmap.Path, 1, false);
+                    // real path (links resolved) like the item output path, so the reference can be relative
+                    textureSet.References.U03.Descriptor = NodeRefUtils.CreateFile(texAssets.RoughnessBitmap.Path);
                 }
 
                 if(!texAssets.SurfacePhysicsId.HasValue)

@@ -110,8 +110,7 @@ public class CPlugBitmapConverter
     ToolResult<CPlugBitmap> CreateBitmapFromConfig(BitmapConfig config)
     {
         var template = GbxTemplateLibrary.CreateBitmapGbxTemplate().Value;
-        var reftable = new GbxRefTable() { FileSystemPath = config.ImageFile };
-        var imageFile = reftable.CreateFile(config.ImageFile, 1, false);
+        var imageFile = NodeRefUtils.CreateFile(config.ImageFile);
         var templateNode = template.Node;
 
         templateNode.References.Image.Descriptor = imageFile;
