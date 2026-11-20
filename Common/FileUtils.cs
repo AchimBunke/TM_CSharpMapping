@@ -16,7 +16,14 @@ public static class FileUtils
 
         while (current is not null)
         {
-            var target = current.ResolveLinkTarget(returnFinalTarget: true);
+            // directories that don't exist yet (first export into a new folder) can't be links
+            FileSystemInfo? target = null;
+            if (current.Exists)
+            {
+                try { target = current.ResolveLinkTarget(returnFinalTarget: true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
             if (target is not null)
                 return Path.Combine(target.FullName, tail);
 
