@@ -73,6 +73,11 @@ public enum AssetType
     // not used yet: reserved for particle fx (Nadeo's default particles don't reference materials/shaders)
     Material,
     Shader,
+    /// <summary>
+    /// Texture inside the game data, by its path below GameData (e.g. "Stadium\Media\Texture\Image\RoadIce_D.dds").
+    /// Used as is by custom materials (CPlugMaterialUserInst.UserTextures): nothing is shipped with the item.
+    /// </summary>
+    GameTexture,
 }
 public class NormalizedMaterial
 {

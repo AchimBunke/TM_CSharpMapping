@@ -195,7 +195,10 @@ public record FbxGbxConversionInput : IDisposable
                 Link = m.Link,
                 Color = m.OverrideColor ? m.Color : null,
                 PhysicsId = m.OverridePhysicsId ? m.PhysicsId : null,
-                GameplayId = m.OverrideGameplayId ? m.GameplayId : null
+                GameplayId = m.OverrideGameplayId ? m.GameplayId : null,
+                Model = string.IsNullOrEmpty(m.Model) ? null : m.Model,
+                // NadeoImporter stores "Items/X/Name" as "\Items\X\Name" (relative to Documents\Trackmania).
+                BaseTexture = string.IsNullOrEmpty(m.BaseTexture) ? null : @"\" + m.BaseTexture.Replace('/', '\\').TrimStart('\\'),
             }).ToList(),
             Lights = meshParamsXml.Lights.Select(l => new LightConfig
             {

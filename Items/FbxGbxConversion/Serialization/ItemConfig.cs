@@ -135,6 +135,9 @@ public class ItemConfig
         var asset = Assets.FirstOrDefault(a => a.Id == assetId);
         if (asset is null)
             return null;
+        // A game texture is a path inside the game data, not a file next to the config.
+        if (asset.Type == AssetType.GameTexture)
+            return (asset.Path, asset.Type);
         var path = Path.IsPathRooted(asset.Path) || string.IsNullOrEmpty(BaseDirectory)
             ? asset.Path
             : Path.GetFullPath(Path.Combine(BaseDirectory, asset.Path));

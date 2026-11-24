@@ -42,6 +42,14 @@ public sealed class MaterialXml
     [XmlAttribute("Link")]
     public string Link { get; set; } = "";
 
+    /// <summary>NadeoImporter custom material: shading model (TDSN, TDSNI, ...).</summary>
+    [XmlAttribute("Model")]
+    public string? Model { get; set; }
+
+    /// <summary>NadeoImporter custom material: texture path prefix relative to the Work folder, e.g. "Items/X/Textures/Name".</summary>
+    [XmlAttribute("BaseTexture")]
+    public string? BaseTexture { get; set; }
+
     [XmlAttribute("Color")]
     public string? ColorValue { get; set; }
     [XmlIgnore]

@@ -9,10 +9,24 @@ using static GBX.NET.Engines.Plug.CPlugSurface;
 namespace TM_GenericMapping.Items.FbxGbxConversion.Serialization;
 
 
+public enum MaterialConfigType
+{
+    /// <summary>Nadeo material from the material library (<see cref="MaterialConfig.Link"/>).</summary>
+    Link,
+    /// <summary>Own or game textures on a Nadeo shading model (<see cref="MaterialConfig.Model"/>), written as UserTextures.</summary>
+    Custom,
+    /// <summary>VegetTree material. Also detected without this type when Color/Normal/RoughnessImage are set (older configs).</summary>
+    TextureSet,
+}
+
 public class MaterialConfig
 {
     [JsonPropertyName("Name")]
     public string Name { get; set; } = "";
+
+    [JsonPropertyName("Type")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public MaterialConfigType Type { get; set; } = MaterialConfigType.Link;
 
     [JsonPropertyName("Link")]
     public string Link { get; set; } = "";
@@ -33,10 +47,14 @@ public class MaterialConfig
     [JsonPropertyName("BaseTexture")]
     public string? BaseTexture { get; set; } = null;
 
+    /// <summary>Shading model of a Custom material: TDSN, TDOSN, TDOBSN, TDSNE, TDSNI, TDSNI_Night or TIAdd.</summary>
     [JsonPropertyName("Model")]
     public string? Model { get; set; } = null;
 
-    /// <summary>Asset ids (see ItemConfig.Assets). Only used by materials of meshes that are part of a VegetTree (replaces Link).</summary>
+    /// <summary>
+    /// Asset ids (see ItemConfig.Assets). Used by VegetTree materials (replaces Link) and by Custom materials, where they
+    /// become UserTextures (ImgFile: a dds on disk; GameTexture: a path inside the game data).
+    /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("ColorImage")]
     public string? ColorImage { get; set; }
@@ -48,6 +66,36 @@ public class MaterialConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("RoughnessImage")]
     public string? RoughnessImage { get; set; }
+
+    /// <summary>Custom materials only: self-illumination texture (TDSNI, TDSNI_Night, TIAdd).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("SelfIllumImage")]
+    public string? SelfIllumImage { get; set; }
+
+    /// <summary>Custom materials only: energy texture (TDSNE).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("EnergyImage")]
+    public string? EnergyImage { get; set; }
+
+    /// <summary>Custom materials only: glow strength (TDSNI), written as the "SelfIllumScale" constant.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("SelfIllumScale")]
+    public float? SelfIllumScale { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("TilingU")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public CPlugMaterialUserInst.ETexAddress? TilingU { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("TilingV")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public CPlugMaterialUserInst.ETexAddress? TilingV { get; set; }
+
+    /// <summary>Custom materials only: texture coordinate animations (at most 2 are used by the game importer).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("UvAnims")]
+    public List<UvAnimConfig>? UvAnims { get; set; }
 
     /// <summary>Asset ids (see ItemConfig.Assets). Only used by materials of meshes that are part of a VegetTree (replaces Link).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -64,6 +112,49 @@ public class MaterialConfig
 }
 
 
+
+/// <summary>
+/// Texture coordinate animation of a Custom material (CPlugMaterialUserInst.UvAnims). In-game tests: only works on
+/// Model TIAdd with Layer "SelfIllum" on static items; Type "TransLinear" scrolls, "TransSubTexture" plays a flip-book.
+/// </summary>
+public class UvAnimConfig
+{
+    [JsonPropertyName("Layer")]
+    public string Layer { get; set; } = "SelfIllum";
+
+    /// <summary>TransLinear, TransSubTexture, TransCircular, Rotate, Scale, ... (written as given).</summary>
+    [JsonPropertyName("Type")]
+    public string Type { get; set; } = "TransLinear";
+
+    /// <summary>Seconds per animation cycle.</summary>
+    [JsonPropertyName("Period")]
+    public float Period { get; set; } = 1;
+
+    [JsonPropertyName("InputVal")]
+    public string InputVal { get; set; } = "GameTime";
+
+    /// <summary>TransLinear: scroll per period along U / V.</summary>
+    [JsonPropertyName("SpeedU")]
+    public float SpeedU { get; set; } = 0;
+
+    [JsonPropertyName("SpeedV")]
+    public float SpeedV { get; set; } = 0;
+
+    /// <summary>TransSubTexture: number of frames and the atlas layout.</summary>
+    [JsonPropertyName("FrameCount")]
+    public int FrameCount { get; set; } = 0;
+
+    [JsonPropertyName("FramesX")]
+    public int FramesX { get; set; } = 0;
+
+    [JsonPropertyName("FramesY")]
+    public int FramesY { get; set; } = 0;
+
+    /// <summary>Raw UvAnim.Data; when set it's written instead of the value encoded from the fields above.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("Data")]
+    public ulong? Data { get; set; }
+}
 
 /// <summary>Entry of the top-level asset registry. Path is relative to the config file unless absolute.</summary>
 public class AssetConfig

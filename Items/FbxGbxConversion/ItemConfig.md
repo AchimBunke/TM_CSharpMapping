@@ -128,12 +128,18 @@ Defines how a material in the FBX is converted. **Required for every material us
 | Field        | Type          | Default | Description                                                                                 |
 | ------------ | ------------- | ------- | ------------------------------------------------------------------------------------------- |
 | `Name`       | `string`      | `""`    | Name of the material used in the fbx.                                    |
+| `Type`       | `MaterialConfigType` | `Link` | `Link` (Nadeo material), `Custom` (own/game textures, see below) or `TextureSet` (VegetTree; also detected from the image fields). |
 | `Link`       | `string`      | `""`    | Links the configured material to the corresponding material/resource in the Nadeo material library. |
-| `Color`      | `Color?`      | `null`  | Optional color override.                                                |
+| `Color`      | `Color?`      | `null`  | Optional color override (`TargetColor`; only colorizable game materials react to it).          |
 | `PhysicsId`  | `MaterialId?` | `null`  | Optional physics/surface material override.                                               |
 | `GameplayId` | `GameplayId?` | `null`  | Optional gameplay material override.                                                      |
 | `BaseTexture`| `string?` | `null`  | Optional base texture override.                                                      |
-| `Model`      | `string?` | `null`  | Optional model override.                                                      |
+| `Model`      | `string?` | `null`  | Shading model of a `Custom` material (see below).                                          |
+| `ColorImage`, `NormalImage`, `RoughnessImage` | `string?` | `null` | Asset ids (`Assets`). VegetTree materials, and texture slots of `Custom` materials. |
+| `SelfIllumImage`, `EnergyImage` | `string?` | `null` | Asset ids: self-illumination / energy texture of a `Custom` material. |
+| `SelfIllumScale` | `float?` | `null` | `Custom`: glow strength (TDSNI, TDSNI_Night). Not set looks like 8; 1 is clearly dimmer. |
+| `TilingU`, `TilingV` | `ETexAddress?` | `null` | Texture addressing: `Wrap` repeats, `Clamp` stretches the edge pixels outside 0..1. |
+| `UvAnims`    | `UvAnimConfig[]?` | `null` | `Custom`: texture coordinate animations (see below). |
 
 ### Material linking
 
@@ -142,6 +148,53 @@ Defines how a material in the FBX is converted. **Required for every material us
 `item.fbx` includes the material names used in blender. `Name` identifies these materials and `Link` is then used to find the entry in the `NadeoImporterMaterialLib.txt`.
 
 This entry defines default material link, uv channels and gameplay effects.
+
+### Custom materials (`"Type": "Custom"`)
+
+Own or game textures on one of Nadeo's shading models, written as `UserTextures` of the material. Found by in-game
+tests; details in `TM_Various/CustomMaterialTest/CustomMaterials.md`.
+
+| `Model` | Look | Texture slots |
+|---|---|---|
+| `TDSN` | Opaque | `ColorImage`, `NormalImage` |
+| `TDOSN` | Alpha test (alpha 0 = hole) | `ColorImage` (with alpha), `NormalImage` |
+| `TDOBSN` | Alpha blend | `ColorImage` (with alpha), `NormalImage` |
+| `TDSNE` | Dark by day, energy glow at night (after the shadow calculation) | `ColorImage`, `NormalImage`, `EnergyImage` |
+| `TDSNI` | Self-illumination (`SelfIllumScale`) | `ColorImage`, `NormalImage`, `SelfIllumImage` |
+| `TDSNI_Night` | Self-illumination at night only | `ColorImage`, `NormalImage`, `SelfIllumImage` |
+| `TIAdd` | Additive glow (color added to what's behind, black = invisible) | `SelfIllumImage` |
+
+- **Assets:** `"Type": "ImgFile"` = a `.dds` on disk (full mip chain, no PNG), `"Type": "GameTexture"` = a path inside
+  the game data, e.g. `"Stadium\\Media\\Texture\\Image\\RoadIce_D.dds"` (used as is, nothing is shipped).
+- **Paths:** the game reads `ImgFile` textures relative to `Documents\Trackmania`, so they must lie below `Items\`; the
+  asset path is cut at its first `Items\` segment (e.g. `Items\_BlenderAssets\Tex_B.dds`). Where the game finds them:
+  - Editor: on disk, for every item.
+  - Play mode: the editor embeds the items when saving the map, but not these texture files. Embedded static items then
+    find textures only in the map's files (so they must be embedded as well); moving items/prefabs only on disk (so in a
+    shared map they only work with `GameTexture` assets).
+  - `GameTexture` assets always work.
+- The mesh needs UVs (the compiler then writes the tangents the custom shaders require).
+- `RoughnessImage` is written but had no visible effect in any test. Moving items show no texture animation.
+
+```json
+"Assets": [ { "Id": "IceD", "Path": "Stadium\\Media\\Texture\\Image\\RoadIce_D.dds", "Type": "GameTexture" },
+            { "Id": "IceN", "Path": "Stadium\\Media\\Texture\\Image\\IcePy_N.dds", "Type": "GameTexture" } ],
+"Materials": [ { "Name": "Ice", "Type": "Custom", "Model": "TDSN", "ColorImage": "IceD", "NormalImage": "IceN", "PhysicsId": "RoadIce" } ]
+```
+
+### `UvAnimConfig`
+
+Animates the texture coordinates of a `Custom` material. In-game only on `TIAdd` with `Layer` `SelfIllum`, static items.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `Layer` | `string` | `SelfIllum` | Texture layer to animate. |
+| `Type` | `string` | `TransLinear` | `TransLinear` scrolls, `TransSubTexture` plays a flip-book over an atlas (other types are written but didn't animate). |
+| `Period` | `float` | `1` | Seconds per cycle. |
+| `InputVal` | `string` | `GameTime` | Time source (`GameTime`, `RaceTime`, ...). |
+| `SpeedU`, `SpeedV` | `float` | `0` | `TransLinear`: scroll per period. |
+| `FrameCount`, `FramesX`, `FramesY` | `int` | `0` | `TransSubTexture`: frames and atlas grid. |
+| `Data` | `ulong?` | `null` | Raw value written instead of the one encoded from the fields above. |
 
 ---
 

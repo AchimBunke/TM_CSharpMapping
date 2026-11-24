@@ -50,6 +50,18 @@ internal class FbxMaterialConverter
         if (!TryFindMaterialConfig(matName, configIndex, out var materialConfig))
             return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.FbxGbxConverter.MissingMaterialConfig, matName);
 
+        // Checked before the tree material: a Custom material uses the same image fields.
+        if (materialConfig.Type == MaterialConfigType.Custom)
+        {
+            var applied = CustomMaterialUtils.ApplyCustomMaterial(customMat, materialConfig, configIndex.ItemConfig);
+            if (applied.IsFailure)
+                return ToolResult.Fail(applied);
+            if (materialConfig.Color.HasValue)
+                ApplyTargetColor(customMat, materialConfig.Color.Value, replace: false); // keep SelfIllumScale
+            // No DMaterial: FbxMeshConverter then keeps the texture and lightmap UVs (and the compiler the tangents).
+            return ToolResult.Success(new MaterialDef(customMat, null), nameof(FbxGbxConverter));
+        }
+
         if (FbxVegetTreeConverter.HasTextureAssets(materialConfig))
         {
             // tree material: Link/library are not used, the texture assets are attached to the material and
@@ -84,27 +96,23 @@ internal class FbxMaterialConverter
         if(!string.IsNullOrEmpty(materialConfig.Model))
             customMat.Model = materialConfig.Model;
         if (materialConfig.Color.HasValue)
-        {
-            var color = materialConfig.Color.Value;
-
-            int r = BitConverter.SingleToInt32Bits(SrgbToLinear(color.R / 255.0f));
-            int g = BitConverter.SingleToInt32Bits(SrgbToLinear(color.G / 255.0f));
-            int b = BitConverter.SingleToInt32Bits(SrgbToLinear(color.B / 255.0f));
-
-            customMat.CstValues = [r, g, b];
-            customMat.Csts = [
-                new CPlugMaterialUserInst.Cst()
-                {
-                    Name = "TargetColor",
-                    Type = "Real",
-                    ValueCount = 3,
-                }
-                ];
-        }
+            ApplyTargetColor(customMat, materialConfig.Color.Value);
 
         var materialDef = new MaterialDef(customMat, dMaterial);
 
         return ToolResult.Success(materialDef, nameof(FbxGbxConverter));
+    }
+
+    // Tint of colorizable game materials: linear RGB as float bits. replace: drop other constants first (Link materials).
+    static void ApplyTargetColor(CPlugMaterialUserInst material, Color color, bool replace = true)
+    {
+        if (replace)
+        {
+            material.CstValues = [];
+            material.Csts = [];
+        }
+        CustomMaterialUtils.AddRealConstant(material, "TargetColor",
+            SrgbToLinear(color.R / 255.0f), SrgbToLinear(color.G / 255.0f), SrgbToLinear(color.B / 255.0f));
     }
 
     static float SrgbToLinear(float c)
