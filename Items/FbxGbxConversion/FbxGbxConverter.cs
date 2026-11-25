@@ -282,7 +282,9 @@ public class FbxGbxConverter
         if (meshResult.IsFailure)
             return ToolResult.Fail(meshResult);
 
-        AssignLightsToGroups(item, lights, groups, groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
+        var lightResult = AssignLightsToGroups(item, lights, groups, groupIndexToModelKey, groupIndexToAnchorPosition, groupIndexToAnchorRotation);
+        if (lightResult.IsFailure)
+            return ToolResult.Fail(lightResult);
 
         SetAttachmentLocations(item, rootModel, config, variant);
 
@@ -359,7 +361,7 @@ public class FbxGbxConverter
 
     }
 
-    void AssignLightsToGroups(
+    ToolResult<None> AssignLightsToGroups(
         NormalizedItem item,
         List<LightDef> lights,
         List<NodeDefGroup> groups,
@@ -367,16 +369,23 @@ public class FbxGbxConverter
         Dictionary<int, Vector3> groupIndexToAnchorPosition,
         Dictionary<int, Quaternion> groupIndexToAnchorRotation)
     {
-        int firstStaticGroupIndex = groups.FindIndex(g => g.Type == ModelType.Static);
-        if (firstStaticGroupIndex < 0)
-            firstStaticGroupIndex = 0;
+        if (lights.Count == 0)
+            return ToolResult.Success(nameof(FbxGbxConverter));
 
-        if (groups.Count == 0 || lights.Count == 0)
-            return;
+        // Lights are stored in the Solid2Model of a static or moving mesh. Triggers and veget trees have no
+        // place for them (a light in a trigger cluster ended up as a "collision source"), so if there is no
+        // static or moving mesh group the item can't carry lights at all.
+        int lightGroupIndex = groups.FindIndex(g => g.Type == ModelType.Static);
+        if (lightGroupIndex < 0)
+            lightGroupIndex = groups.FindIndex(g => g.Type == ModelType.Dynamic);
+        if (lightGroupIndex < 0)
+            return ToolResult.Fail(nameof(FbxGbxConverter), ErrorCodes.ItemCompiler.MissingVisibleMesh,
+                $"Light(s) {string.Join(", ", lights.Select(l => $"'{l.LightConfig.Name}'"))} need a visible mesh, but the item only has trigger meshes. " +
+                "Add a visible (non-trigger) mesh to the item or remove the lights.");
 
-        var anchorPos = groupIndexToAnchorPosition[firstStaticGroupIndex];
-        var anchorRot = groupIndexToAnchorRotation[firstStaticGroupIndex];
-        var modelKey = groupIndexToModelKey[firstStaticGroupIndex];
+        var anchorPos = groupIndexToAnchorPosition[lightGroupIndex];
+        var anchorRot = groupIndexToAnchorRotation[lightGroupIndex];
+        var modelKey = groupIndexToModelKey[lightGroupIndex];
         var model = item.ModelPool[modelKey];
 
         var anchorInverseRotation = Quaternion.Inverse(anchorRot);
@@ -395,6 +404,7 @@ public class FbxGbxConverter
                 Rotation = localRot,
             });
         }
+        return ToolResult.Success(nameof(FbxGbxConverter));
     }
 
     void SetMetaData(NormalizedItem item, FbxGbxConversionInput config)

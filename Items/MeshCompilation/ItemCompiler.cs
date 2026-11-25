@@ -1155,7 +1155,7 @@ public class ItemCompiler
 
 
 
-        var surface = GetOrCreateSurface(item, instances, LegacyGameplayId.None, gameplayMainDir, true, buildSettings);
+        var surface = GetOrCreateSurface(item, TriggerShapeSources(instances), LegacyGameplayId.None, gameplayMainDir, true, buildSettings);
         triggerWaypoint.TriggerShape = surface;
         return ToolResult.Success(triggerWaypoint, nameof(ItemCompiler));
     }
@@ -1188,12 +1188,17 @@ public class ItemCompiler
         else
             gameplayMainDir = new Vec3(0, 0, 1);
 
-        var surface = GetOrCreateSurface(item, instances, LegacyGameplayId.None, gameplayMainDir, true, buildSettings);
+        var surface = GetOrCreateSurface(item, TriggerShapeSources(instances), LegacyGameplayId.None, gameplayMainDir, true, buildSettings);
         triggerSpecial.TriggerShape = surface;
 
         ItemTriggerEffectConverter.ConvertEffect(cluster.TriggerGameplayId!.Value, triggerSpecial);
         return ToolResult.Success(triggerSpecial, nameof(ItemCompiler));
     }
+
+    // Trigger shapes are built from every mesh/shape of the cluster (Collidable is ignored on purpose), but never from lights:
+    // a trigger has no Solid2Model to hold them.
+    static List<(Guid Id, InstanceSettings Instance)> TriggerShapeSources(List<(Guid Id, InstanceSettings Instance)> instances)
+        => instances.Where(i => i.Instance.Kind is RefKind.Mesh or RefKind.Shape).ToList();
 
     ToolResult<CPlugVegetTreeModel> GetOrCreateVegetTreeModel(NormalizedItem item, Guid clusterKey, List<(Guid Id, InstanceSettings Instance)> instances, ClusterSettings cluster, BuildSettings buildSettings)
     {
